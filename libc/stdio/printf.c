@@ -4,77 +4,138 @@
 #include <stdio.h>
 #include <string.h>
 
-static bool print(const char* data, size_t length) {
-	const unsigned char* bytes = (const unsigned char*) data;
-	for (size_t i = 0; i < length; i++)
-		if (putchar(bytes[i]) == EOF)
-			return false;
-	return true;
+static void printchar(int c)
+{
+	putchar(c);
 }
 
-int printf(const char* restrict format, ...) {
-	va_list parameters;
-	va_start(parameters, format);
+static int prints(const char *string)
+{
+	register int pc = 0;
 
-	int written = 0;
-
-	while (*format != '\0') {
-		size_t maxrem = INT_MAX - written;
-
-		if (format[0] != '%' || format[1] == '%') {
-			if (format[0] == '%')
-				format++;
-			size_t amount = 1;
-			while (format[amount] && format[amount] != '%')
-				amount++;
-			if (maxrem < amount) {
-				// TODO: Set errno to EOVERFLOW.
-				return -1;
-			}
-			if (!print(format, amount))
-				return -1;
-			format += amount;
-			written += amount;
-			continue;
-		}
-
-		const char* format_begun_at = format++;
-
-		if (*format == 'c') {
-			format++;
-			char c = (char) va_arg(parameters, int /* char promotes to int */);
-			if (!maxrem) {
-				// TODO: Set errno to EOVERFLOW.
-				return -1;
-			}
-			if (!print(&c, sizeof(c)))
-				return -1;
-			written++;
-		} else if (*format == 's') {
-			format++;
-			const char* str = va_arg(parameters, const char*);
-			size_t len = strlen(str);
-			if (maxrem < len) {
-				// TODO: Set errno to EOVERFLOW.
-				return -1;
-			}
-			if (!print(str, len))
-				return -1;
-			written += len;
-		} else {
-			format = format_begun_at;
-			size_t len = strlen(format);
-			if (maxrem < len) {
-				// TODO: Set errno to EOVERFLOW.
-				return -1;
-			}
-			if (!print(format, len))
-				return -1;
-			written += len;
-			format += len;
-		}
+	for ( ; *string ; ++string) 
+	{
+		printchar (*string);
+		++pc;
 	}
 
-	va_end(parameters);
-	return written;
+	return pc;
+}
+
+/* the following should be enough for 32 bit int */
+#define PRINT_BUF_LEN 12
+
+static int printi(int i, int b, int sg, int letbase)
+{
+	char print_buf[PRINT_BUF_LEN];
+	register char *s;
+	register int t, neg = 0, pc = 0;
+	register unsigned int u = i;
+
+	if (i == 0) 
+	{
+		print_buf[0] = '0';
+		print_buf[1] = '\0';
+		return prints (print_buf);
+	}
+
+	if (sg && b == 10 && i < 0) {
+		neg = 1;
+		u = -i;
+	}
+
+	s = print_buf + PRINT_BUF_LEN-1;
+	*s = '\0';
+
+	while (u) 
+	{
+		t = u % b;
+		if( t >= 10 )
+			t += letbase - '0' - 10;
+		*--s = t + '0';
+		u /= b;
+	}
+
+	if (neg) 
+	{
+		*--s = '-';
+	}
+
+	return pc + prints (s);
+}
+
+static int print(int *varg)
+{
+	register int pc = 0;
+	register char *format = (char *)(*varg++);
+	char scr[2];
+
+	for (; *format != 0; ++format) 
+	{
+		if (*format == '%') 
+		{
+			++format;
+
+			if (*format == '\0') 
+				break;
+
+			if (*format == '%') 
+				goto out;
+
+			if( *format == 's' ) 
+			{
+				register char *s = *((char **)varg++);
+				pc += prints ( s?s:"(null)");
+				continue;
+			}
+
+			if( *format == 'd' ) 
+			{
+				pc += printi (*varg++, 10, 1, 'a');
+				continue;
+			}		
+
+			if( *format == 'x' ) 
+			{
+				pc += printi (*varg++, 16, 0, 'a');
+				continue;
+			}
+
+			if( *format == 'X' )
+			{
+				pc += printi (*varg++, 16, 0, 'A');
+				continue;
+			}
+
+			if( *format == 'u' ) 
+			{
+				pc += printi (*varg++, 10, 0, 'a');
+				continue;
+			}
+
+			if( *format == 'c' ) 
+			{
+				/* char are converted to int then pushed on the stack */
+				scr[0] = *varg++;
+				scr[1] = '\0';
+				pc += prints (scr);
+				continue;
+			}
+		}
+		else 
+		{
+		out:
+			printchar (*format);
+			++pc;
+		}
+	}
+	return pc;
+}
+
+/* assuming sizeof(void *) == sizeof(int) */
+
+int printf(const char *format, ...)
+{
+	register int *varg = (int *)(&format);
+	return print(varg);
 }

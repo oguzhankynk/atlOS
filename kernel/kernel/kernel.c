@@ -2,7 +2,9 @@
 
 #include <kernel/tty.h>
 
-void kernel_main(void) {
+void kernel_main(void) 
+{
 	terminal_initialize();
-	printf("Hello, kernel World!\n");
+	
+	printf("HELLO WORLD FROM kaynakOS");
 }
