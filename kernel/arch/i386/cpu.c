@@ -11,7 +11,6 @@ static void printCacheInfo(const CacheList* CacheList);
 static void cpuid_00h_command(uint32_t* p_maximumIndex, char* p_CPUstr);
 static void cpuid_01h_command();
 static void cpuid_04h_command(CacheList* p_CacheList);
-static void cpuid_80000000_command();
 
 void InitiliazeCPUInfo(CPU_Info* cpu_info)
 {
@@ -34,7 +33,7 @@ void printCPUInfo(const CPU_Info* cpu_info)
 	//printCPUFeatures(&cpu_info->CPUFeatures);
 	//printf("\n");
 	//printProcessorType(&cpu_info->processorType);
-	printCacheInfo(&cpu_info->CacheList);
+	//printCacheInfo(&cpu_info->CacheList);
 }
 
 static void printCPUFeatures(const CPUFeatures* features)
@@ -291,12 +290,4 @@ static void cpuid_04h_command(CacheList* p_CacheList)
 	}
 	
 
-}
-
-static void cpuid_80000000_command()
-{
-	unsigned int eax, ebx, ecx, edx;
-	cpuid(0x80000000, &eax, &ebx, &ecx, &edx);
-
-	printf("Maximum Input Value for Extended Function CPUID Information.: %d \n", eax);
 }

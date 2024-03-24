@@ -4,6 +4,7 @@
 #include <kernel/tty.h>
 
 #include <kernel/cpu.h>
+#include <kernel/BIOS.h>
 
 
 
@@ -13,8 +14,13 @@ void kernel_main(void)
 
 	printf("HELLO WORLD FROM kaynakOS\n");
 
-	CPU_Info cpuInfo;
-	InitiliazeCPUInfo(&cpuInfo);
+	//CPU_Info cpuInfo;
+	//InitiliazeCPUInfo(&cpuInfo);
 
-	printCPUInfo(&cpuInfo);
+	//printCPUInfo(&cpuInfo);
+	SMBIOSEntryPoint BIOS_handle;
+
+	SMBIOSInit(&BIOS_handle);
+
+	
 }

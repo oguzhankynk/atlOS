@@ -914,3 +914,18 @@ int fctprintf(void (*out)(char character, void* arg), void* arg, const char* for
   va_end(va);
   return ret;
 }
+
+void printMemory(const void* ptr, size_t size) 
+{
+    const uint8_t* bytes = (const uint8_t*)ptr;
+    
+    // Bellek bloğunu 8x8 şeklinde yazdır
+    for (size_t i = 0; i < size; i++) 
+    {
+        printf("%02X ", bytes[i] & 0xFF); // Byte'ı hex formatında yazdır
+        if ((i + 1) % 8 == 0)
+        {
+            printf("\n"); // Her satırda 8 byte olduğunda yeni satıra geç
+        }
+    }
+}
