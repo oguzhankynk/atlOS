@@ -3,18 +3,23 @@
 
 #include <stdint.h>
 
-typedef struct
-{
-    uint32_t stepping : 4;      // Stepping (4 bits)
-    uint32_t model : 4;         // Model (4 bits)
-    uint32_t family : 4;        // Family (4 bits)
-    uint32_t processorType : 2; // Processor Type (2 bits)
-    uint32_t reserved : 2;      // Reserved (2 bits)
-    uint32_t extendedModel : 4; // Extended Model (4 bits)
-    uint32_t extendedFamily : 8;// Extended Family (8 bits)
-}ProcessorType;
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
-typedef struct {
+struct ProcessorType
+{
+    uint32_t stepping : 4;       // Stepping (4 bits)
+    uint32_t model : 4;          // Model (4 bits)
+    uint32_t family : 4;         // Family (4 bits)
+    uint32_t processorType : 2;  // Processor Type (2 bits)
+    uint32_t reserved : 2;       // Reserved (2 bits)
+    uint32_t extendedModel : 4;  // Extended Model (4 bits)
+    uint32_t extendedFamily : 8; // Extended Family (8 bits)
+};
+
+struct CPUFeatures
+{
     uint32_t SSE3 : 1;
     uint32_t PCLMULQDQ : 1;
     uint32_t DTES64 : 1;
@@ -79,15 +84,16 @@ typedef struct {
     uint32_t TM : 1;
     uint32_t Reserved4 : 1;
     uint32_t PBE : 1;
-} CPUFeatures;
+};
 
-typedef struct
+struct CPUTopology
 {
     uint32_t logical_CPU_bits;
     uint32_t core_bits;
-}CPUTopology;
+} ;
 
-typedef struct {
+struct CacheInfo
+{
     uint32_t cacheType : 5;
     uint32_t cacheLevel : 3;
     uint32_t selfInitializing : 1;
@@ -101,28 +107,29 @@ typedef struct {
     uint32_t writeBackInvalidate : 1;
     uint32_t cacheInclusiveness : 1;
     uint32_t complexCacheIndexing : 1;
-} CacheInfo;
+};
 
-typedef struct
+struct CacheList
 {
-    uint8_t CacheCount;
-    CacheInfo CacheInfo[8];
-} CacheList;
+    uint8_t cacheCount;
+    CacheInfo cacheInfo[8];
+};
 
-typedef struct
+struct CPU_Info
 {
     char cpu[32];
     uint32_t maksimumIndex;
-    CPUFeatures CPUFeatures;
+    CPUFeatures CPUFeaturesInfo;
     ProcessorType processorType;
-    CPUTopology CPUTopology; 
-    CacheList CacheList;
-}CPU_Info;
+    CPUTopology CPUTopologyInfo;
+    CacheList cacheList;
+} ;
 
+void InitiliazeCPUInfo(CPU_Info *cpu_info);
+void printCPUInfo(const CPU_Info *cpu_info);
 
-
-
-void InitiliazeCPUInfo(CPU_Info* cpu_info);
-void printCPUInfo(const CPU_Info* cpu_info);
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif
 
 #endif /* A046BEC9_DED9_4255_85EE_5065946448E0 */

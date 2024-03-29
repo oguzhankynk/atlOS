@@ -2,8 +2,15 @@
 #define EB497FF7_83CA_4F01_A507_7433482E25D2
 
 #include <stdint.h>
+#include <kernel/private/BIOS/BIOSInformation.h>
+#include <kernel/private/BIOS/SystemInformation.h>
 
-typedef struct {
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+struct SMBIOSEntryPoint
+{
     char signature[4];
     uint8_t checksum;
     uint8_t length;
@@ -18,26 +25,13 @@ typedef struct {
     uint32_t structureTableAddress;
     uint16_t numberOfStructures;
     uint8_t bcdRevision;
-} SMBIOSEntryPoint;
+} ;
 
-typedef struct 
-    {
-        uint8_t type;
-        uint8_t length;
-        uint16_t handle;
-        uint8_t vendorString;  
-        uint8_t versionString;  
-        uint16_t startSegment;
-        uint8_t releaseDateString;    
-        uint8_t romSize;
-        uint64_t characteristics;
-        uint16_t extensionByte1;
-        uint8_t systemBiosMajorRelease;
-        uint8_t systemBiosMinorRelease;
-        uint8_t embeddedControllerFirmwareMajorRelease;
-        uint8_t embeddedControllerFirmwareMinorRelease;
-    }BIOSInfo;
 
 void SMBIOSInit(SMBIOSEntryPoint* handle);
+
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif
 
 #endif /* EB497FF7_83CA_4F01_A507_7433482E25D2 */

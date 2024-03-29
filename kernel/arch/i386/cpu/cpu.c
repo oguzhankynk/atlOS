@@ -1,12 +1,11 @@
-#include <kernel/cpu.h>
-
 #include <stdio.h>
-#include <kernel/cpuid.h>
+#include <kernel/public/cpu.h>
+#include <kernel/public/cpuid.h>
 
 
 static void printCPUFeatures(const CPUFeatures* features);
 static void printProcessorType(const ProcessorType* processor);
-static void printCacheInfo(const CacheList* CacheList);
+static void printCacheInfo(const CacheList* cacheList);
 
 static void cpuid_00h_command(uint32_t* p_maximumIndex, char* p_CPUstr);
 static void cpuid_01h_command();
@@ -17,12 +16,12 @@ void InitiliazeCPUInfo(CPU_Info* cpu_info)
 
     //cpuid_00h_command(&cpu_info->maksimumIndex, cpu_info->cpu);
 	//cpuid_01h_command(&cpu_info->processorType, &cpu_info->CPUFeatures);
-	cpuid_04h_command(&cpu_info->CacheList);
+	cpuid_04h_command(&cpu_info->cacheList);
 
-	if(cpu_info->CPUFeatures.HTT == 0 )
+	if(cpu_info->CPUFeaturesInfo.HTT == 0 )
 	{
-		cpu_info->CPUTopology.logical_CPU_bits = 0;
-		cpu_info->CPUTopology.core_bits = 0;
+		cpu_info->CPUTopologyInfo.logical_CPU_bits = 0;
+		cpu_info->CPUTopologyInfo.core_bits = 0;
 	}
 }
 
@@ -33,7 +32,7 @@ void printCPUInfo(const CPU_Info* cpu_info)
 	//printCPUFeatures(&cpu_info->CPUFeatures);
 	//printf("\n");
 	//printProcessorType(&cpu_info->processorType);
-	//printCacheInfo(&cpu_info->CacheList);
+	//printCacheInfo(&cpu_info->cacheList);
 }
 
 static void printCPUFeatures(const CPUFeatures* features)
@@ -126,9 +125,9 @@ static void printCacheInfo(const CacheList* p_CacheList)
 		"Unified",
 	};
 
-	for(int i=0; i<p_CacheList->CacheCount; i++)
+	for(int i=0; i<p_CacheList->cacheCount; i++)
 	{
-		CacheInfo* p_CacheInfo = &p_CacheList->CacheInfo[i];
+		const CacheInfo* p_CacheInfo = &p_CacheList->cacheInfo[i];
 
 		printf("Cache [%d]: \n", i);
 		printf("cacheType: %u -> %s cacheLevel: %u self: %u \n",
@@ -246,11 +245,11 @@ static void cpuid_01h_command(ProcessorType* p_ProcessorType, CPUFeatures* p_CPU
 
 static void cpuid_04h_command(CacheList* p_CacheList)
 {
-	p_CacheList->CacheCount = 0;
+	p_CacheList->cacheCount = 0;
 
 	while(1)
 	{
-		CacheInfo* p_CacheInfo = &p_CacheList->CacheInfo[p_CacheList->CacheCount];
+		CacheInfo* p_CacheInfo = &p_CacheList->cacheInfo[p_CacheList->cacheCount];
 
 		unsigned int eax, ebx, ecx, edx;
 		
@@ -258,7 +257,7 @@ static void cpuid_04h_command(CacheList* p_CacheList)
 		(
 			"cpuid;"               // cpuid komutunu çağır
 			: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
-			: "0" (0x04), "2" (p_CacheList->CacheCount)
+			: "0" (0x04), "2" (p_CacheList->cacheCount)
 		);
 
 		if ((eax & 0x1f) == 0)
@@ -285,7 +284,7 @@ static void cpuid_04h_command(CacheList* p_CacheList)
 		p_CacheInfo->cacheInclusiveness = (edx >> 1) & 0x1;
 		p_CacheInfo->complexCacheIndexing = (edx >> 2) & 0x1;
 
-		p_CacheList->CacheCount++;
+		p_CacheList->cacheCount++;
 
 	}
 	

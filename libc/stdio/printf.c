@@ -915,7 +915,7 @@ int fctprintf(void (*out)(char character, void* arg), void* arg, const char* for
   return ret;
 }
 
-void printMemory(const void* ptr, size_t size) 
+void printMemory(const void* ptr, unsigned int size) 
 {
     const uint8_t* bytes = (const uint8_t*)ptr;
     

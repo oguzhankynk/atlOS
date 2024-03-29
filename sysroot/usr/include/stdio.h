@@ -15,6 +15,8 @@ int puts(const char*);
 
 int sprintf(char* buffer, const char* format, ...);
 
+void printMemory(const void* ptr, unsigned int size);
+
 #ifdef __cplusplus
 }
 #endif

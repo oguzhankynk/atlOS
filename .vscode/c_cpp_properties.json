@@ -1,0 +1,21 @@
+{
+  "configurations": [
+      {
+          "name": "i686-elf",
+          "includePath": [
+              "${workspaceFolder}/kernel/include/*",
+              "${workspaceFolder}/libc/include/*"
+          ],
+          "defines": [],
+          "compilerPath": "/home/oguzhan/opt/cross/bin/i686-elf-gcc",
+          "cStandard": "gnu17",
+          "cppStandard": "gnu++14",
+          "intelliSenseMode": "gcc-x64",
+          "compilerArgs": [
+              "--sysroot=${workspaceFolder}/sysroot",
+              "-ffreestanding"
+          ]
+      }
+  ],
+  "version": 4
+}
