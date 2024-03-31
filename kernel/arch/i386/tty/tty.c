@@ -1,3 +1,12 @@
+/**
+ * @ File: tty.c
+ * @ Author: okaynak
+ * @ Create Time: 2024-03-17 20:17:34
+ * @ Modified by: okaynak
+ * @ Modified time: 2024-03-31 14:53:59
+ * @ Description:
+ */
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -98,7 +107,8 @@ void terminal_writestring(const char* data)
 	terminal_write(data, strlen(data));
 }
 
-static void terminal_scroll(void) 
+/// @brief Scrolls the terminal buffer up by one row.
+static void terminal_scroll(void)
 {
     // Scroll the buffer up by one row.
 	for(unsigned int row = 0; row<VGA_HEIGHT-1; row++)

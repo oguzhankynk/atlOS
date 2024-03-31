@@ -1,3 +1,13 @@
+/**
+ * @file SMBIOS.c
+ * @author okaynak ()
+ * @brief Functions for SMBIOS initialization and management.
+ * @date 2024-03-31
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #include <stdio.h>
 #include <string.h>
 
@@ -47,9 +57,10 @@ SMBIOS::SMBIOS()
     m_SMBIOSEntryPoint.numberOfStructures = *(uint16_t*)(ptr + 28);
     m_SMBIOSEntryPoint.bcdRevision = *(ptr + 30);
 
-    void* pBIOSInformationEnd = m_BIOSInformation.ScanBIOSInformation((void*)m_SMBIOSEntryPoint.structureTableAddress);
+    void* pBIOSInformationEnd = m_BIOSInformation.Scan((void*)m_SMBIOSEntryPoint.structureTableAddress);
 
-    void* pSystemInformationEnd = m_SystemInformation.ScanSystemInformation(pBIOSInformationEnd);
+    void* pSystemInformationEnd = m_SystemInformation.Scan(pBIOSInformationEnd);
+
 }
 
 void SMBIOS::printEntryPoint() 

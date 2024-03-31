@@ -1,6 +1,9 @@
 {
     "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
-        "stdio.h": "c"
-    }
+        "stdio.h": "c",
+        "vga.h": "c"
+    },
+    "doxygen_runner.configuration_file_override": "${workspaceFolder}/Doxyfile"
+    
 }

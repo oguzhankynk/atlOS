@@ -1,3 +1,12 @@
+/**
+ * @file cpu.c
+ * @author okaynak ()
+ * @brief Functions for CPU management and control.
+ * @date 2024-03-31
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
 #include <stdio.h>
 #include <kernel/public/cpu.h>
 #include <kernel/public/cpuid.h>
@@ -8,7 +17,7 @@ static void printProcessorType(const ProcessorType* processor);
 static void printCacheInfo(const CacheList* cacheList);
 
 static void cpuid_00h_command(uint32_t* p_maximumIndex, char* p_CPUstr);
-static void cpuid_01h_command();
+static void cpuid_01h_command(ProcessorType* p_ProcessorType, CPUFeatures* p_CPUFeatures);
 static void cpuid_04h_command(CacheList* p_CacheList);
 
 void InitiliazeCPUInfo(CPU_Info* cpu_info)
@@ -35,6 +44,8 @@ void printCPUInfo(const CPU_Info* cpu_info)
 	//printCacheInfo(&cpu_info->cacheList);
 }
 
+/// @brief Prints the CPU features.
+/// @param features: A pointer to CPU features to print.
 static void printCPUFeatures(const CPUFeatures* features)
 {
 	printf("SSE3: %u\t", features->SSE3);
@@ -104,7 +115,10 @@ static void printCPUFeatures(const CPUFeatures* features)
     printf("PBE : %u\t", features->PBE );
 }
 
-static void printProcessorType(const ProcessorType* processor) {
+/// @brief Prints the processor type.
+/// @param processor: A pointer to the processor type information to print.
+static void printProcessorType(const ProcessorType* processor)
+{
     printf("Stepping: %u\n", processor->stepping);
     printf("Model: %u\n", processor->model);
     printf("Family: %u\n", processor->family);
@@ -114,9 +128,10 @@ static void printProcessorType(const ProcessorType* processor) {
     printf("Extended Family: %u\n", processor->extendedFamily);
 }
 
+/// @brief Prints the cache information.
+/// @param cacheList: A pointer to the cache information to print.
 static void printCacheInfo(const CacheList* p_CacheList)
 {
-	
 	const char* CacheTypeStrs[] = 
 	{
 		"Null",
@@ -151,6 +166,10 @@ static void printCacheInfo(const CacheList* p_CacheList)
 
 	}
 }
+
+/// @brief Executes the CPUID command with EAX=0x00 and stores the maximum index and CPU string.
+/// @param p_maximumIndex: A pointer to store the maximum index.
+/// @param p_CPUstr: A pointer to store the CPU string.
 static void cpuid_00h_command(uint32_t* p_maximumIndex, char* p_CPUstr)
 {
 	unsigned int eax, ebx, ecx, edx;
@@ -163,7 +182,11 @@ static void cpuid_00h_command(uint32_t* p_maximumIndex, char* p_CPUstr)
 	*p_maximumIndex = eax;
 }
 
+/// @brief Executes the CPUID command with EAX=0x01 and retrieves processor type and CPU features.
+/// @param p_ProcessorType Pointer to a ProcessorType structure where the processor type information will be stored.
+/// @param p_CPUFeatures Pointer to a CPUFeatures structure where the CPU feature information will be stored.
 static void cpuid_01h_command(ProcessorType* p_ProcessorType, CPUFeatures* p_CPUFeatures)
+
 {
 	unsigned int eax, ebx, ecx, edx;
 	cpuid(0x01, &eax, &ebx, &ecx, &edx);
@@ -243,6 +266,8 @@ static void cpuid_01h_command(ProcessorType* p_ProcessorType, CPUFeatures* p_CPU
 	p_CPUFeatures->PBE  	 = (edx & (1 << 31)) != 0;
 }
 
+/// @brief Executes the CPUID command with EAX=0x04 and stores the cache list.
+/// @param p_CacheList: A pointer to store the cache list.
 static void cpuid_04h_command(CacheList* p_CacheList)
 {
 	p_CacheList->cacheCount = 0;

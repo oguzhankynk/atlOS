@@ -1,3 +1,12 @@
+/**
+ * @file stdbool.h
+ * @author okaynak ()
+ * @brief This header file defines the Boolean data type and macros.
+ * @date 2024-03-31
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
 #ifndef __STDBOOL_H
 #define __STDBOOL_H
  
