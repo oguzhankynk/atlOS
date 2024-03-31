@@ -24,16 +24,20 @@ extern "C" void kernel_main(void);
 
 
 /**
- * @brief firs point of kaynakOS
+ * @brief firs point of ParsOS
  * 
  */
 void kernel_main(void) 
 {
 	terminal_initialize();
+	extern void BannerPrint();
 
-	printf("HELLO WORLD FROM kaynakOS\n");
+	BannerPrint();
+	//printf("HELLO WORLD FROM ParsOS\n");
 
-	BIOSInit();
+	//BIOSInit();
 
 	while(1);
 }
+
+
