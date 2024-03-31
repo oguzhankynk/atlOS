@@ -3,7 +3,7 @@ HOST?=DEFAULT_HOST
 HOSTARCH!=../target-triplet-to-arch.sh $(HOST)
 
 CFLAGS?=-O2 -g
-CPPFLAGS?=
+CPPFLAGS?=-O2
 LDFLAGS?=
 LIBS?=
 
@@ -60,7 +60,7 @@ $(ARCHDIR)/crt/crtbegin.o $(ARCHDIR)/crt/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 .c.o:
-	$(CC)  -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
+	$(CC)  -c $< -o $@ -std=c++11 $(CFLAGS) $(CPPFLAGS)
 
 .S.o:
 	$(CC)  -c $< -o $@ $(CFLAGS) $(CPPFLAGS)

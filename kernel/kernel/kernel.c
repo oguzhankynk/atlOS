@@ -19,13 +19,7 @@ void kernel_main(void)
 
 	printf("HELLO WORLD FROM kaynakOS\n");
 
-	//CPU_Info cpuInfo;
-	//InitiliazeCPUInfo(&cpuInfo);
-
-	//printCPUInfo(&cpuInfo);
-	SMBIOSEntryPoint BIOS_handle;
-
-	SMBIOSInit(&BIOS_handle);
+	BIOSInit();
 
 	while(1);
 }

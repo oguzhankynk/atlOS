@@ -6,6 +6,7 @@
  * 
  * @tparam T 
  */
+/*
 template <typename T>
 class Singleton
 {
@@ -21,6 +22,6 @@ class Singleton
     public:
         Singleton(Singleton const &) = delete;
         Singleton& operator=(Singleton const &) = delete;
-};
+};*/
 
 #endif /* C49E6E0B_3B89_48A8_A790_4F89AFE19EB2 */
