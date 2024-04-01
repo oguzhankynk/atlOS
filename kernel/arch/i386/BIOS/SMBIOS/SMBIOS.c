@@ -61,6 +61,12 @@ SMBIOS::SMBIOS()
 
     void* pSystemInformationEnd = m_SystemInformation.Scan(pBIOSInformationEnd);
 
+   // void* pBaseBoardInformationEnd= m_BaseBoardInformation.Scan(pSystemInformationEnd);
+
+    void* pSystemEnclosureChassisEnd = m_SystemEnclosureChassis.Scan(pSystemInformationEnd);
+
+    void* pProcessorInformationEnd = m_ProcessorInformation.Scan(pSystemEnclosureChassisEnd);
+
 }
 
 void SMBIOS::printEntryPoint() 
@@ -89,4 +95,19 @@ void SMBIOS::printEntryPoint()
  void SMBIOS::printSystemInformation()
  {
     m_SystemInformation.print();
+ }
+
+ void SMBIOS::printBaseBoardInformation()
+ {
+    m_BaseBoardInformation.print();
+ }
+
+ void SMBIOS::printSystemEnclosureChassis()
+ {
+    m_SystemEnclosureChassis.print();
+ }
+
+ void SMBIOS::printProcessorInformation()
+ {
+    m_ProcessorInformation.print();
  }

@@ -38,8 +38,7 @@ public:
         int end = 1;
         uint8_t *ptr = getFamilyAddr() + 1;
 
-        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
-            ;
+        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++);
 
         m_pEnd = ptr + end + 1;
 
@@ -160,7 +159,7 @@ public:
         printf("Family: %u\n", getFamily());
         for (size_t i = 0; i < StringCount; ++i)
         {
-            printf("%s ", m_strings[i]);
+           printf("[%d]:%s ", i, m_strings[i]);
         }
         printf("\n");
     }

@@ -30,12 +30,10 @@ extern "C" void kernel_main(void);
 void kernel_main(void) 
 {
 	terminal_initialize();
-	extern void BannerPrint();
+	
+	printf("HELLO WORLD FROM ParsOS\n");
 
-	BannerPrint();
-	//printf("HELLO WORLD FROM ParsOS\n");
-
-	//BIOSInit();
+	BIOSInit();
 
 	while(1);
 }

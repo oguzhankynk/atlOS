@@ -18,7 +18,10 @@ void BIOSInit()
     BIOS bios;
     //bios.printEntryPoint();
     //bios.printBIOSInformation();
-    bios.printSystemInformation();
+    //bios.printSystemInformation();
+    //bios.printBaseBoardInformation();
+    //bios.printSystemEnclosureChassis();
+    bios.printProcessorInformation();
 }
 
 

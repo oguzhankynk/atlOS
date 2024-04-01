@@ -172,7 +172,7 @@ public:
         printf("Embedded Controller Firmware Minor Release: %u\n", getEmbeddedControllerFirmwareMinorRelease());
         for (size_t i = 0; i < StringCount; ++i)
         {
-            printf("%s ", m_strings[i]);
+            printf("[%d]:%s ", i, m_strings[i]);
         }
         printf("\n");
     }

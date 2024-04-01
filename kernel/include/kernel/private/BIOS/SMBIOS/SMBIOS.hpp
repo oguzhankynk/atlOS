@@ -14,7 +14,11 @@
 
 #include <kernel/private/BIOS/SMBIOS/BIOSInformation.hpp>
 #include <kernel/private/BIOS/SMBIOS/SystemInformation.hpp>
+#include <kernel/private/BIOS/SMBIOS/BaseBoardInformation.hpp>
+#include <kernel/private/BIOS/SMBIOS/SystemEnclosureChassis.hpp>
+#include <kernel/private/BIOS/SMBIOS/ProcessorInformation.hpp>
 
+/// @brief Structure representing the SMBIOS Entry Point.
 /// @brief Structure representing the SMBIOS Entry Point.
 struct SMBIOSEntryPoint
 {
@@ -50,10 +54,22 @@ public:
     /// @brief Prints the system information.
     void printSystemInformation();
 
+    /// @brief Prints the baseboard information.
+    void printBaseBoardInformation();
+
+    /// @brief Prints the baseboard information.
+    void printSystemEnclosureChassis();
+
+    /// @brief Prints the Processor Information.
+    void printProcessorInformation();
+
 private:
     SMBIOSEntryPoint m_SMBIOSEntryPoint; ///< SMBIOS entry point structure.
     BIOSInformation m_BIOSInformation;   ///< BIOS information structure.
     SystemInformation m_SystemInformation; ///< System information structure.
+    BaseBoardInformation m_BaseBoardInformation; ///< BaseBoardInformation structure.
+    SystemEnclosureChassis m_SystemEnclosureChassis; ///< SystemEnclosureChassis structure.
+    ProcessorInformation m_ProcessorInformation; ///< ProcessorInformation structure.
 };
 
 #endif /* CC04DEBE_B0F3_4321_AA29_F8861E1DEABD */
