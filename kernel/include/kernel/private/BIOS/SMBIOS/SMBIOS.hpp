@@ -17,6 +17,11 @@
 #include <kernel/private/BIOS/SMBIOS/BaseBoardInformation.hpp>
 #include <kernel/private/BIOS/SMBIOS/SystemEnclosureChassis.hpp>
 #include <kernel/private/BIOS/SMBIOS/ProcessorInformation.hpp>
+#include <kernel/private/BIOS/SMBIOS/PhysicalMemoryArray.hpp>
+#include <kernel/private/BIOS/SMBIOS/MemoryDevice.hpp>
+#include <kernel/private/BIOS/SMBIOS/MemoryArrayMappedAddress.hpp>
+#include <kernel/private/BIOS/SMBIOS/SystemBootInformation.hpp>
+#include <kernel/private/BIOS/SMBIOS/EndOfTable.hpp>
 
 /// @brief Structure representing the SMBIOS Entry Point.
 /// @brief Structure representing the SMBIOS Entry Point.
@@ -63,6 +68,18 @@ public:
     /// @brief Prints the Processor Information.
     void printProcessorInformation();
 
+    /// @brief Prints the PhysicalMemoryArray Information.
+    void printPhysicalMemoryArray();
+
+    /// @brief Prints the PhysicalMemoryArray Information.
+    void printMemoryDevice();
+
+    /// @brief Prints the MemoryArrayMappedAddress.
+    void printMemoryArrayMappedAddress();
+
+    /// @brief Prints the SystemBootInformation.
+    void printSystemBootInformation();
+
 private:
     SMBIOSEntryPoint m_SMBIOSEntryPoint; ///< SMBIOS entry point structure.
     BIOSInformation m_BIOSInformation;   ///< BIOS information structure.
@@ -70,6 +87,11 @@ private:
     BaseBoardInformation m_BaseBoardInformation; ///< BaseBoardInformation structure.
     SystemEnclosureChassis m_SystemEnclosureChassis; ///< SystemEnclosureChassis structure.
     ProcessorInformation m_ProcessorInformation; ///< ProcessorInformation structure.
+    PhysicalMemoryArray m_PhysicalMemoryArray; ///< PhysicalMemoryArray structure.
+    MemoryDevice m_MemoryDevice; ///< MemoryDevice structure.
+    MemoryArrayMappedAddress m_MemoryArrayMappedAddress; ///< MemoryDevice structure.
+    SystemBootInformation m_SystemBootInformation; ///< System Boot Information
+    EndOfTable m_EndOfTable; ///< System Boot Information
 };
 
 #endif /* CC04DEBE_B0F3_4321_AA29_F8861E1DEABD */

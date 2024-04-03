@@ -34,10 +34,9 @@ public:
         m_pStart = p_start;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t*)getContainedObjectHandlesAddr() + getNumContainedObjectHandles();
+        uint8_t *ptr = (uint8_t *)(m_pStart + getLength());
 
-        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
-            ;
+        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++);
 
         m_pEnd = ptr + end + 1;
 

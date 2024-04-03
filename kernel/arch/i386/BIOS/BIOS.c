@@ -21,7 +21,8 @@ void BIOSInit()
     //bios.printSystemInformation();
     //bios.printBaseBoardInformation();
     //bios.printSystemEnclosureChassis();
-    bios.printProcessorInformation();
+    //bios.printProcessorInformation();
+    //bios.printPhysicalMemoryArray();
 }
 
 
