@@ -77,7 +77,6 @@ SMBIOS::SMBIOS()
 
    void *pEndOfTableEnd = m_EndOfTable.Scan(pSystemBootInformationEnd);
 
-
 }
 
 void SMBIOS::printEntryPoint()

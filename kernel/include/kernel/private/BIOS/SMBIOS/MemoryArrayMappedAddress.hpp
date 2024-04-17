@@ -36,7 +36,7 @@ public:
         m_pStart = p_start;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)(m_pStart + getLength());
+        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++);
 

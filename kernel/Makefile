@@ -2,8 +2,8 @@ DEFAULT_HOST!=../default-host.sh
 HOST?=DEFAULT_HOST
 HOSTARCH!=../target-triplet-to-arch.sh $(HOST)
 
-CFLAGS?=-O2 -g
-CPPFLAGS?=-O2
+CFLAGS?=
+CPPFLAGS?=  
 LDFLAGS?=
 LIBS?=
 
@@ -13,8 +13,8 @@ EXEC_PREFIX?=$(PREFIX)
 BOOTDIR?=$(EXEC_PREFIX)/boot
 INCLUDEDIR?=$(PREFIX)/include
 
-CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra 
-CPPFLAGS:=$(CPPFLAGS) -D__is_kernel -Iinclude
+CFLAGS:=$(CFLAGS) -ffreestanding 
+CPPFLAGS:=$(CPPFLAGS) -std=c++11 -fno-exceptions -fno-rtti -D__is_kernel -Iinclude 
 LDFLAGS:=$(LDFLAGS)
 LIBS:=$(LIBS) -nostdlib -lk -lgcc
 
@@ -51,23 +51,26 @@ $(ARCHDIR)/crt/crtn.o \
 .PHONY: all clean install install-headers install-kernel
 .SUFFIXES: .o .c .S
 
-all: myos.kernel
+all: ParsOS.kernel
 
-myos.kernel: $(OBJS) $(ARCHDIR)/linker.ld
+ParsOS.kernel: $(OBJS) $(ARCHDIR)/linker.ld
 	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot myos.kernel
+	grub-file --is-x86-multiboot ParsOS.kernel
 
 $(ARCHDIR)/crt/crtbegin.o $(ARCHDIR)/crt/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 .c.o:
-	$(CC)  -c $< -o $@ -std=c++11 $(CFLAGS) $(CPPFLAGS)
+	$(CC)  -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+
+.cpp.o:
+	$(CC)  -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 .S.o:
 	$(CC)  -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 clean:
-	rm -f myos.kernel
+	rm -f ParsOS.kernel
 	rm -f $(OBJS) *.o */*.o */*/*.o
 	rm -f $(OBJS:.o=.d) *.d */*.d */*/*.d
 
@@ -82,9 +85,9 @@ install-headers:
 	cp -R --preserve=timestamps include/kernel/public/. $(DESTDIR)$(INCLUDEDIR)/kernel/public/.
 
 
-install-kernel: myos.kernel
+install-kernel: ParsOS.kernel
 	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp myos.kernel $(DESTDIR)$(BOOTDIR)
+	cp ParsOS.kernel $(DESTDIR)$(BOOTDIR)
 
 -include $(OBJS:.o=.d)
 
