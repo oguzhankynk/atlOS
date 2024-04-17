@@ -1,5 +1,5 @@
 /**
- * @file kernel.c
+ * @file kernel.cpp
  * @author okaynak ()
  * @brief Kernel implementation file containing kernel initialization and utility functions.
  *
@@ -17,7 +17,7 @@
 
 #include <kernel/public/tty.h>
 
-#include <kernel/public/cpu.h>
+#include <kernel/public/cpu.hpp>
 #include <kernel/public/BIOS/BIOS.h>
 
 extern "C" void kernel_main(void);

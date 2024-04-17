@@ -1,5 +1,5 @@
 /**
- * @file cpu.h
+ * @file cpu.hpp
  * @author okaynak ()
  * @brief Header file containing CPU related function declarations and structures.
  * @date 2024-03-31
@@ -12,10 +12,6 @@
 #define A046BEC9_DED9_4255_85EE_5065946448E0
 
 #include <stdint.h>
-
-#if defined(__cplusplus)
-extern "C" {
-#endif
 
 /// @brief Represents the Processor Type information.
 struct ProcessorType
@@ -150,9 +146,5 @@ void InitializeCPUInfo(CPU_Info *cpu_info);
 /// @brief Prints the CPU information.
 /// @param cpu_info Pointer to the CPU_Info structure containing CPU information to be printed.
 void printCPUInfo(const CPU_Info *cpu_info);
-
-#if defined(__cplusplus)
-} /* extern "C" */
-#endif
 
 #endif /* A046BEC9_DED9_4255_85EE_5065946448E0 */

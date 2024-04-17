@@ -1,5 +1,5 @@
 /**
- * @file cpu.c
+ * @file cpu.cpp
  * @author okaynak ()
  * @brief Functions for CPU management and control.
  * @date 2024-03-31
@@ -8,7 +8,7 @@
  * 
  */
 #include <stdio.h>
-#include <kernel/public/cpu.h>
+#include <kernel/public/cpu.hpp>
 #include <kernel/public/cpuid.h>
 
 

@@ -1,5 +1,5 @@
 /**
- * @file cpuid.c
+ * @file cpuid.cpp
  * @author okaynak ()
  * @brief This file contains functions for interacting with the CPUID instruction to retrieve processor information.
  * @date 2024-03-31

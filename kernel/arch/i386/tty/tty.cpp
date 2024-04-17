@@ -1,5 +1,5 @@
 /**
- * @ File: tty.c
+ * @ File: tty.cpp
  * @ Author: okaynak
  * @ Create Time: 2024-03-17 20:17:34
  * @ Modified by: okaynak
