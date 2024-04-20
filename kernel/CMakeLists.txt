@@ -36,9 +36,9 @@ include_directories(
     ${SYSROOT}/usr/include
 )
 
-set( BARE_METAL_CRTS app-crts )
+set( CRTS_FILES crts )
 
-add_library( ${BARE_METAL_CRTS} OBJECT
+add_library( ${CRTS_FILES} OBJECT
     ${ARCHDIR}/boot/boot.S  # contains symbols analogical to crt0.s
     ${ARCHDIR}/crt/crti.S
     ${ARCHDIR}/crt/crtn.S
@@ -64,26 +64,25 @@ target_link_directories(ParsOS.kernel PRIVATE
 )
 
 # This ensures the boot.o crti.o, crtn.o to be build prior to BARE_METAL target
-add_dependencies( ParsOS.kernel  ${BARE_METAL_CRTS} )
+add_dependencies( ParsOS.kernel  ${CRTS_FILES} )
 
 # Ask GCC to get the full path name of crtbegin. and crtend.o
 execute_process( COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=crtbegin.o OUTPUT_VARIABLE CRTBEGIN_O OUTPUT_STRIP_TRAILING_WHITESPACE )
 execute_process( COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=crtend.o OUTPUT_VARIABLE CRTEND_O OUTPUT_STRIP_TRAILING_WHITESPACE)
-
 
 # CMAKE_CXX_LINK_EXECUTABLE değişkenini yürütülebilir dosya oluşturma işlemi için ayarla
 #set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> --sysroot=${SYSROOT} -isystem=/usr/include -o <TARGET> <LINK_FLAGS> <CMAKE_CXX_LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES>")
 set( CMAKE_CXX_LINK_EXECUTABLE 
 "<CMAKE_CXX_COMPILER> --sysroot=${SYSROOT} -isystem=/usr/include \
  <LINK_FLAGS> \
- ${CMAKE_BINARY_DIR}/CMakeFiles/app-crts.dir/arch/i386/crt/crti.S.obj \
- ${ARCHDIR}/crt/crtbegin.o \
- ${CMAKE_BINARY_DIR}/CMakeFiles/app-crts.dir/arch/i386/boot/boot.S.obj \
+ ${CMAKE_BINARY_DIR}/CMakeFiles/${CRTS_FILES}.dir/arch/i386/crt/crti.S.obj \
+ ${CRTBEGIN_O} \
+ ${CMAKE_BINARY_DIR}/CMakeFiles/${CRTS_FILES}.dir/arch/i386/boot/boot.S.obj \
  <OBJECTS> \
  -o <TARGET> \
  <LINK_LIBRARIES> \
- ${ARCHDIR}/crt/crtend.o \
- ${CMAKE_BINARY_DIR}/CMakeFiles/app-crts.dir/arch/i386/crt/crtn.S.obj" )
+ ${CRTEND_O} \
+ ${CMAKE_BINARY_DIR}/CMakeFiles/${CRTS_FILES}.dir/arch/i386/crt/crtn.S.obj" )
 
 # Add a custom command to copy ParsOS.kernel to SYSROOT/boot
 add_custom_command(
