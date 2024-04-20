@@ -14,9 +14,9 @@ endif()
 project(ParsOS_kernel C CXX ASM)
 
 # Specify compiler flags for C and C++ sources
-SET (CMAKE_CXX_FLAGS "-std=c++11 -m32 -ffreestanding -fno-rtti -fno-exceptions -nostdlib -nostdinc -fno-stack-protector")
-SET (CMAKE_C_FLAGS "-m32 -ffreestanding -fno-exceptions -nostdlib -nostdinc -fno-stack-protector")
-set(CMAKE_ASM_FLAGS "-m32 -nostdlib -nostdinc ")
+SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function -std=c++11 -fno-exceptions -fno-rtti -D__is_kernel")
+SET (CMAKE_C_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function  -fno-exceptions -fno-rtti -D__is_kernel")
+SET (CMAKE_ASM_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function  -fno-exceptions -fno-rtti -D__is_kernel")
 
 # Define the ARCHDIR as kernel/arch/i386
 set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/i386)
@@ -24,12 +24,11 @@ set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/i386)
 file(GLOB_RECURSE KERNEL_FILES
     ${ARCHDIR}/**/*.c 
     ${ARCHDIR}/**/*.cpp
-    ${ARCHDIR}/**/*.S
-    kernel/banner.cpp
+    kernel/*.cpp
 )
 
 # Print the list of found objects
-message(STATUS "Found kernel objects: ${KERNEL_FILES}")
+message(STATUS "Found kernel objects: ${KERNEL_FILES} ")
 
 # Add include directories for the project
 include_directories(
@@ -37,18 +36,25 @@ include_directories(
     ${SYSROOT}/usr/include
 )
 
-add_library(kernel ${KERNEL_FILES})
+set( BARE_METAL_CRTS app-crts )
 
-# Create the ParsOS.kernel executable using the libkernel.a, libgcc.a, and libk.a libraries
-add_executable(ParsOS.kernel kernel/kernel.cpp)
+add_library( ${BARE_METAL_CRTS} OBJECT
+    ${ARCHDIR}/boot/boot.S  # contains symbols analogical to crt0.s
+    ${ARCHDIR}/crt/crti.S
+    ${ARCHDIR}/crt/crtn.S
+)
+
+# Create the ParsOS.kernel executable
+add_executable(ParsOS.kernel  
+    ${KERNEL_FILES}
+)
 
 target_link_options(ParsOS.kernel PRIVATE
-    -T${ARCHDIR}/linker.ld
+    -T${ARCHDIR}/linker.ld -nostdlib -ffreestanding  
 )
 
 # Link order and list for the executable
 target_link_libraries(ParsOS.kernel PRIVATE
-    kernel
     k
     gcc
 )
@@ -56,6 +62,28 @@ target_link_libraries(ParsOS.kernel PRIVATE
 target_link_directories(ParsOS.kernel PRIVATE
     ${SYSROOT}/usr/lib
 )
+
+# This ensures the boot.o crti.o, crtn.o to be build prior to BARE_METAL target
+add_dependencies( ParsOS.kernel  ${BARE_METAL_CRTS} )
+
+# Ask GCC to get the full path name of crtbegin. and crtend.o
+execute_process( COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=crtbegin.o OUTPUT_VARIABLE CRTBEGIN_O OUTPUT_STRIP_TRAILING_WHITESPACE )
+execute_process( COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=crtend.o OUTPUT_VARIABLE CRTEND_O OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+
+# CMAKE_CXX_LINK_EXECUTABLE değişkenini yürütülebilir dosya oluşturma işlemi için ayarla
+#set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> --sysroot=${SYSROOT} -isystem=/usr/include -o <TARGET> <LINK_FLAGS> <CMAKE_CXX_LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES>")
+set( CMAKE_CXX_LINK_EXECUTABLE 
+"<CMAKE_CXX_COMPILER> --sysroot=${SYSROOT} -isystem=/usr/include \
+ <LINK_FLAGS> \
+ ${CMAKE_BINARY_DIR}/CMakeFiles/app-crts.dir/arch/i386/crt/crti.S.obj \
+ ${ARCHDIR}/crt/crtbegin.o \
+ ${CMAKE_BINARY_DIR}/CMakeFiles/app-crts.dir/arch/i386/boot/boot.S.obj \
+ <OBJECTS> \
+ -o <TARGET> \
+ <LINK_LIBRARIES> \
+ ${ARCHDIR}/crt/crtend.o \
+ ${CMAKE_BINARY_DIR}/CMakeFiles/app-crts.dir/arch/i386/crt/crtn.S.obj" )
 
 # Add a custom command to copy ParsOS.kernel to SYSROOT/boot
 add_custom_command(

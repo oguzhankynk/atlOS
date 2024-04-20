@@ -13,10 +13,7 @@ endif()
 project(ParsOS_libk)
 
 # Define C++ compiler flags for the project
-SET (CMAKE_CXX_FLAGS "-std=c++11 -m32 -ffreestanding -fno-rtti -fno-exceptions -nostdlib -nostdinc -fno-stack-protector")
-
-# Define C compiler flags for the project
-SET (CMAKE_C_FLAGS "-m32 -ffreestanding -fno-exceptions -nostdlib -nostdinc -fno-stack-protector")
+SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include -std=c++11  -ffreestanding -Wall -Wextra  -Wall -Wno-unused-variable -Wno-unused-function")
 
 # Recursively find all .cpp source files in stdio, stdlib, and string directories
 file(GLOB_RECURSE SOURCES
@@ -36,11 +33,14 @@ include_directories(
 # Create a static library 'k' using the found sources
 add_library(k STATIC  ${SOURCES})
 
+SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> rcs  <TARGET> <LINK_FLAGS> <OBJECTS>")
+SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> rcs  <TARGET> <LINK_FLAGS> <OBJECTS>")
+
 # Copy the `k` static library to the target destination directories
 install(TARGETS k
     LIBRARY DESTINATION ${SYSROOT}/usr/lib
     ARCHIVE DESTINATION ${SYSROOT}/usr/lib
-)
+    )
 
 # Copy the headers to the target destination directories
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${SYSROOT}/usr)
