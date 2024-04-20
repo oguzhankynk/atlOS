@@ -1,13 +1,16 @@
 #!/bin/bash
 
+echo "libcCMake.sh"
 
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 
-# SYSROOT
-SYSROOT="$SCRIPT_DIR/sysroot"
-mkdir "$SYSROOT"
-mkdir "$SYSROOT/boot"
-mkdir "$SYSROOT/usr"
+SYSROOT="$SCRIPT_DIR/sysroot" 
+
+if [ ! -d "$SYSROOT" ]; then
+  mkdir "$SYSROOT"
+  mkdir "$SYSROOT/boot"
+  mkdir "$SYSROOT/usr"
+fi
 
 PROJECT_DIR="$SCRIPT_DIR/libc"
 
@@ -53,3 +56,5 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Compilation completed successfully."
+
+cd $SCRIPT_DIR
