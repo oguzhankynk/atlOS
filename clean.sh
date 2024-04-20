@@ -1,11 +1,6 @@
 #!/bin/sh
-set -e
-. ./config.sh
-
-for PROJECT in $PROJECTS; do
-  (cd $PROJECT && $MAKE clean)
-done
 
 rm -rf sysroot
 rm -rf isodir
-rm -rf ParsOS.iso
+rm -rf kernel/build
+rm -rf libc/build
