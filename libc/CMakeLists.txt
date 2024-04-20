@@ -13,7 +13,9 @@ endif()
 project(ParsOS_libk)
 
 # Define C++ compiler flags for the project
-SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include -std=c++11  -ffreestanding -Wall -Wextra  -Wall -Wno-unused-variable -Wno-unused-function")
+SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include \
+-std=c++11  -ffreestanding -Wall -Wextra  -Wall -Wno-unused-variable -Wno-unused-function\
+-D__is_libc -D__is_libk ")
 
 # Recursively find all .cpp source files in stdio, stdlib, and string directories
 file(GLOB_RECURSE SOURCES
