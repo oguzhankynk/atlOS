@@ -35,7 +35,7 @@ public:
      * @param p_start Pointer to the start of the structure.
      * @return Pointer to the end address of the SystemEnclosureChassis
      */
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -56,121 +56,122 @@ public:
      * @brief Get the type of the structure.
      * @return Type of the structure.
      */
-    uint8_t getType() { return *getTypeAddr(); }
+    uint8_t getType() const { return *getTypeAddr(); }
 
     /**
      * @brief Get the length of the structure.
      * @return Length of the structure.
      */
-    uint8_t getLength() { return *getLengthAddr(); }
+    uint8_t getLength() const { return *getLengthAddr(); }
 
     /**
      * @brief Get the handle of the structure.
      * @return Handle of the structure.
      */
-    uint16_t getHandle() { return *getHandleAddr(); }
+    uint16_t getHandle() const { return *getHandleAddr(); }
 
     /**
      * @brief Get the manufacturer of the enclosure or chassis.
      * @return Manufacturer of the enclosure or chassis.
      */
-    uint8_t getManufacturer() { return *getManufacturerAddr(); }
+    uint8_t getManufacturer() const {return *getManufacturerAddr(); }
 
     /**
      * @brief Get the type of the enclosure or chassis.
      * @return Type of the enclosure or chassis.
      */
-    uint8_t getType2() { return *getType2Addr(); }
+    uint8_t getType2() const {return *getType2Addr(); }
 
     /**
      * @brief Get the version of the enclosure or chassis.
      * @return Version of the enclosure or chassis.
      */
-    uint8_t getVersion() { return *getVersionAddr(); }
+    uint8_t getVersion() const {return *getVersionAddr(); }
 
     /**
      * @brief Get the serial number of the enclosure or chassis.
      * @return Serial number of the enclosure or chassis.
      */
-    uint8_t getSerialNumber() { return *getSerialNumberAddr(); }
+    uint8_t getSerialNumber() const {return *getSerialNumberAddr(); }
 
     /**
      * @brief Get the asset tag number of the enclosure or chassis.
      * @return Asset tag number of the enclosure or chassis.
      */
-    uint8_t getAssetTagNumber() { return *getAssetTagNumberAddr(); }
+    uint8_t getAssetTagNumber() const {return *getAssetTagNumberAddr(); }
 
     /**
      * @brief Get the boot-up state of the enclosure or chassis.
      * @return Boot-up state of the enclosure or chassis.
      */
-    uint8_t getBootUpState() { return *getBootUpStateAddr(); }
+    uint8_t getBootUpState() const {return *getBootUpStateAddr(); }
 
     /**
      * @brief Get the power supply state of the enclosure or chassis.
      * @return Power supply state of the enclosure or chassis.
      */
-    uint8_t getPowerSupplyState() { return *getPowerSupplyStateAddr(); }
+    uint8_t getPowerSupplyState() const {return *getPowerSupplyStateAddr(); }
 
     /**
      * @brief Get the thermal state of the enclosure or chassis.
      * @return Thermal state of the enclosure or chassis.
      */
-    uint8_t getThermalState() { return *getThermalStateAddr(); }
+    uint8_t getThermalState() const {return *getThermalStateAddr(); }
 
     /**
      * @brief Get the security status of the enclosure or chassis.
      * @return Security status of the enclosure or chassis.
      */
-    uint8_t getSecurityStatus() { return *getSecurityStatusAddr(); }
+    uint8_t getSecurityStatus() const {return *getSecurityStatusAddr(); }
 
     /**
      * @brief Get the OEM-defined information of the enclosure or chassis.
      * @return OEM-defined information of the enclosure or chassis.
      */
-    uint32_t getOemDefined() { return *getOemDefinedAddr(); }
+    uint32_t getOemDefined() const {return *getOemDefinedAddr(); }
 
     /**
      * @brief Get the height of the enclosure.
      * @return Height of the enclosure.
      */
-    uint8_t getHeight() { return *getHeightAddr(); }
+    uint8_t getHeight() const {return *getHeightAddr(); }
 
     /**
      * @brief Get the number of power cords associated with the enclosure or chassis.
      * @return Number of power cords associated with the enclosure or chassis.
      */
-    uint8_t getNumPowerCords() { return *getNumPowerCordsAddr(); }
+    uint8_t getNumPowerCords() const {return *getNumPowerCordsAddr(); }
 
     /**
      * @brief Get the number of contained element records.
      * @return Number of contained element records.
      */
-    uint8_t getContainedElementCount() { return *getContainedElementCountAddr(); }
+    uint8_t getContainedElementCount() const {return *getContainedElementCountAddr(); }
 
     /**
      * @brief Get the byte length of each contained element record.
      * @return Byte length of each contained element record.
      */
-    uint8_t getContainedElementRecordLength() { return *getContainedElementRecordLengthAddr(); }
+    uint8_t getContainedElementRecordLength() const {return *getContainedElementRecordLengthAddr(); }
 
     /**
      * @brief Get the contained elements of the enclosure or chassis.
      * @return Contained elements of the enclosure or chassis.
      */
-    uint8_t *getContainedElements() { return getContainedElementsAddr(); }
+    uint8_t *getContainedElements() const {return getContainedElementsAddr(); }
 
     /**
      * @brief Get the SKU number of the enclosure or chassis.
      * @return SKU number of the enclosure or chassis.
      */
-    uint8_t getSkuNumber() { return *getSkuNumberAddr(); }
+    uint8_t getSkuNumber() const {return *getSkuNumberAddr(); }
 
     // Print function to display all values
     /**
      * @brief Print function to display all values of the System Enclosure or Chassis Information structure.
      */
-    void print() {
+    void print() const override
+    {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
         printf("Handle: %u\n", getHandle());
@@ -219,60 +220,60 @@ private:
     const char *m_strings[StringCount]{};     ///< Array to store extracted strings.
 
     /// @brief Get the address of the Type field in the System Enclosure or Chassis Information structure.
-    uint8_t *getTypeAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }
+    uint8_t *getTypeAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }
 
     /// @brief Get the address of the Length field in the System Enclosure or Chassis Information structure.
-    uint8_t *getLengthAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x01); }
+    uint8_t *getLengthAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x01); }
 
     /// @brief Get the address of the Handle field in the System Enclosure or Chassis Information structure.
-    uint16_t *getHandleAddr() { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t *getHandleAddr() const {return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x02); }
 
     /// @brief Get the address of the Manufacturer field in the System Enclosure or Chassis Information structure.
-    uint8_t *getManufacturerAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x04); }
+    uint8_t *getManufacturerAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x04); }
 
     /// @brief Get the address of the Type field (again) in the System Enclosure or Chassis Information structure.
-    uint8_t *getType2Addr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x05); }
+    uint8_t *getType2Addr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x05); }
 
     /// @brief Get the address of the Version field in the System Enclosure or Chassis Information structure.
-    uint8_t *getVersionAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x06); }
+    uint8_t *getVersionAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x06); }
 
     /// @brief Get the address of the Serial Number field in the System Enclosure or Chassis Information structure.
-    uint8_t *getSerialNumberAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x07); }
+    uint8_t *getSerialNumberAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x07); }
 
     /// @brief Get the address of the Asset Tag Number field in the System Enclosure or Chassis Information structure.
-    uint8_t *getAssetTagNumberAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x08); }
+    uint8_t *getAssetTagNumberAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x08); }
 
     /// @brief Get the address of the Boot-up State field in the System Enclosure or Chassis Information structure.
-    uint8_t *getBootUpStateAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x09); }
+    uint8_t *getBootUpStateAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x09); }
 
     /// @brief Get the address of the Power Supply State field in the System Enclosure or Chassis Information structure.
-    uint8_t *getPowerSupplyStateAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0A); }
+    uint8_t *getPowerSupplyStateAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0A); }
 
     /// @brief Get the address of the Thermal State field in the System Enclosure or Chassis Information structure.
-    uint8_t *getThermalStateAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0B); }
+    uint8_t *getThermalStateAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0B); }
     
     /// @brief Get the address of the Security Status field in the System Enclosure or Chassis Information structure.
-    uint8_t *getSecurityStatusAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0C); }
+    uint8_t *getSecurityStatusAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0C); }
 
     /// @brief Get the address of the OEM-defined field in the System Enclosure or Chassis Information structure.
-    uint32_t *getOemDefinedAddr() { return (uint32_t *)(static_cast<uint8_t *>(m_pStart) + 0x0D); }
+    uint32_t *getOemDefinedAddr() const {return (uint32_t *)(static_cast<uint8_t *>(m_pStart) + 0x0D); }
 
     /// @brief Get the address of the Height field in the System Enclosure or Chassis Information structure.
-    uint8_t *getHeightAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x11); }
+    uint8_t *getHeightAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x11); }
 
     /// @brief Get the address of the Number of Power Cords field in the System Enclosure or Chassis Information structure.
-    uint8_t *getNumPowerCordsAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x12); }
+    uint8_t *getNumPowerCordsAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x12); }
 
     /// @brief Get the address of the Contained Element Count field in the System Enclosure or Chassis Information structure.
-    uint8_t *getContainedElementCountAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x13); }
+    uint8_t *getContainedElementCountAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x13); }
 
     /// @brief Get the address of the Contained Element Record Length field in the System Enclosure or Chassis Information structure.
-    uint8_t *getContainedElementRecordLengthAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x14); }
+    uint8_t *getContainedElementRecordLengthAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x14); }
 
     /// @brief Get the address of the Contained Elements field in the System Enclosure or Chassis Information structure.
-    uint8_t *getContainedElementsAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x15); }
+    uint8_t *getContainedElementsAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x15); }
 
     /// @brief Get the address of the SKU Number field in the System Enclosure or Chassis Information structure.
-    uint8_t *getSkuNumberAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x15 + getContainedElementCount() * getContainedElementRecordLength()); }
+    uint8_t *getSkuNumberAddr() const {return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x15 + getContainedElementCount() * getContainedElementRecordLength()); }
 };
 #endif /* D9D2E7CD_CE66_4545_AC83_AB1DD86799B2 */

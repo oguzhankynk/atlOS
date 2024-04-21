@@ -79,7 +79,7 @@ SMBIOS::SMBIOS()
 
 }
 
-void SMBIOS::printEntryPoint()
+void SMBIOS::printEntryPoint() const
 {
    printf("Signature: %c%c%c%c\n", m_SMBIOSEntryPoint.signature[0], m_SMBIOSEntryPoint.signature[1], m_SMBIOSEntryPoint.signature[2], m_SMBIOSEntryPoint.signature[3]);
    printf("Checksum: %d\n", m_SMBIOSEntryPoint.checksum);
@@ -97,47 +97,47 @@ void SMBIOS::printEntryPoint()
    printf("BCD Revision: %d\n", m_SMBIOSEntryPoint.bcdRevision);
 }
 
-void SMBIOS::printBIOSInformation()
+void SMBIOS::printBIOSInformation() const
 {
    m_BIOSInformation.print();
 }
 
-void SMBIOS::printSystemInformation()
+void SMBIOS::printSystemInformation() const
 {
    m_SystemInformation.print();
 }
 
-void SMBIOS::printBaseBoardInformation()
+void SMBIOS::printBaseBoardInformation() const
 {
    m_BaseBoardInformation.print();
 }
 
-void SMBIOS::printSystemEnclosureChassis()
+void SMBIOS::printSystemEnclosureChassis() const
 {
    m_SystemEnclosureChassis.print();
 }
 
-void SMBIOS::printProcessorInformation()
+void SMBIOS::printProcessorInformation() const
 {
    m_ProcessorInformation.print();
 }
 
-void SMBIOS::printPhysicalMemoryArray()
+void SMBIOS::printPhysicalMemoryArray() const
 {
    m_PhysicalMemoryArray.print();
 }
 
-void SMBIOS::printMemoryDevice()
+void SMBIOS::printMemoryDevice() const
 {
    m_MemoryDevice.print();
 }
 
-void SMBIOS::printMemoryArrayMappedAddress()
+void SMBIOS::printMemoryArrayMappedAddress() const
 {
    m_MemoryArrayMappedAddress.print();
 }
 
-void SMBIOS::printSystemBootInformation()
+void SMBIOS::printSystemBootInformation() const
 {
    m_SystemBootInformation.print();
 }

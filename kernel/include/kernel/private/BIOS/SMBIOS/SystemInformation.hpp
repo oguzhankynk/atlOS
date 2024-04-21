@@ -31,7 +31,7 @@ public:
     /// @brief Scans the structure and extracts relevant information.
     /// @param p_start Pointer to the start address of the structure.
     /// @return Pointer to the end address of the structure.
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -49,97 +49,97 @@ public:
 
     /// @brief Retrieves the start address of the structure.
     /// @return Pointer to the start address of the structure.
-    void *getStartAddr()
+    void *getStartAddr() const
     {
         return m_pStart;
     }
 
     /// @brief Retrieves the end address of the structure.
     /// @return Pointer to the end address of the structure.
-    void *getEndAddr()
+    void *getEndAddr() const
     {
         return m_pEnd;
     }
 
     /// @brief Retrieves the type of the structure.
     /// @return Type of the structure.
-    uint8_t getType()
+    uint8_t getType() const
     {
         return *getTypeAddr();
     }
 
     /// @brief Retrieves the length of the structure.
     /// @return Length of the structure.
-    uint8_t getLength()
+    uint8_t getLength() const
     {
         return *getLengthAddr();
     }
 
     /// @brief Retrieves the handle of the structure.
     /// @return Handle of the structure.
-    uint16_t getHandle()
+    uint16_t getHandle() const
     {
         return *getHandleAddr();
     }
 
     /// @brief Retrieves the manufacturer of the system.
     /// @return Manufacturer of the system.
-    uint8_t getManufacturer()
+    uint8_t getManufacturer() const
     {
         return *getManufacturerAddr();
     }
 
     /// @brief Retrieves the product name of the system.
     /// @return Product name of the system.
-    uint8_t getProductName()
+    uint8_t getProductName() const
     {
         return *getProductNameAddr();
     }
 
     /// @brief Retrieves the version of the system.
     /// @return Version of the system.
-    uint8_t getVersion()
+    uint8_t getVersion() const
     {
         return *getVersionAddr();
     }
 
     /// @brief Retrieves the serial number of the system.
     /// @return Serial number of the system.
-    uint8_t getSerialNumber()
+    uint8_t getSerialNumber() const
     {
         return *getSerialNumberAddr();
     }
 
     /// @brief Retrieves the UUID of the system.
     /// @return Pointer to the UUID of the system.
-    const uint8_t *getUuid()
+    const uint8_t *getUuid() const
     {
         return getUuidAddr();
     }
 
     /// @brief Retrieves the wake-up type of the system.
     /// @return Wake-up type of the system.
-    uint8_t getWakeUpType()
+    uint8_t getWakeUpType() const
     {
         return *getWakeUpTypeAddr();
     }
 
     /// @brief Retrieves the SKU number of the system.
     /// @return SKU number of the system.
-    uint8_t getSkuNumber()
+    uint8_t getSkuNumber() const
     {
         return *getSkuNumberAddr();
     }
 
     /// @brief Retrieves the family of the system.
     /// @return Family of the system.
-    uint8_t getFamily()
+    uint8_t getFamily() const
     {
         return *getFamilyAddr();
     }
 
     /// @brief Prints the extracted information of the system structure.
-    void print()
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
@@ -181,77 +181,77 @@ private:
 
     /// @brief Retrieves the address of the type field.
     /// @return Address of the type field.
-    uint8_t *getTypeAddr()
+    uint8_t *getTypeAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0);
     }
 
     /// @brief Retrieves the address of the length field.
     /// @return Address of the length field.
-    uint8_t *getLengthAddr()
+    uint8_t *getLengthAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 1);
     }
 
     /// @brief Retrieves the address of the handle field.
     /// @return Address of the handle field.
-    uint16_t *getHandleAddr()
+    uint16_t *getHandleAddr() const
     {
         return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 2);
     }
 
     /// @brief Retrieves the address of the manufacturer field.
     /// @return Address of the manufacturer field.
-    uint8_t *getManufacturerAddr()
+    uint8_t *getManufacturerAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 4);
     }
 
     /// @brief Retrieves the address of the product name field.
     /// @return Address of the product name field.
-    uint8_t *getProductNameAddr()
+    uint8_t *getProductNameAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 5);
     }
 
     /// @brief Retrieves the address of the version field.
     /// @return Address of the version field.
-    uint8_t *getVersionAddr()
+    uint8_t *getVersionAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 6);
     }
 
     /// @brief Retrieves the address of the serial number field.
     /// @return Address of the serial number field.
-    uint8_t *getSerialNumberAddr()
+    uint8_t *getSerialNumberAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 7);
     }
 
     /// @brief Retrieves the address of the UUID field.
     /// @return Address of the UUID field.
-    uint8_t *getUuidAddr()
+    uint8_t *getUuidAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 8);
     }
 
     /// @brief Retrieves the address of the wake-up type field.
     /// @return Address of the wake-up type field.
-    uint8_t *getWakeUpTypeAddr()
+    uint8_t *getWakeUpTypeAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 24);
     }
 
     /// @brief Retrieves the address of the SKU number field.
     /// @return Address of the SKU number field.
-    uint8_t *getSkuNumberAddr()
+    uint8_t *getSkuNumberAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 25);
     }
 
     /// @brief Retrieves the address of the family field.
     /// @return Address of the family field.
-    uint8_t *getFamilyAddr()
+    uint8_t *getFamilyAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 26);
     }

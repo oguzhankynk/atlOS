@@ -30,7 +30,7 @@ public:
     /// @brief Scans the End-of-Table structure.
     /// @param p_start Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *Scan(void *p_start) 
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -59,7 +59,8 @@ public:
     uint16_t getHandle() const { return *getHandleAddr(); }
 
     // Print function to display all values
-    void print() const {
+    void print() const override
+    {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
         printf("Handle: %u\n", getHandle());

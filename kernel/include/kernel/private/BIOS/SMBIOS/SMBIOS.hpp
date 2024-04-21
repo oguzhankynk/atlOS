@@ -51,34 +51,34 @@ public:
     SMBIOS();
 
     /// @brief Prints the SMBIOS entry point information.
-    void printEntryPoint();
+    void printEntryPoint() const;
 
     /// @brief Prints the BIOS information.
-    void printBIOSInformation();
+    void printBIOSInformation() const;
 
     /// @brief Prints the system information.
-    void printSystemInformation();
+    void printSystemInformation() const;
 
     /// @brief Prints the baseboard information.
-    void printBaseBoardInformation();
+    void printBaseBoardInformation() const;
 
     /// @brief Prints the baseboard information.
-    void printSystemEnclosureChassis();
+    void printSystemEnclosureChassis() const;
 
     /// @brief Prints the Processor Information.
-    void printProcessorInformation();
+    void printProcessorInformation() const;
 
     /// @brief Prints the PhysicalMemoryArray Information.
-    void printPhysicalMemoryArray();
+    void printPhysicalMemoryArray() const ;
 
     /// @brief Prints the PhysicalMemoryArray Information.
-    void printMemoryDevice();
+    void printMemoryDevice() const ;
 
     /// @brief Prints the MemoryArrayMappedAddress.
-    void printMemoryArrayMappedAddress();
+    void printMemoryArrayMappedAddress() const;
 
     /// @brief Prints the SystemBootInformation.
-    void printSystemBootInformation();
+    void printSystemBootInformation() const;
 
 private:
     SMBIOSEntryPoint m_SMBIOSEntryPoint; ///< SMBIOS entry point structure.

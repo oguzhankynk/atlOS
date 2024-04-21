@@ -29,7 +29,7 @@ public:
      * @param p_start Pointer to the start address of the BaseBoardInformation structure.
      * @return Pointer to the end address of the scanned structure.
      */
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -50,88 +50,88 @@ public:
      * @brief Gets the type of the structure.
      * @return The type of the structure.
      */
-    uint8_t getType() { return *getTypeAddr(); }
+    uint8_t getType() const { return *getTypeAddr(); }
 
     /**
      * @brief Gets the length of the structure.
      * @return The length of the structure.
      */
-    uint8_t getLength() { return *getLengthAddr(); }
+    uint8_t getLength() const { return *getLengthAddr(); }
 
     /**
      * @brief Gets the handle of the structure.
      * @return The handle of the structure.
      */
-    uint16_t getHandle() { return *getHandleAddr(); }
+    uint16_t getHandle() const { return *getHandleAddr(); }
 
     /**
      * @brief Gets the manufacturer of the baseboard.
      * @return The manufacturer of the baseboard.
      */
-    uint8_t getManufacturer() { return *getManufacturerAddr(); }
+    uint8_t getManufacturer() const { return *getManufacturerAddr(); }
 
     /**
      * @brief Gets the product name of the baseboard.
      * @return The product name of the baseboard.
      */
-    uint8_t getProduct() { return *getProductAddr(); }
+    uint8_t getProduct() const { return *getProductAddr(); }
 
     /**
      * @brief Gets the version of the baseboard.
      * @return The version of the baseboard.
      */
-    uint8_t getVersion() { return *getVersionAddr(); }
+    uint8_t getVersion() const { return *getVersionAddr(); }
 
     /**
      * @brief Gets the serial number of the baseboard.
      * @return The serial number of the baseboard.
      */
-    uint8_t getSerialNumber() { return *getSerialNumberAddr(); }
+    uint8_t getSerialNumber() const { return *getSerialNumberAddr(); }
 
     /**
      * @brief Gets the asset tag of the baseboard.
      * @return The asset tag of the baseboard.
      */
-    uint8_t getAssetTag() { return *getAssetTagAddr(); }
+    uint8_t getAssetTag() const { return *getAssetTagAddr(); }
 
     /**
      * @brief Gets the feature flags of the baseboard.
      * @return The feature flags of the baseboard.
      */
-    uint8_t getFeatureFlags() { return *getFeatureFlagsAddr(); }
+    uint8_t getFeatureFlags() const { return *getFeatureFlagsAddr(); }
 
     /**
      * @brief Gets the location in chassis of the baseboard.
      * @return The location in chassis of the baseboard.
      */
-    uint8_t getLocationInChassis() { return *getLocationInChassisAddr(); }
+    uint8_t getLocationInChassis() const { return *getLocationInChassisAddr(); }
 
     /**
      * @brief Gets the chassis handle of the baseboard.
      * @return The chassis handle of the baseboard.
      */
-    uint16_t getChassisHandle() { return *getChassisHandleAddr(); }
+    uint16_t getChassisHandle() const { return *getChassisHandleAddr(); }
 
     /**
      * @brief Gets the board type of the baseboard.
      * @return The board type of the baseboard.
      */
-    uint8_t getBoardType() { return *getBoardTypeAddr(); }
+    uint8_t getBoardType() const { return *getBoardTypeAddr(); }
 
     /**
      * @brief Gets the number of contained object handles.
      * @return The number of contained object handles.
      */
-    uint8_t getNumContainedObjectHandles() { return *getNumContainedObjectHandlesAddr(); }
+    uint8_t getNumContainedObjectHandles() const { return *getNumContainedObjectHandlesAddr(); }
 
     /**
      * @brief Gets the contained object handles.
      * @return The contained object handles.
      */
-    uint16_t *getContainedObjectHandles() { return getContainedObjectHandlesAddr(); }
+    uint16_t *getContainedObjectHandles() const { return getContainedObjectHandlesAddr(); }
 
     /// @brief Prints the extracted information of the Baseboard structure.
-    void print() 
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
@@ -174,85 +174,85 @@ private:
      * @brief Gets the address of the type field in the BaseBoardInformation structure.
      * @return The address of the type field.
      */
-    uint8_t *getTypeAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }
+    uint8_t *getTypeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }
 
     /**
      * @brief Gets the address of the length field in the BaseBoardInformation structure.
      * @return The address of the length field.
      */
-    uint8_t *getLengthAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x01); }
+    uint8_t *getLengthAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x01); }
 
     /**
      * @brief Gets the address of the handle field in the BaseBoardInformation structure.
      * @return The address of the handle field.
      */
-    uint16_t *getHandleAddr() { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t *getHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x02); }
 
     /**
      * @brief Gets the address of the manufacturer field in the BaseBoardInformation structure.
      * @return The address of the manufacturer field.
      */
-    uint8_t *getManufacturerAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x04); }
+    uint8_t *getManufacturerAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x04); }
 
     /**
      * @brief Gets the address of the product field in the BaseBoardInformation structure.
      * @return The address of the product field.
      */
-    uint8_t *getProductAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x05); }
+    uint8_t *getProductAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x05); }
 
     /**
      * @brief Gets the address of the version field in the BaseBoardInformation structure.
      * @return The address of the version field.
      */
-    uint8_t *getVersionAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x06); }
+    uint8_t *getVersionAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x06); }
 
     /**
      * @brief Gets the address of the serial number field in the BaseBoardInformation structure.
      * @return The address of the serial number field.
      */
-    uint8_t *getSerialNumberAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x07); }
+    uint8_t *getSerialNumberAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x07); }
 
     /**
      * @brief Gets the address of the asset tag field in the BaseBoardInformation structure.
      * @return The address of the asset tag field.
      */
-    uint8_t *getAssetTagAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x08); }
+    uint8_t *getAssetTagAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x08); }
 
     /**
      * @brief Gets the address of the feature flags field in the BaseBoardInformation structure.
      * @return The address of the feature flags field.
      */
-    uint8_t *getFeatureFlagsAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x09); }
+    uint8_t *getFeatureFlagsAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x09); }
 
     /**
      * @brief Gets the address of the location in chassis field in the BaseBoardInformation structure.
      * @return The address of the location in chassis field.
      */
-    uint8_t *getLocationInChassisAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0A); }
+    uint8_t *getLocationInChassisAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0A); }
     
     /**
      * @brief Gets the address of the chassis handle field in the BaseBoardInformation structure.
      * @return The address of the chassis handle field.
      */
-    uint16_t *getChassisHandleAddr() { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x0B); }
+    uint16_t *getChassisHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x0B); }
 
     /**
      * @brief Gets the address of the board type field in the BaseBoardInformation structure.
      * @return The address of the board type field.
      */
-    uint8_t *getBoardTypeAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0D); }
+    uint8_t *getBoardTypeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0D); }
 
     /**
      * @brief Gets the address of the number of contained object handles field in the BaseBoardInformation structure.
      * @return The address of the number of contained object handles field.
      */
-    uint8_t *getNumContainedObjectHandlesAddr() { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0E); }
+    uint8_t *getNumContainedObjectHandlesAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0E); }
 
     /**
      * @brief Gets the address of the contained object handles field in the BaseBoardInformation structure.
      * @return The address of the contained object handles field.
      */
-    uint16_t *getContainedObjectHandlesAddr() { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x0F); }
+    uint16_t *getContainedObjectHandlesAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x0F); }
 };
 
 #endif /* F26356CA_FE94_49CC_9832_A5D11CC1F3C2 */

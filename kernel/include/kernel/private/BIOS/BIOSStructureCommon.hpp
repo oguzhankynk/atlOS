@@ -28,6 +28,10 @@ public:
             str_start += strlen(str_start) + 1; // Bir sonraki dizeye geç
         }
     }
+
+    virtual void *Scan(void *p_start) = 0;
+
+    virtual void print() const = 0;
 };
 
 #endif /* C4ED04D9_0FCD_4B1F_9597_24FD51FBB80F */

@@ -27,7 +27,7 @@ public:
     /// @brief Scans the Processor Information structure starting from the given address.
     /// @param p_start Pointer to the start address of the Processor Information structure.
     /// @return Pointer to the end address of the structure.
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         
         m_pStart = p_start;
@@ -125,7 +125,7 @@ public:
     uint16_t getProcessorFamily2() const { return *getProcessorFamily2Addr(); }
 
     /// @brief Prints the extracted information of the system structure.
-    void print() const
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());

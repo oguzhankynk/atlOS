@@ -31,7 +31,7 @@ public:
     /// @brief Scans the System Boot Information table.
     /// @param p_start Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *Scan(void *p_start) 
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -64,7 +64,7 @@ public:
     uint8_t getBootStatus() const { return *getBootStatusAddr(); }
 
     // Print function to display all values
-    void print() const 
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());

@@ -31,7 +31,7 @@ public:
     /// @brief Scans the Memory Device structure starting from the given address.
     /// @param p_start Start address of the Memory Device structure.
     /// @return End address of the scanned Memory Device structure.
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -148,7 +148,7 @@ public:
     uint16_t getConfiguredVoltage() const { return *getConfiguredVoltageAddr(); }
 
     /// @brief Prints all the values of the Memory Device table.
-    void print() const
+    void print() const override
     {
         // Print each field with its value
         printf("Type: %u\n", *getTypeAddr());

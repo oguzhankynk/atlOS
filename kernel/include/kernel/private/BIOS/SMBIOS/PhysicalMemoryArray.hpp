@@ -31,7 +31,7 @@ public:
     /// @brief Scans the structure starting from the given address.
     /// @param p_start Start address of the structure.
     /// @return End address of the scanned structure.
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -47,46 +47,46 @@ public:
 
     /// @brief Gets the type of the physical memory array.
     /// @return Type of the physical memory array.
-    uint8_t getType() { return *getTypeAddr(); }
+    uint8_t getType() const { return *getTypeAddr(); }
 
     /// @brief Gets the length of the structure.
     /// @return Length of the structure.
-    uint8_t getLength() { return *getLengthAddr(); }
+    uint8_t getLength() const { return *getLengthAddr(); }
 
     /// @brief Gets the handle associated with the structure.
     /// @return Handle associated with the structure.
-    uint16_t getHandle() { return *getHandleAddr(); }
+    uint16_t getHandle() const { return *getHandleAddr(); }
 
     /// @brief Gets the location of the memory array.
     /// @return Location of the memory array.
-    uint8_t getLocation() { return *getLocationAddr(); }
+    uint8_t getLocation() const { return *getLocationAddr(); }
 
     /// @brief Gets the use of the memory array.
     /// @return Use of the memory array.
-    uint8_t getUse() { return *getUseAddr(); }
+    uint8_t getUse() const { return *getUseAddr(); }
 
     /// @brief Gets the memory error correction information.
     /// @return Memory error correction information.
-    uint8_t getMemoryErrorCorrection() { return *getMemoryErrorCorrectionAddr(); }
+    uint8_t getMemoryErrorCorrection() const { return *getMemoryErrorCorrectionAddr(); }
 
     /// @brief Gets the maximum capacity of the memory array.
     /// @return Maximum capacity of the memory array.
-    uint32_t getMaximumCapacity() { return *getMaximumCapacityAddr(); }
+    uint32_t getMaximumCapacity()const  { return *getMaximumCapacityAddr(); }
 
     /// @brief Gets the memory error information handle.
     /// @return Memory error information handle.
-    uint16_t getMemoryErrorInformationHandle() { return *getMemoryErrorInformationHandleAddr(); }
+    uint16_t getMemoryErrorInformationHandle() const { return *getMemoryErrorInformationHandleAddr(); }
 
     /// @brief Gets the number of memory devices.
     /// @return Number of memory devices.
-    uint16_t getNumberOfMemoryDevices() { return *getNumberOfMemoryDevicesAddr(); }
+    uint16_t getNumberOfMemoryDevices() const { return *getNumberOfMemoryDevicesAddr(); }
 
     /// @brief Gets the extended maximum capacity of the memory array.
     /// @return Extended maximum capacity of the memory array.
-    uint64_t getExtendedMaximumCapacity() { return *getExtendedMaximumCapacityAddr(); }
+    uint64_t getExtendedMaximumCapacity() const { return *getExtendedMaximumCapacityAddr(); }
 
     /// @brief Prints the content of the Physical Memory Array structure.
-    void print() 
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());

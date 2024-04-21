@@ -31,7 +31,7 @@ public:
     /// @brief Scans the BIOS information structure.
     /// @param p_start Pointer to the start address of the BIOS structure.
     /// @return Pointer to the end address of the BIOS structure.
-    void *Scan(void *p_start)
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
@@ -50,111 +50,111 @@ public:
 
     /// @brief Returns the start address of the BIOS structure.
     /// @return Start address of the BIOS structure.
-    void *getStartAddr()
+    void *getStartAddr() const
     {
         return m_pStart;
     }
 
     /// @brief Returns the end address of the BIOS structure.
     /// @return End address of the BIOS structure.
-    void *getEndAddr()
+    void *getEndAddr() const
     {
         return m_pEnd;
     }
 
     /// @brief Returns the type field of the BIOS structure.
     /// @return Type field of the BIOS structure.
-    uint8_t getType()
+    uint8_t getType() const
     {
         return *getTypeAddr();
     }
 
     /// @brief Returns the length field of the BIOS structure.
     /// @return Length field of the BIOS structure.
-    uint8_t getLength()
+    uint8_t getLength() const
     {
         return *getLengthAddr();
     }
 
     /// @brief Returns the handle field of the BIOS structure.
     /// @return Handle field of the BIOS structure.
-    uint16_t getHandle()
+    uint16_t getHandle() const 
     {
         return *getHandleAddr();
     }
 
     /// @brief Returns the vendor string field of the BIOS structure.
     /// @return Vendor string field of the BIOS structure.
-    uint8_t getVendorString()
+    uint8_t getVendorString() const
     {
         return *getVendorStringAddr();
     }
 
     /// @brief Returns the version string field of the BIOS structure.
     /// @return Version string field of the BIOS structure.
-    uint8_t getVersionString()
+    uint8_t getVersionString() const
     {
         return *getVersionStringAddr();
     }
 
     /// @brief Returns the start segment field of the BIOS structure.
     /// @return Start segment field of the BIOS structure.
-    uint16_t getStartSegment()
+    uint16_t getStartSegment() const
     {
         return *getStartSegmentAddr();
     }
 
     /// @brief Returns the release date string field of the BIOS structure.
     /// @return Release date string field of the BIOS structure.
-    uint8_t getReleaseDateString()
+    uint8_t getReleaseDateString() const
     {
         return *getReleaseDateStringAddr();
     }
 
     /// @brief Returns the ROM size field of the BIOS structure.
     /// @return ROM size field of the BIOS structure.
-    uint8_t getRomSize()
+    uint8_t getRomSize() const 
     {
         return *getRomSizeAddr();
     }
 
     /// @brief Returns the characteristics field of the BIOS structure.
     /// @return Characteristics field of the BIOS structure.
-    uint64_t getCharacteristics()
+    uint64_t getCharacteristics() const
     {
         return *getCharacteristicsAddr();
     }
 
     /// @brief Returns the system BIOS major release field of the BIOS structure.
     /// @return System BIOS major release field of the BIOS structure.
-    uint8_t getSystemBiosMajorRelease()
+    uint8_t getSystemBiosMajorRelease() const 
     {
         return *getSystemBiosMajorReleaseAddr();
     }
 
     /// @brief Returns the system BIOS minor release field of the BIOS structure.
     /// @return System BIOS minor release field of the BIOS structure.
-    uint8_t getSystemBiosMinorRelease()
+    uint8_t getSystemBiosMinorRelease() const
     {
         return *getSystemBiosMinorReleaseAddr();
     }
 
     /// @brief Returns the embedded controller firmware major release field of the BIOS structure.
     /// @return Embedded controller firmware major release field of the BIOS structure.
-    uint8_t getEmbeddedControllerFirmwareMajorRelease()
+    uint8_t getEmbeddedControllerFirmwareMajorRelease() const 
     {
         return *getEmbeddedControllerFirmwareMajorReleaseAddr();
     }
 
     /// @brief Returns the embedded controller firmware minor release field of the BIOS structure.
     /// @return Embedded controller firmware minor release field of the BIOS structure.
-    uint8_t getEmbeddedControllerFirmwareMinorRelease()
+    uint8_t getEmbeddedControllerFirmwareMinorRelease() const 
     {
         return *getEmbeddedControllerFirmwareMinorReleaseAddr();
     }
 
     /// @brief Prints the BIOS structure information.
-    void print()
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
@@ -190,85 +190,85 @@ private:
     const char *m_strings[StringCount]{};     ///< Array to store extracted strings.
 
     /// @brief Returns the address of the type field in the BIOS structure.
-    uint8_t *getTypeAddr()
+    uint8_t *getTypeAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0);
     }
 
     /// @brief Returns the address of the length field in the BIOS structure.
-    uint8_t *getLengthAddr()
+    uint8_t *getLengthAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 1);
     }
 
     /// @brief Returns the address of the handle field in the BIOS structure.
-    uint16_t *getHandleAddr()
+    uint16_t *getHandleAddr() const
     {
         return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 2);
     }
 
     /// @brief Returns the address of the vendor string field in the BIOS structure.
-    uint8_t *getVendorStringAddr()
+    uint8_t *getVendorStringAddr() const 
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 4);
     }
 
     /// @brief Returns the address of the version string field in the BIOS structure.
-    uint8_t *getVersionStringAddr()
+    uint8_t *getVersionStringAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 5);
     }
 
     /// @brief Returns the address of the start segment field in the BIOS structure.
-    uint16_t *getStartSegmentAddr()
+    uint16_t *getStartSegmentAddr() const
     {
         return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 6);
     }
 
     /// @brief Returns the address of the release date string field in the BIOS structure.
-    uint8_t *getReleaseDateStringAddr()
+    uint8_t *getReleaseDateStringAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 8);
     }
 
     /// @brief Returns the address of the ROM size field in the BIOS structure.
-    uint8_t *getRomSizeAddr()
+    uint8_t *getRomSizeAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 9);
     }
 
     /// @brief Returns the address of the characteristics field in the BIOS structure.
-    uint64_t *getCharacteristicsAddr()
+    uint64_t *getCharacteristicsAddr() const
     {
         return (uint64_t *)(static_cast<uint8_t *>(m_pStart) + 10);
     }
 
     /// @brief Returns the address of the extension byte field in the BIOS structure.
-    uint8_t *getExtensionByteAddr()
+    uint8_t *getExtensionByteAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 14);
     }
 
     /// @brief Returns the address of the system BIOS major release field in the BIOS structure.
-    uint8_t *getSystemBiosMajorReleaseAddr()
+    uint8_t *getSystemBiosMajorReleaseAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + getLength() - 4);
     }
 
     /// @brief Returns the address of the system BIOS minor release field in the BIOS structure.
-    uint8_t *getSystemBiosMinorReleaseAddr()
+    uint8_t *getSystemBiosMinorReleaseAddr() const
     {
         return getSystemBiosMajorReleaseAddr() + 1;
     }
 
     /// @brief Returns the address of the embedded controller firmware major release field in the BIOS structure.
-    uint8_t *getEmbeddedControllerFirmwareMajorReleaseAddr()
+    uint8_t *getEmbeddedControllerFirmwareMajorReleaseAddr() const
     {
         return getSystemBiosMinorReleaseAddr() + 1;
     }
 
     /// @brief Returns the address of the embedded controller firmware minor release field in the BIOS structure.
-    uint8_t *getEmbeddedControllerFirmwareMinorReleaseAddr()
+    uint8_t *getEmbeddedControllerFirmwareMinorReleaseAddr() const
     {
         return getEmbeddedControllerFirmwareMajorReleaseAddr() + 1;
     }

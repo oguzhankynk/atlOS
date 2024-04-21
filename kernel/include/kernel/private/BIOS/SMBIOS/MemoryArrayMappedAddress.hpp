@@ -31,7 +31,7 @@ public:
     /// @brief Scans the Memory Array Mapped Address table.
     /// @param p_start Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *Scan(void *p_start) 
+    void *Scan(void *p_start) override
     {
         m_pStart = p_start;
 
