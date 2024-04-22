@@ -6,6 +6,15 @@
         "systemenclosurechassis.hpp": "c",
         "bios.h": "c"
     },
-    "doxygen_runner.configuration_file_override": "${workspaceFolder}/Doxyfile"
+    "doxygen_runner.configuration_file_override": "${workspaceFolder}/Doxyfile",
+    "doxdocgen.generic.authorEmail": "",
+    "doxdocgen.generic.authorName": "Oguzhan KAYNAK",
+    "autoHeader": {},
+    "security.allowedUNCHosts": [
+        "wsl.localhost"
+    ],
+    "git.ignoreMissingGitWarning": true,
+    "editor.wordWrap": "off",
+    "doxdocgen.generic.commandSuggestionAddPrefix": true
     
 }

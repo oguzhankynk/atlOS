@@ -24,7 +24,8 @@ set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/i386)
 file(GLOB_RECURSE KERNEL_FILES
     ${ARCHDIR}/**/*.c 
     ${ARCHDIR}/**/*.cpp
-    kernel/*.cpp
+    src/**/*.c 
+    src/**/*.cpp
 )
 
 # Print the list of found objects
@@ -92,7 +93,7 @@ add_custom_command(
 )
 
 # Install header files from include/kernel/public to SYSROOT/usr/include/public
-install( DIRECTORY include/kernel/public DESTINATION ${SYSROOT}/usr/include/kernel )
+install( DIRECTORY include/kernel DESTINATION ${SYSROOT}/usr/include )
 
 # Install header files from include/common to SYSROOT/usr/include/common
 install(DIRECTORY include/common DESTINATION ${SYSROOT}/usr/include)
