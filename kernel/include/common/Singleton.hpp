@@ -29,8 +29,7 @@ class Singleton
             return instance;
         }
     protected:
-        Singleton() {}
-        ~Singleton() {}
+        Singleton() {};
     public:
         Singleton(Singleton const &) = delete;
         Singleton& operator=(Singleton const &) = delete;

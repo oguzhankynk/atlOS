@@ -29,11 +29,12 @@ void BIOSInit()
     //bios.printEntryPoint();
     //bios.printBIOSInformation();
     //bios.printSystemInformation();
-    //bios.printBaseBoardInformation();
     //bios.printSystemEnclosureChassis();
     //bios.printProcessorInformation();
-    bios.printMemoryArrayMappedAddress();
     //bios.printPhysicalMemoryArray();
+    //bios.printMemoryDevice();
+    //bios.printMemoryArrayMappedAddress();
+    //bios.printSystemBootInformation();
 }
 
 

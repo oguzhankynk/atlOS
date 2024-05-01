@@ -24,6 +24,7 @@ set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/i386)
 file(GLOB_RECURSE KERNEL_FILES
     ${ARCHDIR}/**/*.c 
     ${ARCHDIR}/**/*.cpp
+    ${ARCHDIR}/IDT/ISR.S
     src/**/*.c 
     src/**/*.cpp
 )

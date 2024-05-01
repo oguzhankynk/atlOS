@@ -18,8 +18,8 @@
  * 
  */
 #include <stdio.h>
-#include <kernel/cpu/cpu.hpp>
-#include <kernel/cpu/cpuid.h>
+#include <arch/i386/cpu/cpu.hpp>
+#include <arch/i386/cpu/cpuid.h>
 
 
 static void printCPUFeatures(const CPUFeatures* features);

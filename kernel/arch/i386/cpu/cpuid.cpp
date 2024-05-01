@@ -17,7 +17,7 @@
  * 
  * 
  */
-#include <kernel/cpu/cpuid.h>
+#include <arch/i386/cpu/cpuid.h>
 
 void cpuid(unsigned int value, unsigned int *eax, unsigned int *ebx, unsigned int *ecx, unsigned int *edx)
 {

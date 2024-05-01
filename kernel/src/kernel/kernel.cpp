@@ -25,22 +25,57 @@
 #include <string.h>
 
 #include <kernel/tty.h>
-
-#include <kernel/cpu/cpu.hpp>
 #include <kernel/BIOS/BIOS.h>
+#include <kernel/sys/multiboot.h>
+#include <kernel/panic.h>
 
-extern "C" void kernel_main(void);
+#include <arch/i386/GDT/gdt.hpp>
+#include <arch/i386/IDT/idt.hpp>
 
 
 /**
  * @brief firs point of ParsOS
  * 
  */
-void kernel_main(void) 
+extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 {
-	terminal_initialize();
+    GDT::getInstance().Init();
+    IDT::getInstance().Init();
 	
-	printf("HELLO WORLD FROM ParsOS\n");
+    terminal_initialize();
+    printf("HELLO WORLD FROM ParsOS\n");
+
+
+	if(magic != MULTIBOOT_BOOTLOADER_MAGIC)
+	{
+		kernel_panic("magic number is invalid.");
+	}
+
+	multiboot_info_t* mbd = (multiboot_info_t*) addr;
+
+	if(!(mbd->flags >> 6 & 0x1)) {
+        kernel_panic("invalid memory map given by GRUB bootloader");
+    }
+
+
+    /* Loop through the memory map and display the values */
+    for(int i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) 
+    {
+        multiboot_memory_map_t* mmmt = 
+            (multiboot_memory_map_t*) (mbd->mmap_addr + i);
+ 
+        printf("Start Addr: 0x%llx | Length: 0x%llx | Size: 0x%x | Type: %u\n",
+            mmmt->addr, mmmt->len, mmmt->size, mmmt->type);
+ 
+        if(mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
+            /* 
+             * Do something with this memory block!
+             * BE WARNED that some of memory shown as availiable is actually 
+             * actively being used by the kernel! You'll need to take that
+             * into account before writing to memory!
+             */
+        }
+    }
 
 	BIOSInit();
 

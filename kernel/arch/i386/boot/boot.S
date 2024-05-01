@@ -26,6 +26,10 @@ stack_top:
 _start:
 	movl $stack_top, %esp
 
+	# Multiboot headers
+	pushl %ebx
+	pushl %eax
+
 	# Call the global constructors.
 	call _init
 
