@@ -32,6 +32,7 @@
 #include <arch/i386/GDT/gdt.hpp>
 #include <arch/i386/IDT/idt.hpp>
 
+#include <kernel/banner.h>
 
 /**
  * @brief firs point of ParsOS
@@ -44,7 +45,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 	
     terminal_initialize();
     printf("HELLO WORLD FROM ParsOS\n");
-
+    ParsOSBanner();
 
 	if(magic != MULTIBOOT_BOOTLOADER_MAGIC)
 	{

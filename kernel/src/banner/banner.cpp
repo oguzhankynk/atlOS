@@ -14,15 +14,29 @@
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * 
  */
+#include <kernel/banner.h>
+#include <kernel/Version.h>
 #include <stdio.h>
 
-static const char* banner = 
-{
-    "#####    ####   #####    #####         ## ##    #####   \n##  ##  ##  ##  ##  ##  ##   ##       ##   ##  ##   ##  \n##  ##  ##  ##  ##  ##  ##            ##   ##  ####     \n####    ##  ##  #####    #####  ##### ##   ##   #####   \n##      ######  ## ##       ###       ##   ##      ###  \n##      ##  ##  ##  ##  ##   ##       ##   ##  ##   ##  \n##      ##  ##  ##  ##   ## ##         ## ##    ## ##   "
-};
 
-void BannerPrint()
+static const char* banner = "\
+|============================================|\n\
+|          Welcome to ParsOS                 |\n\
+|   Developed by: Oguzhan KAYNAK             |\n\
+|                                            |\n\
+| Your reliable and efficient operating      |\n\
+| system for a better computing experience!  |\n\
+|============================================|\n\
+"
+;
+
+void ParsOSBanner()
 {
     printf("%s",banner);
+    char version[256];
+    sprintf(version, "ParsOS Version: %d.%d.%d Build Time: %s",
+             MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, BUILD_TIME);
+    printf("%s\n", version);
 }
