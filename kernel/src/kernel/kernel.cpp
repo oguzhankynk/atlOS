@@ -34,6 +34,8 @@
 
 #include <kernel/banner.h>
 
+
+
 /**
  * @brief firs point of ParsOS
  * 
@@ -42,9 +44,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 {
     GDT::getInstance().Init();
     IDT::getInstance().Init();
-	
     terminal_initialize();
-    printf("HELLO WORLD FROM ParsOS\n");
+	
     ParsOSBanner();
 
 	if(magic != MULTIBOOT_BOOTLOADER_MAGIC)

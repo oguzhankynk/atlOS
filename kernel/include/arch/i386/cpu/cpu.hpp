@@ -182,12 +182,12 @@ struct X86ExceptionInfo
      * @brief print register's status.
      *
      */
-    void print()
+    void print() const
     {
         printf("REGISTERS:\n");
-        printf("err_code=%u int_no=%u \n", err_code, int_no);
+        printf("err_code=0x%x int_no=0x%x \n", err_code, int_no);
         printf("eax=0x%x, ebx=0x%x, ecx=0x%x, edx=0x%x\n", eax, ebx, ecx, edx);
-        printf("edi=0x%x, esi=0x%x, ebp=0x%x, esp=0x%x\n", edi, esi, ebp, esp);
+        printf("esi=0x%x, edi=0x%x, ebp=0x%x, esp=0x%x\n", esi, edi, ebp, esp);
     }
 };
 

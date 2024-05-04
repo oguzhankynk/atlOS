@@ -19,34 +19,93 @@
 
 #include <arch/i386/IDT/idt.hpp>
 #include <arch/i386/cpu/cpu.hpp>
+#include <kernel/sys/handlers.hpp>
 
-/**
- * @brief 'exception' functions defined in ISR.S
- * 
- */
-extern "C" void exception_0();
-extern "C" void exception_1();
-extern "C" void exception_2();
-extern "C" void exception_3();
-extern "C" void exception_4();
-extern "C" void exception_5();
-extern "C" void exception_6();
-extern "C" void exception_7();
-extern "C" void exception_8();
-extern "C" void exception_9();
-extern "C" void exception_10();
-extern "C" void exception_11();
-extern "C" void exception_12();
-extern "C" void exception_13();
-extern "C" void exception_14();
-extern "C" void exception_15();
-extern "C" void exception_16();
-extern "C" void exception_17();
-extern "C" void exception_18();
-extern "C" void exception_19();
-extern "C" void exception_20();
-extern "C" void exception_21();
-extern "C" void exception_22();
+
+
+#define INT(x) extern "C" void INT_##x();
+#define INT_RESERVED(x) 
+
+#define IDT_TABLE \
+    INT(0) INT(1) INT(2) INT(3) INT(4) INT(5) INT(6) INT(7) \
+    INT(8) INT_RESERVED(9) INT(10) INT(11) INT(12) INT(13) INT(14) INT_RESERVED(15) \
+    INT(16) INT(17) INT(18) INT(19) INT(20) INT(21) INT_RESERVED(22) INT_RESERVED(23)\
+    INT_RESERVED(24) INT_RESERVED(25) INT_RESERVED(26) INT_RESERVED(27) INT_RESERVED(28) INT_RESERVED(29) INT_RESERVED(30) INT_RESERVED(31)\
+    INT(32) INT(33) INT(34) INT(35) INT(36) INT(37) INT(38) INT(39)\
+    INT(40) INT(41) INT(42) INT(43) INT(44) INT(45) INT(46) INT(47)\
+    INT(48) INT(49) INT(50) INT(51) INT(52) INT(53) INT(54) INT(55)\
+    INT(56) INT(57) INT(58) INT(59) INT(60) INT(61) INT(62) INT(63)\
+    INT(64) INT(65) INT(66) INT(67) INT(68) INT(69) INT(70) INT(71)\
+    INT(72) INT(73) INT(74) INT(75) INT(76) INT(77) INT(78) INT(79)\
+    INT(80) INT(81) INT(82) INT(83) INT(84) INT(85) INT(86) INT(87)\
+    INT(88) INT(89) INT(90) INT(91) INT(92) INT(93) INT(94) INT(95)\
+    INT(96) INT(97) INT(98) INT(99) INT(100) INT(101) INT(102) INT(103)\
+    INT(104) INT(105) INT(106) INT(107) INT(108) INT(109) INT(110) INT(111)\
+    INT(112) INT(113) INT(114) INT(115) INT(116) INT(117) INT(118) INT(119)\
+    INT(120) INT(121) INT(122) INT(123) INT(124) INT(125) INT(126) INT(127)\
+    INT(128) INT(129) INT(130) INT(131) INT(132) INT(133) INT(134) INT(135)\
+    INT(136) INT(137) INT(138) INT(139) INT(140) INT(141) INT(142) INT(143)\
+    INT(144) INT(145) INT(146) INT(147) INT(148) INT(149) INT(150) INT(151)\
+    INT(152) INT(153) INT(154) INT(155) INT(156) INT(157) INT(158) INT(159)\
+    INT(160) INT(161) INT(162) INT(163) INT(164) INT(165) INT(166) INT(167)\
+    INT(168) INT(169) INT(170) INT(171) INT(172) INT(173) INT(174) INT(175)\
+    INT(176) INT(177) INT(178) INT(179) INT(180) INT(181) INT(182) INT(183)\
+    INT(184) INT(185) INT(186) INT(187) INT(188) INT(189) INT(190) INT(191)\
+    INT(192) INT(193) INT(194) INT(195) INT(196) INT(197) INT(198) INT(199)\
+    INT(200) INT(201) INT(202) INT(203) INT(204) INT(205) INT(206) INT(207)\
+    INT(208) INT(209) INT(210) INT(211) INT(212) INT(213) INT(214) INT(215)\
+    INT(216) INT(217) INT(218) INT(219) INT(220) INT(221) INT(222) INT(223)\
+    INT(224) INT(225) INT(226) INT(227) INT(228) INT(229) INT(230) INT(231)\
+    INT(232) INT(233) INT(234) INT(235) INT(236) INT(237) INT(238) INT(239)\
+    INT(240) INT(241) INT(242) INT(243) INT(244) INT(245) INT(246) INT(247)\
+    INT(248) INT(249) INT(250) INT(251) INT(252) INT(253) INT(254) INT(255)
+
+IDT_TABLE
+
+typedef void (*FUNC)();
+
+#undef INT
+#define INT(x) INT_##x
+
+#undef INT_RESERVED
+#define INT_RESERVED(x) reinterpret_cast<FUNC>(0)
+
+
+
+static FUNC InterruptTable[IDT::IDT_TABLE_LEN] = {
+ INT(0), INT(1), INT(2), INT(3), INT(4), INT(5), INT(6), INT(7), 
+ INT(8), INT_RESERVED(9), INT(10), INT(11), INT(12), INT(13), INT(14), INT_RESERVED(15), 
+ INT(16), INT(17), INT(18), INT(19), INT(20), INT(21), INT_RESERVED(22), INT_RESERVED(23),
+ INT_RESERVED(24), INT_RESERVED(25), INT_RESERVED(26), INT_RESERVED(27), INT_RESERVED(28), INT_RESERVED(29), INT_RESERVED(30), INT_RESERVED(31),
+ INT(32), INT(33), INT(34), INT(35), INT(36), INT(37), INT(38), INT(39),
+ INT(40), INT(41), INT(42), INT(43), INT(44), INT(45), INT(46), INT(47),
+ INT(48), INT(49), INT(50), INT(51), INT(52), INT(53), INT(54), INT(55),
+ INT(56), INT(57), INT(58), INT(59), INT(60), INT(61), INT(62), INT(63),
+ INT(64), INT(65), INT(66), INT(67), INT(68), INT(69), INT(70), INT(71),
+ INT(72), INT(73), INT(74), INT(75), INT(76), INT(77), INT(78), INT(79),
+ INT(80), INT(81), INT(82), INT(83), INT(84), INT(85), INT(86), INT(87),
+ INT(88), INT(89), INT(90), INT(91), INT(92), INT(93), INT(94), INT(95),
+ INT(96), INT(97), INT(98), INT(99), INT(100), INT(101), INT(102), INT(103),
+ INT(104), INT(105), INT(106), INT(107), INT(108), INT(109), INT(110), INT(111),
+ INT(112), INT(113), INT(114), INT(115), INT(116), INT(117), INT(118), INT(119),
+ INT(120), INT(121), INT(122), INT(123), INT(124), INT(125), INT(126), INT(127),
+ INT(128), INT(129), INT(130), INT(131), INT(132), INT(133), INT(134), INT(135),
+ INT(136), INT(137), INT(138), INT(139), INT(140), INT(141), INT(142), INT(143),
+ INT(144), INT(145), INT(146), INT(147), INT(148), INT(149), INT(150), INT(151),
+ INT(152), INT(153), INT(154), INT(155), INT(156), INT(157), INT(158), INT(159),
+ INT(160), INT(161), INT(162), INT(163), INT(164), INT(165), INT(166), INT(167),
+ INT(168), INT(169), INT(170), INT(171), INT(172), INT(173), INT(174), INT(175),
+ INT(176), INT(177), INT(178), INT(179), INT(180), INT(181), INT(182), INT(183),
+ INT(184), INT(185), INT(186), INT(187), INT(188), INT(189), INT(190), INT(191),
+ INT(192), INT(193), INT(194), INT(195), INT(196), INT(197), INT(198), INT(199),
+ INT(200), INT(201), INT(202), INT(203), INT(204), INT(205), INT(206), INT(207),
+ INT(208), INT(209), INT(210), INT(211), INT(212), INT(213), INT(214), INT(215),
+ INT(216), INT(217), INT(218), INT(219), INT(220), INT(221), INT(222), INT(223),
+ INT(224), INT(225), INT(226), INT(227), INT(228), INT(229), INT(230), INT(231),
+ INT(232), INT(233), INT(234), INT(235), INT(236), INT(237), INT(238), INT(239),
+ INT(240), INT(241), INT(242), INT(243), INT(244), INT(245), INT(246), INT(247),
+ INT(248), INT(249), INT(250), INT(251), INT(252), INT(253), INT(254), INT(255)
+} ;
 
 
 /**
@@ -55,28 +114,12 @@ extern "C" void exception_22();
  */
 void IDT::Init()
 {
-    setEntry(0 , reinterpret_cast<uint64_t>(&exception_0 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(1 , reinterpret_cast<uint64_t>(&exception_1 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(2 , reinterpret_cast<uint64_t>(&exception_2 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(3 , reinterpret_cast<uint64_t>(&exception_3 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(4 , reinterpret_cast<uint64_t>(&exception_4 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(5 , reinterpret_cast<uint64_t>(&exception_5 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(6 , reinterpret_cast<uint64_t>(&exception_6 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(7 , reinterpret_cast<uint64_t>(&exception_7 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(8 , reinterpret_cast<uint64_t>(&exception_8 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(9 , reinterpret_cast<uint64_t>(&exception_9 ), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(10, reinterpret_cast<uint64_t>(&exception_10), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(11, reinterpret_cast<uint64_t>(&exception_11), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(12, reinterpret_cast<uint64_t>(&exception_12), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(13, reinterpret_cast<uint64_t>(&exception_13), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(14, reinterpret_cast<uint64_t>(&exception_14), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(16, reinterpret_cast<uint64_t>(&exception_16), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(17, reinterpret_cast<uint64_t>(&exception_17), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(18, reinterpret_cast<uint64_t>(&exception_18), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(19, reinterpret_cast<uint64_t>(&exception_19), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(20, reinterpret_cast<uint64_t>(&exception_20), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
-    setEntry(21, reinterpret_cast<uint64_t>(&exception_21), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
+    Handlers::getInstance().Init();
 
+    for(auto i=0; i<IDT::IDT_TABLE_LEN; i++)
+    {
+        setEntry(i , reinterpret_cast<uint64_t>(InterruptTable[i]), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
+    }
     // Set the IDTR stru)cture
     idtr.limit = sizeof(idt) - 1;
     idtr.base = reinterpret_cast<uint64_t>(&idt);
@@ -119,7 +162,7 @@ void IDT::setEntry(int index, uint64_t handler, uint16_t selector, uint8_t type_
  * @brief Exception handler
  * @param regs The status of registers at exception time
  */
-extern "C" void isr_exception_handler(X86ExceptionInfo regs) 
+extern "C" void int_handler(X86ExceptionInfo regs) 
 {
     const char *int_str;
 
@@ -219,12 +262,13 @@ extern "C" void isr_exception_handler(X86ExceptionInfo regs)
 
     default:
         int_str = "OtherException";
-        break;
+        Handlers::getInstance().ExceptionHandler(regs.int_no);
+        return;
     }
 
     printf("Exception: %s\n",int_str);
 
     regs.print();
+
     while(1);
 }
-

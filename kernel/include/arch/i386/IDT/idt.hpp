@@ -25,14 +25,14 @@
 
 /**
  * @brief ExternalInterrupts enum
- * 
+ *
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | Vector | Mnemonic | Description                                 | Type      | Error Code | Source                             |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | 0      | #DE      | Divide Error                                | Fault     | No         | DIV and IDIV instructions.         |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | 1      | #DB      | Debug Exception                             | Fault/Trap| No         |Instruction, data, and I/O          |
- * |        |          |                                             |           |            |breakpoints; single-step; and others| 
+ * |        |          |                                             |           |            |breakpoints; single-step; and others|
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | 2      | —        | NMI Interrupt                               | Interrupt | No         | Nonmaskable external interrupt.    |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
@@ -78,7 +78,7 @@
  * | 19     | #XM      | SIMD Floating-Point Exception               | Fault     | No         | SSE/SSE2/SSE3                      |
  * |        |          |                                             |           |            | floating-point instructions        |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
- * | 20     | #VE      | Virtualization Exception                    | Fault     | No         | EPT violations5                    |   
+ * | 20     | #VE      | Virtualization Exception                    | Fault     | No         | EPT violations5                    |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | 21     | #CP      | Control Protection Exception                | Fault     | Yes        | RET, IRET, RSTORSSP, and SETSSBSY  |
  * |        |          |                                             |           |            | instructions can generate          |
@@ -86,15 +86,15 @@
  * |        |          |                                             |           |            | branch tracking is enabled, this   |
  * |        |          |                                             |           |            | exception can be generated due to  |
  * |        |          |                                             |           |            | a missing ENDBRANCH instruction at |
- * |        |          |                                             |           |            | target of an indirect call or jump.| 
+ * |        |          |                                             |           |            | target of an indirect call or jump.|
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | 22-31  | —        | Intel reserved. Do not use.                 |           |            |                                    |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
  * | 32-255 | —        | User Defined (Non-reserved)                 | Interrupt |            | External interrupt or              |
  * |        |          |                                             |           |            | INT n instruction.                 |
  * |--------|----------|---------------------------------------------|-----------|------------|------------------------------------|
- * 
- * For more information : 
+ *
+ * For more information :
  *   Intel® 64 and IA-32 Architectures Software Developer’s Manual Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D, and 4
  *   --> 6.3.1 External Interrupts
  */
@@ -128,6 +128,8 @@ enum class ExternalInterrupts : uint32_t
 class IDT : public Singleton<IDT>
 {
 public:
+    static constexpr uint32_t IDT_TABLE_LEN = 256;
+
     /// @brief Structure representing an entry in the Interrupt Descriptor Table (IDT)
     struct IDTEntry
     {
@@ -152,7 +154,6 @@ public:
     void Init();
 
 private:
-    static constexpr uint32_t IDT_TABLE_LEN = 256;
     // Array holding the IDT entries
     IDTEntry idt[IDT_TABLE_LEN];
 
@@ -177,7 +178,6 @@ private:
      * selector, and type attributes.
      */
     void setEntry(int index, uint64_t handler, uint16_t selector, uint8_t type_attr);
-
 };
 
 #endif /* E3243051_550C_401D_85B2_82DEB27080D5 */

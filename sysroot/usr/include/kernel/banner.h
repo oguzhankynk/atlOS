@@ -24,6 +24,10 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Prints banner and version infoormation
+ * 
+ */
 void ParsOSBanner();
 
 
