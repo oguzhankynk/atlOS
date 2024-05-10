@@ -16,7 +16,27 @@
 
         pusha /**< Push the values of all general-purpose registers onto the stack (eax, ebx, ecx, edx, ebp, esp, esi, edi). */
 
+        xor %eax, %eax         /**<push ds*/
+        mov %ds, %ax 
+        push %eax
+
+        mov $0x10 , %ax         /**<kernel data segment*/
+        mov %ax, %ds
+        mov %ax, %es
+        mov %ax, %fs
+        mov %ax, %gs
+
+        push %esp  /**< Call by pointer */
+
         call \HANDLER /**< Call the exception handler specified by HANDLER. */
+
+        pop %eax  /**< Pop the esp  */
+
+        pop %eax            /**<pop old segment*/
+        mov %ax, %ds 
+        mov %ax, %es 
+        mov %ax, %fs 
+        mov %ax, %gs 
 
         popa /**< Pop the general-purpose registers from the stack (eax, ebx, ecx, edx, ebp, esp, esi, edi). */
 

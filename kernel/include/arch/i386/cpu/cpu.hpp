@@ -166,6 +166,7 @@ enum class SegmentSelect : uint16_t
 /// @brief Structure representing the state of x86 registers at exception time.
 struct X86ExceptionInfo
 {
+    uint32_t ds;  ///< Data segment 
     uint32_t edi; ///< Extended Destination Index register
     uint32_t esi; ///< Extended Source Index register
     uint32_t ebp; ///< Extended Base Pointer register
@@ -178,6 +179,8 @@ struct X86ExceptionInfo
     uint32_t int_no;   ///< Interrupt number or exception code
     uint32_t err_code; ///< Error code (if applicable)
 
+    uint32_t eip, cs, eflags, u_esp, ss; ///< Other registers
+
     /**
      * @brief print register's status.
      *
@@ -185,9 +188,10 @@ struct X86ExceptionInfo
     void print() const
     {
         printf("REGISTERS:\n");
-        printf("err_code=0x%x int_no=0x%x \n", err_code, int_no);
+        printf("err_code=0x%x int_no=0x%x\n", err_code, int_no);
         printf("eax=0x%x, ebx=0x%x, ecx=0x%x, edx=0x%x\n", eax, ebx, ecx, edx);
         printf("esi=0x%x, edi=0x%x, ebp=0x%x, esp=0x%x\n", esi, edi, ebp, esp);
+        printf("eip=0x%x, cs=0x%x, eflags=0x%x, ss=0x%x ds=0x%x u_esp=0x%x\n", eip, cs, eflags, ss, ds, u_esp);
     }
 };
 

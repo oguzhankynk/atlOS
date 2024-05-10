@@ -133,9 +133,23 @@ public:
     /// @brief Structure representing an entry in the Interrupt Descriptor Table (IDT)
     struct IDTEntry
     {
+        enum TypeAttr : uint8_t
+        {
+            GATE_TASK             = 0x5,
+            GATE_16BIT_INT        = 0x6,
+            GATE_16BIT_TRAP       = 0x7,
+            GATE_32BIT_INT        = 0xE,
+            GATE_32BIT_TRAP       = 0xF,
+            RING0                  = 0x00,
+            RING1                  = 0x20,
+            RING2                  = 0x40,
+            RING3                  = 0x60,
+            PRESENT                = 0x80,
+        };
+
         uint16_t offset_low;  ///< Lower 16 bits of the handler address
         uint16_t selector;    ///< Code segment selector
-        uint8_t zero;         ///< Unused (set to 0)
+        uint8_t Reserved;         ///< Unused (set to 0)
         uint8_t type_attr;    ///< Type and access attributes
         uint16_t offset_high; ///< Higher 16 bits of the handler address
     } __attribute__((packed));
@@ -177,7 +191,7 @@ private:
      * Configures an entry in the IDT with the provided handler address, code segment
      * selector, and type attributes.
      */
-    void setEntry(int index, uint64_t handler, uint16_t selector, uint8_t type_attr);
+    void setEntry(int index, void* handler, uint16_t selector, uint8_t type_attr);
 };
 
 #endif /* E3243051_550C_401D_85B2_82DEB27080D5 */

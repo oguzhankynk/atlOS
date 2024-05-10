@@ -118,7 +118,7 @@ void IDT::Init()
 
     for(auto i=0; i<IDT::IDT_TABLE_LEN; i++)
     {
-        setEntry(i , reinterpret_cast<uint64_t>(InterruptTable[i]), static_cast<uint16_t>(SegmentSelect::KERNELCODE), 0x8E);
+        setEntry(i , (void*)(InterruptTable[i]), static_cast<uint16_t>(SegmentSelect::KERNELCODE), IDTEntry::TypeAttr::PRESENT | IDTEntry::TypeAttr::GATE_32BIT_INT);
     }
     // Set the IDTR stru)cture
     idtr.limit = sizeof(idt) - 1;
@@ -148,21 +148,21 @@ void IDT::load()
  * Configures an entry in the IDT with the provided handler address, code segment
  * selector, and type attributes.
  */
-void IDT::setEntry(int index, uint64_t handler, uint16_t selector, uint8_t type_attr)
+void IDT::setEntry(int index, void* handler, uint16_t selector, uint8_t type_attr)
 {
     // Configure the IDT entry
-    idt[index].offset_low = handler & 0xFFFF;
+    idt[index].offset_low = (uint32_t)handler & 0xFFFF;
     idt[index].selector = selector;
-    idt[index].zero = 0;
+    idt[index].Reserved = 0;
     idt[index].type_attr = type_attr;
-    idt[index].offset_high = (handler >> 16) & 0xFFFF;
+    idt[index].offset_high = ((uint32_t)handler >> 16) & 0xFFFF;
 }
 
 /**
  * @brief Exception handler
  * @param regs The status of registers at exception time
  */
-extern "C" void int_handler(X86ExceptionInfo regs) 
+extern "C" void int_handler(const X86ExceptionInfo& regs) 
 {
     const char *int_str;
 
