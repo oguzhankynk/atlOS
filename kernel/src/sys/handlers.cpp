@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <arch/i386/IDT/idt.hpp>
 
-static exception_handle_function FUNCS[IDT::IDT_TABLE_LEN];
+static interrupt_handle_function FUNCS[IDT::IDT_TABLE_LEN];
 static void *ARGS[IDT::IDT_TABLE_LEN];
 
 void DEFAULT_HANDLER_FUNCTION(void *param)
@@ -39,21 +39,20 @@ void Handlers::Init()
 {
     for (auto i = 0; i < IDT::IDT_TABLE_LEN; i++)
     {
-        FUNCS[i] = (exception_handle_function)DEFAULT_HANDLER_FUNCTION;
-        ARGS[i] = nullptr;
+        AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, nullptr);
     }
 }
 
 /**
- * @brief Registers an exception handler for a specific exception number.
+ * @brief Registers an Interrupt handler for a specific exception number.
  *
- * @param exception_no The exception number to register the handler for.
+ * @param exception_no The Interrupt number to register the handler for.
  * @param function The function to be called when the specified exception occurs.
  * @param Arg The argument to be passed to the registered handler function
- * @return true if the exception handler was successfully registered
+ * @return true if the Interrupt handler was successfully registered
  * @return false otherwise
  */
-bool Handlers::AddExceptionHandler(uint32_t exception_no, exception_handle_function function, void *Arg)
+bool Handlers::AddInterruptHandler(uint32_t exception_no, interrupt_handle_function function, void *Arg)
 {
     if (exception_no >= IDT::IDT_TABLE_LEN)
         return false;
@@ -65,11 +64,11 @@ bool Handlers::AddExceptionHandler(uint32_t exception_no, exception_handle_funct
 }
 
 /**
- * @brief Call the Exception Handler function
+ * @brief Call the Interrupt Handler function
  *
  * @param exception_no
  */
-void Handlers::ExceptionHandler(uint32_t exception_no)
+void Handlers::InterruptHandler(uint32_t exception_no)
 {
     if (exception_no >= IDT::IDT_TABLE_LEN)
         return ;

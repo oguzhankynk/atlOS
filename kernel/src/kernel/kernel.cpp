@@ -32,7 +32,10 @@
 #include <arch/i386/GDT/gdt.hpp>
 #include <arch/i386/IDT/idt.hpp>
 
+#include <hardware/pic8259.hpp>
+
 #include <kernel/banner.h>
+#include <Drivers/mouse.hpp>
 
 #define CHECK_FLAG(flags, bit) ((flags) & (1 << (bit)))
 
@@ -48,7 +51,10 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 
     ParsOSBanner();
 
-    asm volatile("int $0x00");
+    PIC8259::getInstance().init();
+    mouse_init();
+
+    //asm volatile("int $0x00");
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
     {
         kernel_panic("magic number is invalid.");

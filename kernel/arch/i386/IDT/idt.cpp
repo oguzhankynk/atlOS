@@ -262,7 +262,7 @@ extern "C" void int_handler(const X86ExceptionInfo& regs)
 
     default:
         int_str = "OtherException";
-        Handlers::getInstance().ExceptionHandler(regs.int_no);
+        Handlers::getInstance().InterruptHandler(regs.int_no);
         return;
     }
 

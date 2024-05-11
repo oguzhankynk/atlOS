@@ -27,7 +27,7 @@
  * @brief A function pointer type for exception handling functions.
  *
  */
-typedef void (*exception_handle_function)(void *);
+typedef void (*interrupt_handle_function)(void *);
 
 class Handlers : public Singleton<Handlers>
 {
@@ -39,22 +39,22 @@ public:
     void Init();
 
     /**
-     * @brief Registers an exception handler for a specific exception number.
+     * @brief Registers an Interrupt handler for a specific exception number.
      *
-     * @param exception_no The exception number to register the handler for.
+     * @param exception_no The Interrupt number to register the handler for.
      * @param function The function to be called when the specified exception occurs.
      * @param Arg The argument to be passed to the registered handler function 
-     * @return true if the exception handler was successfully registered
+     * @return true if the Interrupt handler was successfully registered
      * @return false otherwise
      */
-    bool AddExceptionHandler(uint32_t exception_no, exception_handle_function function, void *Arg);
+    bool AddInterruptHandler(uint32_t exception_no, interrupt_handle_function function, void *Arg);
 
     /**
-     * @brief Call the Exception Handler function
+     * @brief Call the Interrupt Handler function
      * 
      * @param exception_no 
      */
-    void ExceptionHandler(uint32_t exception_no);
+    void InterruptHandler(uint32_t exception_no);
 };
 
 #endif /* CA54FFDF_8049_47E3_9ED3_76405AD1CF26 */
