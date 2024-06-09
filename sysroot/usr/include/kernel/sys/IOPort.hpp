@@ -40,6 +40,18 @@ void outportb(uint16_t port, uint8_t value);
  */
 uint8_t inportb(uint16_t port);
 
+/**
+ * @brief Enable Interrupts 
+ * 
+ */
+void EnableInterrupts(void);
+
+/**
+ * @brief Disable Interrupts 
+ * 
+ */
+void DisableInterrupts(void);
+
 } // namespace IOPort
 
 #endif /* EC88CE80_61F7_4750_A489_5B61DDED0BA0 */

@@ -26,7 +26,8 @@ namespace IOPort
  * @param port The I/O port to write to.
  * @param value The byte value to write to the port.
  */
-void outportb(uint16_t port, uint8_t value) {
+void outportb(uint16_t port, uint8_t value) 
+{
     asm volatile ("outb %0, %1" :: "a"(value), "Nd"(port));
 }
 
@@ -36,10 +37,29 @@ void outportb(uint16_t port, uint8_t value) {
  * @param port The I/O port to read from.
  * @return The byte value read from the port.
  */
-uint8_t inportb(uint16_t port) {
+uint8_t inportb(uint16_t port) 
+{
     uint8_t value;
     asm volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
     return value;
+}
+
+/**
+ * @brief Enable Interrupts 
+ * 
+ */
+void EnableInterrupts(void)
+{
+    asm volatile("cli"); 
+}
+
+/**
+ * @brief Disable Interrupts 
+ * 
+ */
+void DisableInterrupts(void)
+{ 
+    asm volatile("sti"); 
 }
 
 } // namespace IOPort

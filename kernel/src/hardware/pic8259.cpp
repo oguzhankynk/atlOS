@@ -21,13 +21,15 @@
 #include <kernel/sys/IOPort.hpp>
 
 // Constructor
-PIC8259::PIC8259() {
+PIC8259::PIC8259() 
+{
     // Default constructor; can be used to set initial states if necessary.
 }
 
 // Initializes the PIC8259.
-void PIC8259::init() {
-    asm("cli");
+void PIC8259::init() 
+{
+    IOPort::DisableInterrupts();
     // Initialization command words (ICW) for master and slave PICs
     uint8_t master_icw1 = 0x11; // ICW1: Start initialization, edge triggered, cascade mode
     uint8_t slave_icw1 = 0x11; // ICW1: Start initialization, edge triggered, cascade mode
@@ -60,23 +62,26 @@ void PIC8259::init() {
     IOPort::outportb(MASTER_DATA_PORT, 0xFF); // Mask all interrupts
     IOPort::outportb(SLAVE_DATA_PORT, 0xFF); // Mask all interrupts
 
-    asm("sti");     
+    IOPort::EnableInterrupts();     
 }
 
 // Sends an end-of-interrupt (EOI) signal to the master PIC.
-void PIC8259::send_master_eoi(uint8_t irq) {
+void PIC8259::send_master_eoi(uint8_t irq) 
+{
     // Send EOI to master PIC
     IOPort::outportb(MASTER_COMMAND_PORT, 0x20);
 }
 
 // Sends an end-of-interrupt (EOI) signal to the slave PIC.
-void PIC8259::send_slave_eoi(uint8_t irq) {
+void PIC8259::send_slave_eoi(uint8_t irq) 
+{
     // Send EOI to slave PIC
     IOPort::outportb(SLAVE_COMMAND_PORT, 0x20);
 }
 
 // Masks a specific interrupt request (IRQ) on the master PIC.
-void PIC8259::mask_master_irq(uint8_t irq) {
+void PIC8259::mask_master_irq(uint8_t irq) 
+{
     // Read current mask
     uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
     // Set the bit for the specified IRQ to mask it
@@ -87,7 +92,8 @@ void PIC8259::mask_master_irq(uint8_t irq) {
 
 
 // Masks a specific interrupt request (IRQ) on the slave PIC.
-void PIC8259::mask_slave_irq(uint8_t irq) {
+void PIC8259::mask_slave_irq(uint8_t irq) 
+{
     // Read the current interrupt mask
     uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
     // Mask the specified IRQ by setting the appropriate bit
@@ -97,7 +103,8 @@ void PIC8259::mask_slave_irq(uint8_t irq) {
 }
 
 // Unmasks a specific interrupt request (IRQ) on the master PIC.
-void PIC8259::unmask_master_irq(uint8_t irq) {
+void PIC8259::unmask_master_irq(uint8_t irq) 
+{
     // Read the current interrupt mask
     uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
     // Unmask the specified IRQ by clearing the appropriate bit
@@ -107,7 +114,8 @@ void PIC8259::unmask_master_irq(uint8_t irq) {
 }
 
 // Unmasks a specific interrupt request (IRQ) on the slave PIC.
-void PIC8259::unmask_slave_irq(uint8_t irq) {
+void PIC8259::unmask_slave_irq(uint8_t irq) 
+{
     // Read the current interrupt mask
     uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
     // Unmask the specified IRQ by clearing the appropriate bit
@@ -117,13 +125,17 @@ void PIC8259::unmask_slave_irq(uint8_t irq) {
 }
 
 // Disables a specific interrupt request (IRQ).
-void PIC8259::irq_disable(uint8_t irq) {
-    if (irq < 8) {
+void PIC8259::irq_disable(uint8_t irq) 
+{
+    if (irq < 8) 
+    {
         // IRQ is in the range of the master PIC
         uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
         mask |= (1 << irq); // Set the bit to mask the IRQ
         IOPort::outportb(MASTER_DATA_PORT, mask);
-    } else {
+    } 
+    else 
+    {
         // IRQ is in the range of the slave PIC
         irq -= 8; // Adjust IRQ number for the slave PIC
         uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
@@ -133,13 +145,17 @@ void PIC8259::irq_disable(uint8_t irq) {
 }
 
 // Enables a specific interrupt request (IRQ).
-void PIC8259::irq_enable(uint8_t irq) {
-    if (irq < 8) {
+void PIC8259::irq_enable(uint8_t irq) 
+{
+    if (irq < 8) 
+    {
         // IRQ is in the range of the master PIC
         uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
         mask &= ~(1 << irq); // Clear the bit to unmask the IRQ
         IOPort::outportb(MASTER_DATA_PORT, mask);
-    } else {
+    } 
+    else 
+    {
         // IRQ is in the range of the slave PIC
         irq -= 8; // Adjust IRQ number for the slave PIC
         uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
@@ -149,21 +165,25 @@ void PIC8259::irq_enable(uint8_t irq) {
 }
 
 // Sends a command to the master PIC.
-void PIC8259::send_master_command(uint8_t command) {
+void PIC8259::send_master_command(uint8_t command) 
+{
     IOPort::outportb(MASTER_COMMAND_PORT, command);
 }
 
 // Sends a command to the slave PIC.
-void PIC8259::send_slave_command(uint8_t command) {
+void PIC8259::send_slave_command(uint8_t command) 
+{
     IOPort::outportb(SLAVE_COMMAND_PORT, command);
 }
 
 // Writes a value to the master PIC data port.
-void PIC8259::write_master_data(uint8_t data) {
+void PIC8259::write_master_data(uint8_t data) 
+{
     IOPort::outportb(MASTER_DATA_PORT, data);
 }
 
 // Writes a value to the slave PIC data port.
-void PIC8259::write_slave_data(uint8_t data) {
+void PIC8259::write_slave_data(uint8_t data) 
+{
     IOPort::outportb(SLAVE_DATA_PORT, data);
 }
