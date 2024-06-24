@@ -61,12 +61,18 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
         kernel_panic("magic number is invalid.");
     }
 
-    Memory::InitMemory((void*)addr);
+    multiboot_info_t* bootInfo = (multiboot_info_t*)addr;
+    uint32_t mod1 = *(uint32_t*)(bootInfo->mods_addr + 4);
+    uint32_t physicalAllocStart = (mod1 + 0xFFF) & ~0xFFF;
+
+
+
+    Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
 
    
 
 
-    BIOSInit();
+    //BIOSInit();
 
     while (1)
         ;

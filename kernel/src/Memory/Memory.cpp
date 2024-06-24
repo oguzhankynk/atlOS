@@ -2,105 +2,179 @@
 #include <Memory/PhysicalMemory.hpp>
 #include <kernel/sys/multiboot.h>
 #include <stdio.h>
+#include <string.h>
 
-#define CHECK_FLAG(flags, bit) ((flags) & (1 << (bit)))
+
+#define CEIL_DIV(a,b) (((a + b) - 1)/b)
+#define REC_PAGEDIR ((uint32_t*)0xFFFFF000)
+#define REC_PAGETABLE(i) ((uint32_t*) (0xFFC00000 + ((i) << 12)))
+
+#define PAGE_FLAG_PRESENT (1 << 0)
+#define PAGE_FLAG_WRITE (1 << 1)
+#define PAGE_FLAG_OWNER (1 << 9)
+
+
+extern uint32_t initial_page_dir[1024];
 
 namespace Memory
 {
-    void InitMemory(void *boot_info_addr)
+    void invalidate(uint32_t vaddr);
+    uint32_t pmmAllocPageFrame();
+
+
+    static uint32_t pageFrameMin;
+    static uint32_t pageFrameMax;
+    static uint32_t totalAlloc;
+    int mem_num_vpages;
+
+#define NUM_PAGES_DIRS 256
+#define NUM_PAGE_FRAMES (0x100000000 / 0x1000 / 8)
+
+    uint8_t physicalMemoryBitmap[NUM_PAGE_FRAMES / 8]; // Dynamically, bit array
+
+    static uint32_t pageDirs[NUM_PAGES_DIRS][1024] __attribute__((aligned(4096)));
+    static uint8_t pageDirUsed[NUM_PAGES_DIRS];
+
+    void invalidate(uint32_t vaddr)
     {
-        multiboot_info_t* boot_info = (multiboot_info_t*)boot_info_addr;
+        asm volatile("invlpg %0" ::"m"(vaddr));
+    }
 
-        /* Print out the flags. */
-        printf("flags = 0x%x\n", (unsigned)boot_info->flags);
+    void pmm_init(uint32_t memLow, uint32_t memHigh)
+    {
+        pageFrameMin = CEIL_DIV(memLow, 0x1000);
+        pageFrameMax = memHigh / 0x1000;
+        totalAlloc = 0;
 
-        /* Are mem_* valid? */
-        if (CHECK_FLAG(boot_info->flags, 0))
+        memset(physicalMemoryBitmap, 0, sizeof(physicalMemoryBitmap));
+    }
+
+    uint32_t *memGetCurrentPageDir()
+    {
+        uint32_t pd;
+        asm volatile("mov %%cr3, %0" : "=r"(pd));
+        pd += KERNEL_START;
+
+        return (uint32_t *)pd;
+    }
+
+    void memChangePageDir(uint32_t *pd)
+    {
+        pd = (uint32_t *)(((uint32_t)pd) - KERNEL_START);
+        asm volatile("mov %0, %%eax \n mov %%eax, %%cr3 \n" ::"m"(pd));
+    }
+
+    void syncPageDirs()
+    {
+        for (int i = 0; i < NUM_PAGES_DIRS; i++)
         {
-            uint32_t total_memory_kb = (boot_info->mem_lower + boot_info->mem_upper);
+            if (pageDirUsed[i])
+            {
+                uint32_t *pageDir = pageDirs[i];
 
-            printf("mem_lower = %uKB, mem_upper = %uKB total_memory = %uKB\n",
-                   (unsigned)boot_info->mem_lower, (unsigned)boot_info->mem_upper, total_memory_kb);
-        }
-
-        
-    constexpr uint32_t MEMMAP_AREA = 0x30000;
-
-    PhysicalMemory::getInstance().Init((void*)MEMMAP_AREA, (uint32_t)(boot_info->mem_lower + boot_info->mem_upper));
-
-    /* Is boot_device valid? */
-    if (CHECK_FLAG(boot_info->flags, 1))
-        printf("boot_device = 0x%x\n", (unsigned)boot_info->boot_device);
-
-    /* Is the command line passed? */
-    if (CHECK_FLAG(boot_info->flags, 2))
-        printf("cmdline = %s\n", (char *)boot_info->cmdline);
-
-    /* Are mods_* valid? */
-    if (CHECK_FLAG(boot_info->flags, 3))
-    {   
-        int i;
-        multiboot_module_t *mod;
-
-        printf("mods_count = %d, mods_addr = 0x%x\n",
-               (int)boot_info->mods_count, (int)boot_info->mods_addr);
-
-        for (i = 0, mod = (multiboot_module_t *)boot_info->mods_addr;
-             i < boot_info->mods_count;
-             i++, mod++)
-            printf(" mod_start = 0x%x, mod_end = 0x%x, cmdline = %s\n",
-                   (unsigned)mod->mod_start,
-                   (unsigned)mod->mod_end,
-                   (char *)mod->cmdline);
-    }
-
-    /* Bits 4 and 5 are mutually exclusive! */
-    if (CHECK_FLAG(boot_info->flags, 4) && CHECK_FLAG(boot_info->flags, 5))
-    {
-        printf("Both bits 4 and 5 are set.\n");
-        return;
-    }
-
-    /* Is the symbol table of a.out valid? */
-    if (CHECK_FLAG(boot_info->flags, 4))
-    {
-        multiboot_aout_symbol_table_t *multiboot_aout_sym = &(boot_info->u.aout_sym);
-
-        printf("multiboot_aout_symbol_table: tabsize = 0x%0x, "
-               "strsize = 0x%x, addr = 0x%x\n",
-               (unsigned)multiboot_aout_sym->tabsize,
-               (unsigned)multiboot_aout_sym->strsize,
-               (unsigned)multiboot_aout_sym->addr);
-    }
-
-    /* Is the section header table of ELF valid? */
-    if (CHECK_FLAG(boot_info->flags, 5))
-    {
-        multiboot_elf_section_header_table_t *multiboot_elf_sec = &(boot_info->u.elf_sec);
-
-        printf("multiboot_elf_sec: num = %u, size = 0x%x,"
-               " addr = 0x%x, shndx = 0x%x\n",
-               (unsigned)multiboot_elf_sec->num, (unsigned)multiboot_elf_sec->size,
-               (unsigned)multiboot_elf_sec->addr, (unsigned)multiboot_elf_sec->shndx);
-    }
-
-    /* Are mmap_* valid? */
-    if (CHECK_FLAG(boot_info->flags, 6))
-    {
-        for(int i=0; i<boot_info->mmap_length; i+= sizeof(multiboot_mmap_entry))
-        {
-            auto *mmmt = (multiboot_mmap_entry*)(boot_info->mmap_addr + i);
-
-            printf("Addr: %x %x | Length: %x %x | size: %x | Type: %x \n",
-            mmmt->addr_low, mmmt->addr_high,
-            mmmt->len_low, mmmt->len_high,
-            mmmt->size, mmmt->type);
+                for (int i = 768; i < 1023; i++)
+                {
+                    pageDir[i] = initial_page_dir[i] & ~PAGE_FLAG_OWNER;
+                }
+            }
         }
     }
-    
-    PhysicalMemory::getInstance().RemoveMemoryRegion((void*)0x1000, 0xB000);                            // Reserve all memory below C000h for the kernel/OS
-    PhysicalMemory::getInstance().RemoveMemoryRegion((void*)MEMMAP_AREA, PhysicalMemory::getInstance().GetMaxBlockSize());
 
+    void memMapPage(uint32_t virutalAddr, uint32_t physAddr, uint32_t flags)
+    {
+        uint32_t *prevPageDir = 0;
+
+        if (virutalAddr >= KERNEL_START)
+        {
+            prevPageDir = memGetCurrentPageDir();
+            if (prevPageDir != initial_page_dir)
+            {
+                memChangePageDir(initial_page_dir);
+            }
+        }
+
+        uint32_t pdIndex = virutalAddr >> 22;
+        uint32_t ptIndex = virutalAddr >> 12 & 0x3FF;
+
+        uint32_t *pageDir = REC_PAGEDIR;
+        uint32_t *pt = REC_PAGETABLE(pdIndex);
+
+        if (!(pageDir[pdIndex] & PAGE_FLAG_PRESENT))
+        {
+            uint32_t ptPAddr = pmmAllocPageFrame();
+            pageDir[pdIndex] = ptPAddr | PAGE_FLAG_PRESENT | PAGE_FLAG_WRITE | PAGE_FLAG_OWNER | flags;
+            invalidate(virutalAddr);
+
+            for (uint32_t i = 0; i < 1024; i++)
+            {
+                pt[i] = 0;
+            }
+        }
+
+        pt[ptIndex] = physAddr | PAGE_FLAG_PRESENT | flags;
+        mem_num_vpages++;
+        invalidate(virutalAddr);
+
+        if (prevPageDir != 0)
+        {
+            syncPageDirs();
+
+            if (prevPageDir != initial_page_dir)
+            {
+                memChangePageDir(prevPageDir);
+            }
+        }
     }
+
+    uint32_t pmmAllocPageFrame()
+    {
+        uint32_t start = pageFrameMin / 8 + ((pageFrameMin & 7) != 0 ? 1 : 0);
+        uint32_t end = pageFrameMax / 8 - ((pageFrameMax & 7) != 0 ? 1 : 0);
+
+        for (uint32_t b = start; b < end; b++)
+        {
+            uint8_t byte = physicalMemoryBitmap[b];
+            if (byte == 0xFF)
+            {
+                continue;
+            }
+
+            for (uint32_t i = 0; i < 8; i++)
+            {
+                bool used = byte >> i & 1;
+
+                if (!used)
+                {
+                    byte ^= (-1 ^ byte) & (1 << i);
+                    physicalMemoryBitmap[b] = byte;
+                    totalAlloc++;
+
+                    uint32_t addr = (b * 8 * i) * 0x1000;
+                    return addr;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    void initMemory(uint32_t memHigh, uint32_t physicalAllocStart)
+    {
+        mem_num_vpages = 0;
+        initial_page_dir[0] = 0;
+         printf("DEBUG 1\n");
+        invalidate(0);
+         printf("DEBUG 2\n");
+        initial_page_dir[1023] = ((uint32_t)initial_page_dir - KERNEL_START) | PAGE_FLAG_PRESENT | PAGE_FLAG_WRITE;
+         printf("DEBUG 3\n");
+        invalidate(0xFFFFF000);
+        printf("DEBUG 4\n");
+        pmm_init(physicalAllocStart, memHigh);
+        memset(pageDirs, 0, 0x1000 * NUM_PAGES_DIRS);
+        memset(pageDirUsed, 0, NUM_PAGES_DIRS);
+        printf("DEBUG 5\n");
+    }
+
+   
 
 } // namespace Memory

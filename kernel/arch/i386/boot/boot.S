@@ -6,7 +6,7 @@
 .set CHECKSUM, -(MAGIC + FLAGS) # checksum of above, to prove we are multiboot
 
 # Declare a header as in the Multiboot Standard.
-.section .multiboot
+.section .multiboot, "ax", @progbits
 .align 4
 .long MAGIC
 .long FLAGS
@@ -19,25 +19,50 @@ stack_bottom:
 .skip 16384 # 16 KiB
 stack_top:
 
-# The kernel entry point.
-.section .text
+
+.section .data
+.align 4096
+.global initial_page_dir
+initial_page_dir:
+    .long 0b10000011
+    .rept 768-1
+        .long 0
+    .endr
+
+    .long (0 << 22) | 0b10000011
+    .long (1 << 22) | 0b10000011
+    .long (2 << 22) | 0b10000011
+    .long (3 << 22) | 0b10000011
+    .rept 256-4
+        .long 0
+    .endr
+
+.section .boot, "ax", @progbits
 .global _start
-.type _start, @function
 _start:
-	movl $stack_top, %esp
+    movl $initial_page_dir - 0xC0000000, %ecx
+    movl %ecx, %cr3
 
-	# Multiboot headers
-	pushl %ebx
-	pushl %eax
+    movl %cr4, %ecx
+    orl $0x10, %ecx
+    movl %ecx, %cr4
 
-	# Call the global constructors.
-	call _init
+    movl %cr0, %ecx
+    orl $0x80000000, %ecx
+    movl %ecx, %cr0
 
-	# Transfer control to the main kernel.
-	call kernel_main
+    jmp higher_half
 
-	# Hang if kernel_main unexpectedly returns.
-	cli
-1:	hlt
-	jmp 1b
-.size _start, . - _start
+.section .text
+.global higher_half
+higher_half:
+    movl $stack_top, %esp
+    push %ebx
+    push %eax
+    xorl %ebp, %ebp
+    call kernel_main
+
+halt:
+    hlt
+    jmp halt
+
