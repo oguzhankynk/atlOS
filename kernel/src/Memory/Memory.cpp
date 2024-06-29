@@ -176,7 +176,7 @@ namespace Memory
     {
         __asm__ __volatile__(
             "mov %%cr0, %%eax;"      // Load the value of CR0 into EAX register
-            "or $0x80000000, %%eax;" // Set the most significant bit in EAX register (paging bit)
+            "or $0x80000001, %%eax;" // Set the most significant bit in EAX register (paging bit)
             "mov %%eax, %%cr0;"      // Move the modified value back into CR0 register
             :
             :
