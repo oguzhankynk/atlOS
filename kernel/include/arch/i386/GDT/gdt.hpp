@@ -20,17 +20,15 @@
 #define B8E0EF46_0B01_45A0_8AA2_0B2B4992066F
 
 #include <stdint.h>
-#include <common/Singleton.hpp>
 
 /**
- * @brief Class representing the Global Descriptor Table (GDT).
+ * @brief Namespace representing the Global Descriptor Table (GDT).
  *
- * The GDT class encapsulates the GDT table and its operations. It provides functions
+ * The GDT namespace encapsulates the GDT table and its operations. It provides functions
  * for initializing the GDT, setting entries, and loading the GDT into the CPU.
  */
-class GDT : public Singleton<GDT>
+namespace GDT
 {
-public:
 
     /// @brief Struct representing the access field in a GDT entry (8bit).
     struct access_field_t
@@ -109,18 +107,7 @@ public:
          *
          * @return uint8_t The converted 8-bit value representing the access_field_t struct
          */
-        uint8_t ConertToUint8() const
-        {
-            uint8_t result = 0;
-            result |= ((uint8_t)present    << 7);
-            result |= ((uint8_t)privilege  << 5);
-            result |= ((uint8_t)descriptor << 4);
-            result |= ((uint8_t)executable << 3);
-            result |= ((uint8_t)direction  << 2);
-            result |= ((uint8_t)RW_flag    << 1);
-            result |= ((uint8_t)accessed   << 0);
-            return result;
-        }
+        uint8_t ConertToUint8() const;
     };
 
     /// @brief Struct representing the flags field in a GDT entry.
@@ -144,19 +131,13 @@ public:
         Granularity gr : 1; /**< Size bit(1 bit). */
 
         flags_field_t() = default;
+
         /**
          * @brief Convert flags_field_t struct to uint8_t value
          *
          * @return uint8_t The converted 8-bit value representing the flags_field_t struct
          */
-        uint8_t ConertToUint8() const
-        {
-            uint8_t result = 0;
-            result |= ((uint8_t)gr << 7);
-            result |= ((uint8_t)sz << 6);
-            result |= 0x0F;
-            return result;
-        }
+        uint8_t ConertToUint8() const;
     };
 
     /// @brief Represents a GDT entry.
@@ -185,34 +166,6 @@ public:
      */
     void Init();
 
-private:
-    static constexpr uint8_t GDT_TABLE_LEN = 5; /* NULL, Kernel Code, Kernel Data, User Code, User Data, TSS*/
-
-    // GDT table (array of GDT entries)
-    GDTEntry gdtEntries[GDT_TABLE_LEN]{}; /* Null descriptor init*/
-
-    // GDTR structure (Global Descriptor Table Register)
-    GDTR gdtr;
-
-    /**
-     * @brief Sets up a GDT entry.
-     *
-     * @param index The index of the GDT entry to set.
-     * @param base The base address of the segment.
-     * @param limit The limit (size) of the segment.
-     * @param access The access flags for the segment.
-     * @param flags The granularity.
-     *
-     * Configures a specific GDT entry with the given base address, limit, access flags, and granularity.
-     */
-    void setEntry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity);
-    // void set_gdt_entry(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity);
-
-    /**
-     * @brief Loads the GDT into the CPU and updates segment registers.
-     *
-     */
-    void loadAndUpdateSegmentRegisters();
 };
 
 #endif /* B8E0EF46_0B01_45A0_8AA2_0B2B4992066F */

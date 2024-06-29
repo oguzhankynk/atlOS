@@ -21,7 +21,6 @@
 #define CA54FFDF_8049_47E3_9ED3_76405AD1CF26
 
 #include <stdint.h>
-#include <common/Singleton.hpp>
 
 /**
  * @brief A function pointer type for exception handling functions.
@@ -29,9 +28,9 @@
  */
 typedef void (*interrupt_handle_function)(void *);
 
-class Handlers : public Singleton<Handlers>
+namespace Handlers 
 {
-public:
+
     /**
      * @brief Initializes the Handler
      *
@@ -55,6 +54,8 @@ public:
      * @param exception_no 
      */
     void InterruptHandler(uint32_t exception_no);
-};
+
+
+};//namespace Handlers 
 
 #endif /* CA54FFDF_8049_47E3_9ED3_76405AD1CF26 */

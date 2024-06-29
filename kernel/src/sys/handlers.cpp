@@ -23,58 +23,68 @@
 #include <stdio.h>
 #include <arch/i386/IDT/idt.hpp>
 
-static interrupt_handle_function FUNCS[IDT::IDT_TABLE_LEN];
-static void *ARGS[IDT::IDT_TABLE_LEN];
-
-void DEFAULT_HANDLER_FUNCTION(void *param)
+namespace Handlers
 {
-    printf("DEFAULT_HANDLER_FUNCTION \n");
-}
 
-/**
- * @brief Initializes the Handler
- *
- */
-void Handlers::Init()
-{
-    for (auto i = 0; i < IDT::IDT_TABLE_LEN; i++)
+    static interrupt_handle_function FUNCS[IDT::IDT_TABLE_LEN];
+    static void *ARGS[IDT::IDT_TABLE_LEN];
+
+    /**
+     * @brief Default handler function
+     * 
+     * @param param 
+     */
+    static void DEFAULT_HANDLER_FUNCTION(void *param)
     {
-        AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, nullptr);
+        printf("DEFAULT_HANDLER_FUNCTION \n");
     }
-}
 
-/**
- * @brief Registers an Interrupt handler for a specific exception number.
- *
- * @param exception_no The Interrupt number to register the handler for.
- * @param function The function to be called when the specified exception occurs.
- * @param Arg The argument to be passed to the registered handler function
- * @return true if the Interrupt handler was successfully registered
- * @return false otherwise
- */
-bool Handlers::AddInterruptHandler(uint32_t exception_no, interrupt_handle_function function, void *Arg)
-{
-    if (exception_no >= IDT::IDT_TABLE_LEN)
-        return false;
+    /**
+     * @brief Initializes the Handler
+     *
+     */
+    void Init()
+    {
+        for (auto i = 0; i < IDT::IDT_TABLE_LEN; i++)
+        {
+            AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, nullptr);
+        }
+    }
 
-    FUNCS[exception_no] = function;
-    ARGS[exception_no] = Arg;
+    /**
+     * @brief Registers an Interrupt handler for a specific exception number.
+     *
+     * @param exception_no The Interrupt number to register the handler for.
+     * @param function The function to be called when the specified exception occurs.
+     * @param Arg The argument to be passed to the registered handler function
+     * @return true if the Interrupt handler was successfully registered
+     * @return false otherwise
+     */
+    bool AddInterruptHandler(uint32_t exception_no, interrupt_handle_function function, void *Arg)
+    {
+        if (exception_no >= IDT::IDT_TABLE_LEN)
+            return false;
 
-    return true;
-}
+        FUNCS[exception_no] = function;
+        ARGS[exception_no] = Arg;
 
-/**
- * @brief Call the Interrupt Handler function
- *
- * @param exception_no
- */
-void Handlers::InterruptHandler(uint32_t exception_no)
-{
-    if (exception_no >= IDT::IDT_TABLE_LEN)
-        return ;
+        return true;
+    }
 
-    auto fn = FUNCS[exception_no];
-    auto arg = ARGS[exception_no];
+    /**
+     * @brief Call the Interrupt Handler function
+     *
+     * @param exception_no
+     */
+    void InterruptHandler(uint32_t exception_no)
+    {
+        if (exception_no >= IDT::IDT_TABLE_LEN)
+            return;
 
-    fn(arg);
-}
+        auto fn = FUNCS[exception_no];
+        auto arg = ARGS[exception_no];
+
+        fn(arg);
+    }
+
+}; // namespace Handlers

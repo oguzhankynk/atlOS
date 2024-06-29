@@ -20,8 +20,6 @@
 #define E3243051_550C_401D_85B2_82DEB27080D5
 
 #include <stdint.h>
-#include <common/Singleton.hpp>
-#include <kernel/panic.h>
 
 /**
  * @brief ExternalInterrupts enum
@@ -98,58 +96,57 @@
  *   Intel® 64 and IA-32 Architectures Software Developer’s Manual Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D, and 4
  *   --> 6.3.1 External Interrupts
  */
-enum class ExternalInterrupts : uint32_t
-{
-    DivideError = 0,
-    DebugException,
-    NMIInterrupt,
-    Breakpoint,
-    Overflow,
-    BOUNDRangeExceeded,
-    InvalidOpcode,
-    DeviceNotAvailable,
-    DoubleFault,
-    CoprocessorSegmentOverrun,
-    reserved,
-    InvalidTSS,
-    SegmentNotPresent,
-    StackSegmentFault,
-    GeneralProtection,
-    PageFault,
-    IntelReserved,
-    x87_FPU_FloatingPointError,
-    AlignmentCheck,
-    MachineCheck,
-    SIMD_FloatingPointException,
-    VirtualizationException,
-    ControlProtectionException
-};
 
-class IDT : public Singleton<IDT>
+namespace IDT
 {
-public:
-    static constexpr uint32_t IDT_TABLE_LEN = 256;
+
+    enum class ExternalInterrupts : uint32_t
+    {
+        DivideError = 0,
+        DebugException,
+        NMIInterrupt,
+        Breakpoint,
+        Overflow,
+        BOUNDRangeExceeded,
+        InvalidOpcode,
+        DeviceNotAvailable,
+        DoubleFault,
+        CoprocessorSegmentOverrun,
+        reserved,
+        InvalidTSS,
+        SegmentNotPresent,
+        StackSegmentFault,
+        GeneralProtection,
+        PageFault,
+        IntelReserved,
+        x87_FPU_FloatingPointError,
+        AlignmentCheck,
+        MachineCheck,
+        SIMD_FloatingPointException,
+        VirtualizationException,
+        ControlProtectionException
+    };
 
     /// @brief Structure representing an entry in the Interrupt Descriptor Table (IDT)
     struct IDTEntry
     {
         enum TypeAttr : uint8_t
         {
-            GATE_TASK             = 0x5,
-            GATE_16BIT_INT        = 0x6,
-            GATE_16BIT_TRAP       = 0x7,
-            GATE_32BIT_INT        = 0xE,
-            GATE_32BIT_TRAP       = 0xF,
-            RING0                  = 0x00,
-            RING1                  = 0x20,
-            RING2                  = 0x40,
-            RING3                  = 0x60,
-            PRESENT                = 0x80,
+            GATE_TASK = 0x5,
+            GATE_16BIT_INT = 0x6,
+            GATE_16BIT_TRAP = 0x7,
+            GATE_32BIT_INT = 0xE,
+            GATE_32BIT_TRAP = 0xF,
+            RING0 = 0x00,
+            RING1 = 0x20,
+            RING2 = 0x40,
+            RING3 = 0x60,
+            PRESENT = 0x80,
         };
 
         uint16_t offset_low;  ///< Lower 16 bits of the handler address
         uint16_t selector;    ///< Code segment selector
-        uint8_t Reserved;         ///< Unused (set to 0)
+        uint8_t Reserved;     ///< Unused (set to 0)
         uint8_t type_attr;    ///< Type and access attributes
         uint16_t offset_high; ///< Higher 16 bits of the handler address
     } __attribute__((packed));
@@ -161,37 +158,14 @@ public:
         uint64_t base;  ///< Base address of the IDT
     } __attribute__((packed));
 
+    static constexpr uint32_t IDT_TABLE_LEN = 256;
+
     /**
      * @brief Initializes the IDT.
      *
      */
     void Init();
 
-private:
-    // Array holding the IDT entries
-    IDTEntry idt[IDT_TABLE_LEN];
-
-    // IDTR structure
-    IDTR idtr;
-
-    /**
-     * @brief Loads the IDT into the CPU.
-     *
-     */
-    void load();
-
-    /**
-     * @brief Sets an entry in the IDT.
-     *
-     * @param index The index of the IDT entry to set.
-     * @param handler The address of the interrupt handler.
-     * @param selector The code segment selector.
-     * @param type_attr The type and attributes of the entry.
-     *
-     * Configures an entry in the IDT with the provided handler address, code segment
-     * selector, and type attributes.
-     */
-    void setEntry(int index, void* handler, uint16_t selector, uint8_t type_attr);
-};
+};// namespace IDT
 
 #endif /* E3243051_550C_401D_85B2_82DEB27080D5 */

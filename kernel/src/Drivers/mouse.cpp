@@ -32,8 +32,8 @@ void mouse_init()
 	mouse_read();
 	mouse_write (0xF4);
 	mouse_read();
-    Handlers::getInstance().AddInterruptHandler(32, (interrupt_handle_function)mouse_IRQhandler, nullptr);
-    PIC8259::getInstance().irq_enable(12);
+    Handlers::AddInterruptHandler(32, (interrupt_handle_function)mouse_IRQhandler, nullptr);
+    PIC8259::irq_enable(12);
 }
 
 /**
@@ -44,7 +44,7 @@ void mouse_init()
 void mouse_dead()
 {
 	printf("mouse_dead");
-    PIC8259::getInstance().irq_disable(12);
+    PIC8259::irq_disable(12);
 	mouse_write(0xF5); 
 	mouse_read();
 }

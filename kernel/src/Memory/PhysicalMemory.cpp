@@ -20,135 +20,144 @@
 #include <Memory/PhysicalMemory.hpp>
 #include <string.h>
 
-static constexpr uint32_t BLOCK_SIZE{0x1000} ; //4KB
-
-static uint32_t *memory{};
-static uint32_t maxBlocks{};
-static uint32_t usedBlocks{};
-
-void PhysicalMemory::Init(const void *start_address, uint32_t size)
+namespace PhysicalMemory
 {
-    memory = (uint32_t*)start_address;
-    maxBlocks  = size / BLOCK_SIZE;
-    usedBlocks = maxBlocks;       // To start off, every block will be "used/reserved"
 
-    // By default, set all memory in use (used blocks/bits = 1, every block is set)
-    // Each byte of memory map holds 8 bits/blocks
-    memset(memory, 0xFF, maxBlocks / 8);
-}
+    static constexpr uint32_t BLOCK_SIZE{0x1000}; // 4KB
 
-void PhysicalMemory::AddMemoryRegion(const void *base_address, uint32_t size)
-{
-    int32_t align      = (uint32_t)base_address / BLOCK_SIZE;  // Convert memory address to blocks
-    int32_t num_blocks = size / BLOCK_SIZE;          // Convert size to blocks
+    static uint32_t *memory{};
+    static uint32_t maxBlocks{};
+    static uint32_t usedBlocks{};
 
-    for (; num_blocks > 0; num_blocks--) 
+    static int32_t FirstFreeBlock(uint32_t num_blocks)
     {
-        UnsetBlock(align++);
-        usedBlocks--;
-    }
+        if (num_blocks == 0)
+            return -1; // Can't return no memory, error
 
-    // Always going to set the 1st block, ensure we can't alloc 0, and can't overwrite
-    //   interrupt tables IDT/IVT, Bios data areas, etc.
-    SetBlock(0);
-}
-
-void PhysicalMemory::RemoveMemoryRegion(const void *base_address, uint32_t size)
-{
-    int32_t align      = (uint32_t)base_address / BLOCK_SIZE;  // Convert memory address to blocks
-    int32_t num_blocks = size / BLOCK_SIZE;          // Convert size to blocks
-
-    for (; num_blocks > 0; num_blocks--) {
-        SetBlock(align++);
-        usedBlocks++;
-    }
-}
-
-void *PhysicalMemory::AllocateBlock(uint32_t num_blocks)
-{
-    // If # of free blocks left is not enough, we can't allocate any more, return
-    if ((maxBlocks - usedBlocks) <= num_blocks) return 0;   
-
-    int32_t starting_block = FirstFreeBlock(num_blocks);
-    if (starting_block == -1) return 0;     // Couldn't find that many blocks in a row to allocate
-
-    // Found free blocks, set them as used
-    for (uint32_t i = 0; i < num_blocks; i++)
-        SetBlock(starting_block + i);
-
-    usedBlocks += num_blocks;  // Blocks are now used/reserved, increase count
-
-    // Convert blocks to bytes to get start of actual RAM that is now allocated
-    uint32_t address = starting_block * BLOCK_SIZE; 
-
-    return (uint32_t *)address;  // Physical memory location of allocated blocks
-}
-
-void PhysicalMemory::FreeBlocks(const void *addr, uint32_t num_blocks)
-{
-    int32_t starting_block = (uint32_t)addr / BLOCK_SIZE;   // Convert address to blocks 
-
-    for (uint32_t i = 0; i < num_blocks; i++) 
-        UnsetBlock(starting_block + i);    // Unset bits/blocks in memory map, to free
-
-    usedBlocks -= num_blocks;  // Decrease used block count
-}
-
-uint32_t PhysicalMemory::GetMaxBlockSize()
-{
-    return maxBlocks/8;
-}
-
-int32_t PhysicalMemory::FirstFreeBlock(uint32_t num_blocks)
-{
-    if (num_blocks == 0) return -1; // Can't return no memory, error
-
-    // Test 32 blocks at a time
-    for (uint32_t i = 0; i < maxBlocks / 32;  i++) 
-    {
-        if (memory[i] != 0xFFFFFFFF) 
+        // Test 32 blocks at a time
+        for (uint32_t i = 0; i < maxBlocks / 32; i++)
         {
-            // At least 1 bit is not set within this 32bit chunk of memory,
-            //   find that bit by testing each bit
-            for (int32_t j = 0; j < 32; j++) 
+            if (memory[i] != 0xFFFFFFFF)
             {
-                int32_t bit = 1 << j;
-
-                // If bit is unset/0, found start of a free region of memory
-                if (!(memory[i] & bit)) 
+                // At least 1 bit is not set within this 32bit chunk of memory,
+                //   find that bit by testing each bit
+                for (int32_t j = 0; j < 32; j++)
                 {
-                    uint32_t free_blocks = 0;
+                    int32_t bit = 1 << j;
 
-                    for (uint32_t count = 0; count < num_blocks; count++) 
+                    // If bit is unset/0, found start of a free region of memory
+                    if (!(memory[i] & bit))
                     {
-                        if ((j+count > 31) && (i+1 <= maxBlocks / 32)) 
-                        {
-                            if (!(memory[i+1] & (1 << ((j+count)-32))))
-                                free_blocks++;
-                        } 
-                        else 
-                        {
-                            if (!(memory[i] & (1 << (j+count))))
-                                free_blocks++;
-                        }
+                        uint32_t free_blocks = 0;
 
-                        if (free_blocks == num_blocks) // Found enough free space
-                            return i*32 + j;
+                        for (uint32_t count = 0; count < num_blocks; count++)
+                        {
+                            if ((j + count > 31) && (i + 1 <= maxBlocks / 32))
+                            {
+                                if (!(memory[i + 1] & (1 << ((j + count) - 32))))
+                                    free_blocks++;
+                            }
+                            else
+                            {
+                                if (!(memory[i] & (1 << (j + count))))
+                                    free_blocks++;
+                            }
+
+                            if (free_blocks == num_blocks) // Found enough free space
+                                return i * 32 + j;
+                        }
                     }
                 }
             }
         }
+
+        return -1; // No free region of memory large enough
     }
 
-    return -1;  // No free region of memory large enough
-}
+    static void SetBlock(uint32_t bit)
+    {
+        memory[bit / 32] |= (1 << (bit % 32));
+    }
 
-void PhysicalMemory::SetBlock(uint32_t bit)
-{
-     memory[bit/32] |= (1 << (bit % 32));
-}
+    static void UnsetBlock(uint32_t bit)
+    {
+        memory[bit / 32] &= ~(1 << (bit % 32));
+    }
 
-void PhysicalMemory::UnsetBlock(uint32_t bit)
-{
-    memory[bit/32] &= ~(1 << (bit % 32));
-}
+    void Init(const void *start_address, uint32_t size)
+    {
+        memory = (uint32_t *)start_address;
+        maxBlocks = size / BLOCK_SIZE;
+        usedBlocks = maxBlocks; // To start off, every block will be "used/reserved"
+
+        // By default, set all memory in use (used blocks/bits = 1, every block is set)
+        // Each byte of memory map holds 8 bits/blocks
+        memset(memory, 0xFF, maxBlocks / 8);
+    }
+
+    void AddMemoryRegion(const void *base_address, uint32_t size)
+    {
+        int32_t align = (uint32_t)base_address / BLOCK_SIZE; // Convert memory address to blocks
+        int32_t num_blocks = size / BLOCK_SIZE;              // Convert size to blocks
+
+        for (; num_blocks > 0; num_blocks--)
+        {
+            UnsetBlock(align++);
+            usedBlocks--;
+        }
+
+        // Always going to set the 1st block, ensure we can't alloc 0, and can't overwrite
+        //   interrupt tables IDT/IVT, Bios data areas, etc.
+        SetBlock(0);
+    }
+
+    void RemoveMemoryRegion(const void *base_address, uint32_t size)
+    {
+        int32_t align = (uint32_t)base_address / BLOCK_SIZE; // Convert memory address to blocks
+        int32_t num_blocks = size / BLOCK_SIZE;              // Convert size to blocks
+
+        for (; num_blocks > 0; num_blocks--)
+        {
+            SetBlock(align++);
+            usedBlocks++;
+        }
+    }
+
+    void *AllocateBlock(uint32_t num_blocks)
+    {
+        // If # of free blocks left is not enough, we can't allocate any more, return
+        if ((maxBlocks - usedBlocks) <= num_blocks)
+            return 0;
+
+        int32_t starting_block = FirstFreeBlock(num_blocks);
+        if (starting_block == -1)
+            return 0; // Couldn't find that many blocks in a row to allocate
+
+        // Found free blocks, set them as used
+        for (uint32_t i = 0; i < num_blocks; i++)
+            SetBlock(starting_block + i);
+
+        usedBlocks += num_blocks; // Blocks are now used/reserved, increase count
+
+        // Convert blocks to bytes to get start of actual RAM that is now allocated
+        uint32_t address = starting_block * BLOCK_SIZE;
+
+        return (uint32_t *)address; // Physical memory location of allocated blocks
+    }
+
+    void FreeBlocks(const void *addr, uint32_t num_blocks)
+    {
+        int32_t starting_block = (uint32_t)addr / BLOCK_SIZE; // Convert address to blocks
+
+        for (uint32_t i = 0; i < num_blocks; i++)
+            UnsetBlock(starting_block + i); // Unset bits/blocks in memory map, to free
+
+        usedBlocks -= num_blocks; // Decrease used block count
+    }
+
+    uint32_t GetMaxBlockSize()
+    {
+        return maxBlocks / 8;
+    }
+
+}; // namespace PhysicalMemory

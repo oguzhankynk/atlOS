@@ -27,6 +27,7 @@
 #include <kernel/tty.h>
 #include <kernel/BIOS/BIOS.h>
 #include <kernel/sys/multiboot.h>
+#include <kernel/sys/IOPort.hpp>
 #include <kernel/panic.h>
 
 #include <arch/i386/GDT/gdt.hpp>
@@ -38,22 +39,22 @@
 #include <kernel/banner.h>
 #include <Drivers/mouse.hpp>
 
-
-
 /**
  * @brief firs point of ParsOS
  *
  */
 extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 {
-
-    GDT::getInstance().Init();
-    IDT::getInstance().Init();
+    
     terminal_initialize();
 
     ParsOSBanner();
+    
+    GDT::Init();
+    
+    IDT::Init();
 
-    //PIC8259::getInstance().init();
+    //PIC8259::Init();
     //mouse_init();
 
     //asm volatile("int $0x00");
@@ -69,12 +70,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 //
 //
     //Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
-    Memory::initMemory(0,0);
+    //Memory::initMemory(0,0);
    
-asm volatile("int $0x00");
+
 
     //BIOSInit();
 
-    while (1)
-        ;
+    while (1);
 }

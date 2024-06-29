@@ -50,7 +50,7 @@ uint8_t inportb(uint16_t port)
  */
 void EnableInterrupts(void)
 {
-    asm volatile("cli"); 
+    asm volatile("sti"); 
 }
 
 /**
@@ -59,7 +59,7 @@ void EnableInterrupts(void)
  */
 void DisableInterrupts(void)
 { 
-    asm volatile("sti"); 
+    asm volatile("cli"); 
 }
 
 } // namespace IOPort
