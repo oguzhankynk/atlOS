@@ -46,6 +46,7 @@
  */
 extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 {
+
     GDT::getInstance().Init();
     IDT::getInstance().Init();
     terminal_initialize();
@@ -56,21 +57,21 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
     //mouse_init();
 
     //asm volatile("int $0x00");
-    if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
-    {
-        kernel_panic("magic number is invalid.");
-    }
-
-    multiboot_info_t* bootInfo = (multiboot_info_t*)addr;
-    uint32_t mod1 = *(uint32_t*)(bootInfo->mods_addr + 4);
-    uint32_t physicalAllocStart = (mod1 + 0xFFF) & ~0xFFF;
-
-
-
-    Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
-
+    //if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
+    //{
+    //    kernel_panic("magic number is invalid.");
+    //}
+//
+    //multiboot_info_t* bootInfo = (multiboot_info_t*)addr;
+    //uint32_t mod1 = *(uint32_t*)(bootInfo->mods_addr + 4);
+    //uint32_t physicalAllocStart = (mod1 + 0xFFF) & ~0xFFF;
+//
+//
+//
+    //Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
+    Memory::initMemory(0,0);
    
-
+asm volatile("int $0x00");
 
     //BIOSInit();
 

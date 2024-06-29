@@ -1,180 +1,168 @@
 #include <Memory/Memory.hpp>
-#include <Memory/PhysicalMemory.hpp>
 #include <kernel/sys/multiboot.h>
 #include <stdio.h>
 #include <string.h>
 
-
-#define CEIL_DIV(a,b) (((a + b) - 1)/b)
-#define REC_PAGEDIR ((uint32_t*)0xFFFFF000)
-#define REC_PAGETABLE(i) ((uint32_t*) (0xFFC00000 + ((i) << 12)))
-
-#define PAGE_FLAG_PRESENT (1 << 0)
-#define PAGE_FLAG_WRITE (1 << 1)
-#define PAGE_FLAG_OWNER (1 << 9)
-
-
-extern uint32_t initial_page_dir[1024];
-
 namespace Memory
 {
-    void invalidate(uint32_t vaddr);
-    uint32_t pmmAllocPageFrame();
 
+    /**
+     * @brief Number of entries per page directory.
+     */
+    static constexpr uint32_t PAGE_DIR_SIZE = 1024;
 
-    static uint32_t pageFrameMin;
-    static uint32_t pageFrameMax;
-    static uint32_t totalAlloc;
-    int mem_num_vpages;
+    /**
+     * @brief Number of entries per page table.
+     */
+    static constexpr uint32_t PAGE_TABLE_SIZE = 1024; /**< Entries per page table */
 
-#define NUM_PAGES_DIRS 256
-#define NUM_PAGE_FRAMES (0x100000000 / 0x1000 / 8)
+    /**
+     * @brief Page directory aligned to a 4096-byte boundary.
+     *
+     */
+    PageDirectory page_directory[PAGE_DIR_SIZE] __attribute__((aligned(4096)));
 
-    uint8_t physicalMemoryBitmap[NUM_PAGE_FRAMES / 8]; // Dynamically, bit array
+    /**
+     * @brief First page table aligned to a 4096-byte boundary.
+     *
+     */
+    PageTableEntry first_page_table[PAGE_TABLE_SIZE] __attribute__((aligned(4096)));
 
-    static uint32_t pageDirs[NUM_PAGES_DIRS][1024] __attribute__((aligned(4096)));
-    static uint8_t pageDirUsed[NUM_PAGES_DIRS];
+    /**
+     * @brief Start address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the start address of
+     * the kernel in memory.
+     */
+    extern "C" uint32_t _kernel_start;
 
-    void invalidate(uint32_t vaddr)
-    {
-        asm volatile("invlpg %0" ::"m"(vaddr));
-    }
+    /**
+     * @brief End address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the end address of
+     * the kernel in memory.
+     */
+    extern "C" uint32_t _kernel_end;
 
-    void pmm_init(uint32_t memLow, uint32_t memHigh)
-    {
-        pageFrameMin = CEIL_DIV(memLow, 0x1000);
-        pageFrameMax = memHigh / 0x1000;
-        totalAlloc = 0;
-
-        memset(physicalMemoryBitmap, 0, sizeof(physicalMemoryBitmap));
-    }
-
-    uint32_t *memGetCurrentPageDir()
-    {
-        uint32_t pd;
-        asm volatile("mov %%cr3, %0" : "=r"(pd));
-        pd += KERNEL_START;
-
-        return (uint32_t *)pd;
-    }
-
-    void memChangePageDir(uint32_t *pd)
-    {
-        pd = (uint32_t *)(((uint32_t)pd) - KERNEL_START);
-        asm volatile("mov %0, %%eax \n mov %%eax, %%cr3 \n" ::"m"(pd));
-    }
-
-    void syncPageDirs()
-    {
-        for (int i = 0; i < NUM_PAGES_DIRS; i++)
-        {
-            if (pageDirUsed[i])
-            {
-                uint32_t *pageDir = pageDirs[i];
-
-                for (int i = 768; i < 1023; i++)
-                {
-                    pageDir[i] = initial_page_dir[i] & ~PAGE_FLAG_OWNER;
-                }
-            }
-        }
-    }
-
-    void memMapPage(uint32_t virutalAddr, uint32_t physAddr, uint32_t flags)
-    {
-        uint32_t *prevPageDir = 0;
-
-        if (virutalAddr >= KERNEL_START)
-        {
-            prevPageDir = memGetCurrentPageDir();
-            if (prevPageDir != initial_page_dir)
-            {
-                memChangePageDir(initial_page_dir);
-            }
-        }
-
-        uint32_t pdIndex = virutalAddr >> 22;
-        uint32_t ptIndex = virutalAddr >> 12 & 0x3FF;
-
-        uint32_t *pageDir = REC_PAGEDIR;
-        uint32_t *pt = REC_PAGETABLE(pdIndex);
-
-        if (!(pageDir[pdIndex] & PAGE_FLAG_PRESENT))
-        {
-            uint32_t ptPAddr = pmmAllocPageFrame();
-            pageDir[pdIndex] = ptPAddr | PAGE_FLAG_PRESENT | PAGE_FLAG_WRITE | PAGE_FLAG_OWNER | flags;
-            invalidate(virutalAddr);
-
-            for (uint32_t i = 0; i < 1024; i++)
-            {
-                pt[i] = 0;
-            }
-        }
-
-        pt[ptIndex] = physAddr | PAGE_FLAG_PRESENT | flags;
-        mem_num_vpages++;
-        invalidate(virutalAddr);
-
-        if (prevPageDir != 0)
-        {
-            syncPageDirs();
-
-            if (prevPageDir != initial_page_dir)
-            {
-                memChangePageDir(prevPageDir);
-            }
-        }
-    }
-
-    uint32_t pmmAllocPageFrame()
-    {
-        uint32_t start = pageFrameMin / 8 + ((pageFrameMin & 7) != 0 ? 1 : 0);
-        uint32_t end = pageFrameMax / 8 - ((pageFrameMax & 7) != 0 ? 1 : 0);
-
-        for (uint32_t b = start; b < end; b++)
-        {
-            uint8_t byte = physicalMemoryBitmap[b];
-            if (byte == 0xFF)
-            {
-                continue;
-            }
-
-            for (uint32_t i = 0; i < 8; i++)
-            {
-                bool used = byte >> i & 1;
-
-                if (!used)
-                {
-                    byte ^= (-1 ^ byte) & (1 << i);
-                    physicalMemoryBitmap[b] = byte;
-                    totalAlloc++;
-
-                    uint32_t addr = (b * 8 * i) * 0x1000;
-                    return addr;
-                }
-            }
-        }
-
-        return 0;
-    }
+    void loadPageDirectory(uint32_t *page_directory);
+    void enablePaging();
+    void *get_physaddr(void *virtualaddr);
 
     void initMemory(uint32_t memHigh, uint32_t physicalAllocStart)
     {
-        mem_num_vpages = 0;
-        initial_page_dir[0] = 0;
-         printf("DEBUG 1\n");
-        invalidate(0);
-         printf("DEBUG 2\n");
-        initial_page_dir[1023] = ((uint32_t)initial_page_dir - KERNEL_START) | PAGE_FLAG_PRESENT | PAGE_FLAG_WRITE;
-         printf("DEBUG 3\n");
-        invalidate(0xFFFFF000);
-        printf("DEBUG 4\n");
-        pmm_init(physicalAllocStart, memHigh);
-        memset(pageDirs, 0, 0x1000 * NUM_PAGES_DIRS);
-        memset(pageDirUsed, 0, NUM_PAGES_DIRS);
-        printf("DEBUG 5\n");
+        memset(first_page_table, 0, sizeof(first_page_table));
+
+        for (int i = 0; i < 1024; i++)
+        {
+            // Supervisor:
+            // Write Enabled:
+            // Not Present:
+            page_directory[i].present = 0;
+            page_directory[i].rw = 1;
+            page_directory[i].user = 0;
+            page_directory[i].pwt = 0;
+            page_directory[i].pcd = 0;
+            page_directory[i].accessed = 0;
+            page_directory[i].reserved = 0;
+            page_directory[i].page_size = 0;
+            page_directory[i].ignored = 0;
+            page_directory[i].table_addr = 0;
+        }
+
+        for (int i = 0; i < 1024; i++)
+        {
+            // supervisor level, read/write, present.
+
+            first_page_table[i].present = 1;
+            first_page_table[i].rw = 1;
+            first_page_table[i].user = 0;
+            first_page_table[i].pwt = 0;
+            first_page_table[i].pcd = 0;
+            first_page_table[i].accessed = 0;
+            first_page_table[i].dirty = 0;
+            first_page_table[i].pat = 0;
+            first_page_table[i].global = 0;
+            first_page_table[i].ignored = 0;
+            first_page_table[i].frame = (i * PAGE_SIZE) >> 12;
+        }
+
+        // attributes: supervisor level, read/write, present
+        page_directory[0].present = 1;
+        page_directory[0].rw = 1;
+        page_directory[0].user = 0;
+        page_directory[0].pwt = 0;
+        page_directory[0].pcd = 0;
+        page_directory[0].accessed = 0;
+        page_directory[0].reserved = 0;
+        page_directory[0].page_size = 0;
+        page_directory[0].ignored = 0;
+        page_directory[0].table_addr = (uint32_t)first_page_table >> 12;
+
+        printf("Paging will be enabled \n");
+
+        // And this inside a function
+        loadPageDirectory((unsigned int *)page_directory);
+        enablePaging();
+
+        printf("Paging  enabled \n");
     }
 
-   
+    /**
+     * @brief Load the page directory base register (CR3) with the given page directory.
+     *
+     * This function sets the CR3 register with the address of the provided page directory.
+     * Setting the CR3 register updates the page directory base, which is used by the CPU
+     * for translating virtual addresses to physical addresses.
+     *
+     * @param page_directory A pointer to the page directory to load into CR3.
+     */
+    void loadPageDirectory(uint32_t *page_directory)
+    {
+        __asm__ __volatile__(
+            "movl %0, %%cr3" // %0 placeholder, replaced by page_directory
+            :
+            : "r"(page_directory) // Input operand as page_directory
+            : "memory"            // Indicates that the inline assembly has memory side effects
+        );
+    }
+
+    /**
+     * @brief Enable paging by setting the PG bit (bit 31) in the CR0 register.
+     *
+     * This function modifies the CR0 register to enable paging. It sets the most
+     * significant bit (PG bit) in the CR0 register, which tells the CPU to start using
+     * the page tables for address translation.
+     */
+    void enablePaging()
+    {
+        __asm__ __volatile__(
+            "mov %%cr0, %%eax;"      // Load the value of CR0 into EAX register
+            "or $0x80000000, %%eax;" // Set the most significant bit in EAX register (paging bit)
+            "mov %%eax, %%cr0;"      // Move the modified value back into CR0 register
+            :
+            :
+            : "eax", "memory" // Indicates that EAX register is modified and memory has side effects
+        );
+    }
+
+    /**
+     * @brief Converts a virtual address to a physical address.
+     *
+     * @param virtualaddr The virtual address to be converted.
+     * @return void* The corresponding physical address, or nullptr if the address is not present.
+     */
+    void *get_physaddr(void *virtualaddr)
+    {
+        unsigned long pdindex = (unsigned long)virtualaddr >> 22;
+        unsigned long ptindex = (unsigned long)virtualaddr >> 12 & 0x03FF;
+
+        unsigned long *pd = (unsigned long *)0xFFFFF000;
+        // Here you need to check whether the PD entry is present.
+
+        unsigned long *pt = ((unsigned long *)0xFFC00000) + (0x400 * pdindex);
+        // Here you need to check whether the PT entry is present.
+
+        return (void *)((pt[ptindex] & ~0xFFF) + ((unsigned long)virtualaddr & 0xFFF));
+    }
 
 } // namespace Memory
