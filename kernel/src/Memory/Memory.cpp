@@ -48,6 +48,45 @@ namespace Memory
     void enablePaging();
     void *get_physaddr(void *virtualaddr);
 
+    /**
+     * @brief Construct a new Page PageDirectory object
+     * 
+     * @param value 
+     */
+    PageDirectory::PageDirectory(uint32_t value)
+    {
+        present = (value >> 0) & 0x1;
+        rw = (value >> 1) & 0x1;
+        user = (value >> 2) & 0x1;
+        pwt = (value >> 3) & 0x1;
+        pcd = (value >> 4) & 0x1;
+        accessed = (value >> 5) & 0x1;
+        reserved = (value >> 6) & 0x1;
+        page_size = (value >> 7) & 0x1;
+        ignored = (value >> 8) & 0xF;
+        table_addr = (value >> 12) & 0xFFFFF;
+    }
+
+    /**
+     * @brief Construct a new PageTableEntry object
+     * 
+     * @param value 
+     */
+    PageTableEntry::PageTableEntry(uint32_t value)
+    {
+        present = (value >> 0) & 0x1;
+        rw = (value >> 1) & 0x1;
+        user = (value >> 2) & 0x1;
+        pwt = (value >> 3) & 0x1;
+        pcd = (value >> 4) & 0x1;
+        accessed = (value >> 5) & 0x1;
+        dirty = (value >> 6) & 0x1;
+        pat = (value >> 7) & 0x1;
+        global = (value >> 8) & 0x1;
+        ignored = (value >> 9) & 0x7;
+        frame = (value >> 12) & 0xFFFFF;
+    }
+
     void initMemory(uint32_t memHigh, uint32_t physicalAllocStart)
     {
         memset(first_page_table, 0, sizeof(first_page_table));
