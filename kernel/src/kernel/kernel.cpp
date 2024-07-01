@@ -38,9 +38,15 @@
 
 #include <kernel/banner.h>
 #include <Drivers/mouse.hpp>
+#include <Drivers/keyboard.hpp>
 
+extern uint32_t _kernel_start;
+extern uint32_t kernel_physical_start;
+extern uint32_t _kernel_end;
+extern uint32_t kernel_physical_end;
+	
 /**
- * @brief firs point of ParsOS
+ * @brief entry point of ParsOS
  *
  */
 extern "C" void kernel_main(uint32_t magic, uint32_t addr)
@@ -50,11 +56,31 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr)
 
     ParsOSBanner();
     
+    printf("Kernel virt: \t start: %x end: %x \n", &_kernel_start, &_kernel_end);
+    printf("Kernel  phy: \t start: %x end: %x \n", &kernel_physical_start, &kernel_physical_end);
+
     GDT::Init();
     
     IDT::Init();
 
-    //PIC8259::Init();
+    asm volatile("int $0x00");
+
+    PIC8259::Init();
+
+    keyboard::Init();
+
+
+    while (1)
+    {
+        auto c = keyboard::GetKey();
+
+        if(!c)
+            continue;
+        
+        printf("Key pressed : %c \n", c);
+    }
+    
+   
     //mouse_init();
 
     //asm volatile("int $0x00");

@@ -5,6 +5,8 @@
 .set MAGIC,    0x1BADB002       # 'magic number' lets bootloader find the header
 .set CHECKSUM, -(MAGIC + FLAGS) # checksum of above, to prove we are multiboot
 
+.set KERNEL_STACK_SIZE, 16384  #16KB
+
 # Declare a multiboot header that marks the program as a kernel.
 .section .multiboot.data, "aw"
 .align 4
@@ -15,7 +17,7 @@
 # Allocate the initial stack.
 .section .bootstrap_stack, "aw", @nobits
 stack_bottom:
-.skip 16384 # 16 KiB
+.skip  KERNEL_STACK_SIZE
 stack_top:
 
 # Preallocate pages used for paging. Don't hard-code addresses and assume they
@@ -23,9 +25,11 @@ stack_top:
 # modules there. This lets the bootloader know it must avoid the addresses.
 .section .bss, "aw", @nobits
 	.align 4096
-boot_page_directory:
+.global page_directory
+page_directory:
 	.skip 4096
-boot_page_table1:
+.global first_page_table
+first_page_table:
 	.skip 4096
 # Further page tables may be required if the kernel grows beyond 3 MiB.
 
@@ -37,11 +41,11 @@ _start:
 
 	cli
 
-	# Physical address of boot_page_table1.
+	# Physical address of first_page_table.
 	# TODO: I recall seeing some assembly that used a macro to do the
 	#       conversions to and from physical. Maybe this should be done in this
 	#       code as well?
-	movl $(boot_page_table1 - 0xC0000000), %edi
+	movl $(first_page_table - 0xC0000000), %edi
 	# First address to map is address 0.
 	# TODO: Start at the first kernel page instead. Alternatively map the first
 	#       1 MiB as it can be generally useful, and there's no need to
@@ -69,7 +73,7 @@ _start:
 2:
 	# Size of page is 4096 bytes.
 	addl $4096, %esi
-	# Size of entries in boot_page_table1 is 4 bytes.
+	# Size of entries in first_page_table is 4 bytes.
 	addl $4, %edi
 	# Loop to the next entry if we haven't finished.
 	loop 1b
@@ -77,7 +81,7 @@ _start:
 3:
 
 	# Map VGA video memory to 0xC03FF000 as "present, writable".
-	movl $(0x000B8000 | 0x003), boot_page_table1 - 0xC0000000 + 1023 * 4
+	movl $(0x000B8000 | 0x003), first_page_table - 0xC0000000 + 1023 * 4
 
 	# The page table is used at both page directory entry 0 (virtually from 0x0
 	# to 0x3FFFFF) (thus identity mapping the kernel) and page directory entry
@@ -87,11 +91,11 @@ _start:
 	# would instead page fault if there was no identity mapping.
 
 	# Map the page table to both virtual addresses 0x00000000 and 0xC0000000.
-	movl $(boot_page_table1 - 0xC0000000 + 0x003), boot_page_directory - 0xC0000000 + 0
-	movl $(boot_page_table1 - 0xC0000000 + 0x003), boot_page_directory - 0xC0000000 + 768 * 4
+	movl $(first_page_table - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 0
+	movl $(first_page_table - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 768 * 4
 
-	# Set cr3 to the address of the boot_page_directory.
-	movl $(boot_page_directory - 0xC0000000), %ecx
+	# Set cr3 to the address of the page_directory.
+	movl $(page_directory - 0xC0000000), %ecx
 	movl %ecx, %cr3
 
 	# Enable paging and the write-protect bit.
@@ -110,7 +114,7 @@ _start:
 	# At this point, paging is fully set up and enabled.
 
 	# Unmap the identity mapping as it is now unnecessary. 
-	movl $0, boot_page_directory + 0
+	movl $0, page_directory + 0
 
 	# Reload crc3 to force a TLB flush so the changes to take effect.
 	movl %cr3, %ecx

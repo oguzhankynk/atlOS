@@ -6,12 +6,6 @@
 namespace Memory
 {
     /**
-     * @brief Size of a single memory page.
-     * 
-     */
-    static constexpr uint32_t PAGE_SIZE = 4096; 
-
-    /**
      * @brief Page Directory Entry (PDE)
      *
      * A single entry in a page directory. It contains the physical address of a page table
@@ -58,7 +52,19 @@ namespace Memory
         PageTableEntry(uint32_t value);
     };
 
+    /**
+     * @brief 
+     * 
+     * @param memHigh 
+     * @param physicalAllocStart 
+     */
     void initMemory(uint32_t memHigh, uint32_t physicalAllocStart);
+
+    /**
+     * @brief Get the Page Size 
+     * 
+     */
+    uint32_t getPageSize();
 
 } // namespace Memory
 

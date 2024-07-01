@@ -7,7 +7,6 @@ SECTIONS
 	/* which will be mapped to 1MB in the physical address space. */
 	/* Note that we page-align the sections. */
 
-	_kernel_start = .;
         .multiboot.data : {
             *(.multiboot.data)
         }
@@ -17,6 +16,10 @@ SECTIONS
        }
 
 	. += 0xC0000000;
+
+	_kernel_start = .;
+	kernel_physical_start = . - 0xC0000000;
+
 	/* Add a symbol that indicates the start address of the kernel. */
 	.text ALIGN (4K) : AT (ADDR (.text) - 0xC0000000)
 	{
@@ -38,4 +41,5 @@ SECTIONS
 	}
 	/* Add a symbol that indicates the end address of the kernel. */
 	_kernel_end = .;
+	kernel_physical_end = . - 0xC0000000;
 }

@@ -7,6 +7,12 @@ namespace Memory
 {
 
     /**
+     * @brief Size of a single memory page.
+     *
+     */
+    static constexpr uint32_t PAGE_SIZE = 4096;
+
+    /**
      * @brief Number of entries per page directory.
      */
     static constexpr uint32_t PAGE_DIR_SIZE = 1024;
@@ -14,19 +20,19 @@ namespace Memory
     /**
      * @brief Number of entries per page table.
      */
-    static constexpr uint32_t PAGE_TABLE_SIZE = 1024; /**< Entries per page table */
+    static constexpr uint32_t PAGE_TABLE_SIZE = 1024;
 
     /**
-     * @brief Page directory aligned to a 4096-byte boundary.
+     * @brief Page directory defined at boot.S
      *
      */
-    PageDirectory page_directory[PAGE_DIR_SIZE] __attribute__((aligned(4096)));
+    extern "C" PageDirectory page_directory[PAGE_DIR_SIZE];
 
     /**
-     * @brief First page table aligned to a 4096-byte boundary.
+     * @brief First page table defined at boot.S
      *
      */
-    PageTableEntry first_page_table[PAGE_TABLE_SIZE] __attribute__((aligned(4096)));
+    extern "C" PageTableEntry first_page_table[PAGE_TABLE_SIZE];
 
     /**
      * @brief Start address of the kernel.
@@ -50,8 +56,8 @@ namespace Memory
 
     /**
      * @brief Construct a new Page PageDirectory object
-     * 
-     * @param value 
+     *
+     * @param value
      */
     PageDirectory::PageDirectory(uint32_t value)
     {
@@ -69,8 +75,8 @@ namespace Memory
 
     /**
      * @brief Construct a new PageTableEntry object
-     * 
-     * @param value 
+     *
+     * @param value
      */
     PageTableEntry::PageTableEntry(uint32_t value)
     {
@@ -87,8 +93,15 @@ namespace Memory
         frame = (value >> 12) & 0xFFFFF;
     }
 
+    /**
+     * @brief 
+     * 
+     * @param memHigh 
+     * @param physicalAllocStart 
+     */
     void initMemory(uint32_t memHigh, uint32_t physicalAllocStart)
     {
+
         memset(first_page_table, 0, sizeof(first_page_table));
 
         for (int i = 0; i < 1024; i++)
@@ -144,6 +157,15 @@ namespace Memory
         enablePaging();
 
         printf("Paging  enabled \n");
+    }
+
+    /**
+     * @brief Get the Page Size 
+     * 
+     */
+    uint32_t getPageSize()
+    {
+        return PAGE_SIZE;
     }
 
     /**
