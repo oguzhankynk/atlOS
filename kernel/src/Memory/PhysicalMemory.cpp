@@ -18,13 +18,14 @@
  */
 
 #include <Memory/PhysicalMemory.hpp>
+#include <Memory/Memory.hpp>
+#include <stdio.h>
 #include <string.h>
 
 namespace PhysicalMemory
 {
 
-    static constexpr uint32_t BLOCK_SIZE{0x1000}; // 4KB
-
+    static uint32_t blockSize{};
     static uint32_t *memory{};
     static uint32_t maxBlocks{};
     static uint32_t usedBlocks{};
@@ -84,37 +85,35 @@ namespace PhysicalMemory
         memory[bit / 32] &= ~(1 << (bit % 32));
     }
 
-    void Init(const void *start_address, uint32_t size)
+    void Init(const void *start_address, uint32_t physical_memory_size, uint32_t block_size)
     {
+        blockSize = block_size;
         memory = (uint32_t *)start_address;
-        maxBlocks = size / BLOCK_SIZE;
+        maxBlocks = physical_memory_size / blockSize;
         usedBlocks = maxBlocks; // To start off, every block will be "used/reserved"
 
         // By default, set all memory in use (used blocks/bits = 1, every block is set)
         // Each byte of memory map holds 8 bits/blocks
         memset(memory, 0xFF, maxBlocks / 8);
+
     }
 
     void AddMemoryRegion(const void *base_address, uint32_t size)
     {
-        int32_t align = (uint32_t)base_address / BLOCK_SIZE; // Convert memory address to blocks
-        int32_t num_blocks = size / BLOCK_SIZE;              // Convert size to blocks
+        uint32_t align = (uint32_t)base_address / blockSize; // Convert memory address to blocks
+        uint32_t num_blocks = size / blockSize;              // Convert size to blocks
 
         for (; num_blocks > 0; num_blocks--)
         {
             UnsetBlock(align++);
             usedBlocks--;
         }
-
-        // Always going to set the 1st block, ensure we can't alloc 0, and can't overwrite
-        //   interrupt tables IDT/IVT, Bios data areas, etc.
-        SetBlock(0);
     }
 
     void RemoveMemoryRegion(const void *base_address, uint32_t size)
     {
-        int32_t align = (uint32_t)base_address / BLOCK_SIZE; // Convert memory address to blocks
-        int32_t num_blocks = size / BLOCK_SIZE;              // Convert size to blocks
+        int32_t align = (uint32_t)base_address / blockSize; // Convert memory address to blocks
+        int32_t num_blocks = size / blockSize;              // Convert size to blocks
 
         for (; num_blocks > 0; num_blocks--)
         {
@@ -140,14 +139,14 @@ namespace PhysicalMemory
         usedBlocks += num_blocks; // Blocks are now used/reserved, increase count
 
         // Convert blocks to bytes to get start of actual RAM that is now allocated
-        uint32_t address = starting_block * BLOCK_SIZE;
+        uint32_t address = starting_block * blockSize;
 
         return (uint32_t *)address; // Physical memory location of allocated blocks
     }
 
     void FreeBlocks(const void *addr, uint32_t num_blocks)
     {
-        int32_t starting_block = (uint32_t)addr / BLOCK_SIZE; // Convert address to blocks
+        int32_t starting_block = (uint32_t)addr / blockSize; // Convert address to blocks
 
         for (uint32_t i = 0; i < num_blocks; i++)
             UnsetBlock(starting_block + i); // Unset bits/blocks in memory map, to free

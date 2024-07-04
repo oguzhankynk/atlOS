@@ -1,7 +1,10 @@
 #include <Memory/Memory.hpp>
-#include <kernel/sys/multiboot.h>
+
 #include <stdio.h>
 #include <string.h>
+
+#include <Memory/PhysicalMemory.hpp>
+#include <kernel/sys/multiboot.h>
 
 namespace Memory
 {
@@ -23,6 +26,13 @@ namespace Memory
     static constexpr uint32_t PAGE_TABLE_SIZE = 1024;
 
     /**
+     * @brief Bitmap for manege physical memory
+     *
+     */
+    static uint8_t bitmap[4 * 128 * 1024 * 1024UL / PAGE_SIZE];
+
+    static constexpr uint32_t KERNEL_LOAD_ADDR = (uint32_t)0xC0000000;
+    /**
      * @brief Page directory defined at boot.S
      *
      */
@@ -33,6 +43,8 @@ namespace Memory
      *
      */
     extern "C" PageTableEntry first_page_table[PAGE_TABLE_SIZE];
+
+    PageTableEntry temp_page_table[PAGE_TABLE_SIZE] __attribute__((aligned(4096)));
 
     /**
      * @brief Start address of the kernel.
@@ -50,9 +62,11 @@ namespace Memory
      */
     extern "C" uint32_t _kernel_end;
 
+    extern "C" uint32_t kernel_physical_start;
+    extern "C" uint32_t kernel_physical_end;
+
     void loadPageDirectory(uint32_t *page_directory);
     void enablePaging();
-    void *get_physaddr(void *virtualaddr);
 
     /**
      * @brief Construct a new Page PageDirectory object
@@ -94,74 +108,55 @@ namespace Memory
     }
 
     /**
-     * @brief 
-     * 
-     * @param memHigh 
-     * @param physicalAllocStart 
+     * @brief
+     *
+     * @param memHigh
+     * @param physicalAllocStart
      */
-    void initMemory(uint32_t memHigh, uint32_t physicalAllocStart)
+    void Init(const multiboot_info_t *bootInfo)
     {
+        printf("Kernel virt: \t start: 0x%x \tend: 0x%x \n", &_kernel_start, &_kernel_end);
+        printf("Kernel  phy: \t start: 0x%x \tend: 0x%x \n", &kernel_physical_start, &kernel_physical_end);
 
-        memset(first_page_table, 0, sizeof(first_page_table));
+        memset(temp_page_table, 0, sizeof(temp_page_table));
 
-        for (int i = 0; i < 1024; i++)
+        for (uint32_t addr = 0, i = 0; addr < 1024 * 1024; addr += PAGE_SIZE, i++)
         {
-            // Supervisor:
-            // Write Enabled:
-            // Not Present:
-            page_directory[i].present = 0;
-            page_directory[i].rw = 1;
-            page_directory[i].user = 0;
-            page_directory[i].pwt = 0;
-            page_directory[i].pcd = 0;
-            page_directory[i].accessed = 0;
-            page_directory[i].reserved = 0;
-            page_directory[i].page_size = 0;
-            page_directory[i].ignored = 0;
-            page_directory[i].table_addr = 0;
+            temp_page_table[i] = addr | 3;
         }
 
-        for (int i = 0; i < 1024; i++)
-        {
-            // supervisor level, read/write, present.
+        page_directory[0] = (uint32_t)get_physaddr((void *)temp_page_table) | 3;
 
-            first_page_table[i].present = 1;
-            first_page_table[i].rw = 1;
-            first_page_table[i].user = 0;
-            first_page_table[i].pwt = 0;
-            first_page_table[i].pcd = 0;
-            first_page_table[i].accessed = 0;
-            first_page_table[i].dirty = 0;
-            first_page_table[i].pat = 0;
-            first_page_table[i].global = 0;
-            first_page_table[i].ignored = 0;
-            first_page_table[i].frame = (i * PAGE_SIZE) >> 12;
+        auto totalMemorySizeKB = bootInfo->mem_lower + bootInfo->mem_upper;
+        printf("Total memory size: 0x%x KB\n", totalMemorySizeKB);
+
+        PhysicalMemory::Init(bitmap, totalMemorySizeKB * 1024, PAGE_SIZE);
+
+        for (int i = 0; i < bootInfo->mmap_length; i += sizeof(multiboot_mmap_entry))
+        {
+            auto *mmmt = (multiboot_mmap_entry *)(bootInfo->mmap_addr + i);
+
+            uint32_t base_addr = ((uint64_t)mmmt->addr_high << 32) | mmmt->addr_low;
+            uint32_t length = ((uint64_t)mmmt->len_high << 32) | mmmt->len_low;
+
+            printf("Addr: 0x%x | Length: 0x%x | size: 0x%x | Type: 0x%x \n",
+                   base_addr,
+                   length,
+                   mmmt->size, mmmt->type);
+
+            if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE)
+            {
+                PhysicalMemory::AddMemoryRegion((void *)base_addr, length);
+            }
         }
 
-        // attributes: supervisor level, read/write, present
-        page_directory[0].present = 1;
-        page_directory[0].rw = 1;
-        page_directory[0].user = 0;
-        page_directory[0].pwt = 0;
-        page_directory[0].pcd = 0;
-        page_directory[0].accessed = 0;
-        page_directory[0].reserved = 0;
-        page_directory[0].page_size = 0;
-        page_directory[0].ignored = 0;
-        page_directory[0].table_addr = (uint32_t)first_page_table >> 12;
-
-        printf("Paging will be enabled \n");
-
-        // And this inside a function
-        loadPageDirectory((unsigned int *)page_directory);
-        enablePaging();
-
-        printf("Paging  enabled \n");
+        PhysicalMemory::RemoveMemoryRegion(0, 1024 * 1024);
+        PhysicalMemory::RemoveMemoryRegion(&kernel_physical_start, (uint32_t)&kernel_physical_end - (uint32_t)&kernel_physical_start);
     }
 
     /**
-     * @brief Get the Page Size 
-     * 
+     * @brief Get the Page Size
+     *
      */
     uint32_t getPageSize()
     {
@@ -214,16 +209,27 @@ namespace Memory
      */
     void *get_physaddr(void *virtualaddr)
     {
-        unsigned long pdindex = (unsigned long)virtualaddr >> 22;
-        unsigned long ptindex = (unsigned long)virtualaddr >> 12 & 0x03FF;
+        uint32_t pdindex = (unsigned long)virtualaddr >> 22 & 0x3FF;
+        uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
+        uint32_t offset = (uint32_t)virtualaddr & 0xFFF;
 
-        unsigned long *pd = (unsigned long *)0xFFFFF000;
-        // Here you need to check whether the PD entry is present.
+        if (!page_directory[pdindex].present)
+        {
+            return 0;
+        }
 
-        unsigned long *pt = ((unsigned long *)0xFFC00000) + (0x400 * pdindex);
-        // Here you need to check whether the PT entry is present.
+        uint32_t page_table_phy = (uint32_t)(page_directory[pdindex].table_addr << 12);
 
-        return (void *)((pt[ptindex] & ~0xFFF) + ((unsigned long)virtualaddr & 0xFFF));
+        PageTableEntry *page_table = (PageTableEntry *)(page_table_phy + KERNEL_LOAD_ADDR);
+
+        if (!page_table[ptindex].present)
+        {
+            return 0;
+        }
+
+        uint32_t page_addr = page_table[ptindex].frame << 12;
+
+        return (void *)(page_addr + offset);
     }
 
 } // namespace Memory

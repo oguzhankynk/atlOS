@@ -31,6 +31,9 @@ page_directory:
 .global first_page_table
 first_page_table:
 	.skip 4096
+.global second_page_table
+second_page_table:
+	.skip 4096
 # Further page tables may be required if the kernel grows beyond 3 MiB.
 
 # The kernel entry point.
@@ -39,20 +42,16 @@ first_page_table:
 .type _start, @function
 _start:
 
-	cli
-
 	# Physical address of first_page_table.
-	# TODO: I recall seeing some assembly that used a macro to do the
-	#       conversions to and from physical. Maybe this should be done in this
-	#       code as well?
 	movl $(first_page_table - 0xC0000000), %edi
+
 	# First address to map is address 0.
 	# TODO: Start at the first kernel page instead. Alternatively map the first
 	#       1 MiB as it can be generally useful, and there's no need to
 	#       specially map the VGA buffer.
 	movl $0, %esi
-	# Map 1023 pages. The 1024th will be the VGA text buffer.
-	movl $1023, %ecx
+	# Map 1024 pages. 
+	movl $1024, %ecx
 
 
 1:
@@ -79,21 +78,40 @@ _start:
 	loop 1b
 
 3:
-
-	# Map VGA video memory to 0xC03FF000 as "present, writable".
 	movl $(0x000B8000 | 0x003), first_page_table - 0xC0000000 + 1023 * 4
-
-	# The page table is used at both page directory entry 0 (virtually from 0x0
-	# to 0x3FFFFF) (thus identity mapping the kernel) and page directory entry
-	# 768 (virtually from 0xC0000000 to 0xC03FFFFF) (thus mapping it in the
-	# higher half). The kernel is identity mapped because enabling paging does
-	# not change the next instruction, which continues to be physical. The CPU
-	# would instead page fault if there was no identity mapping.
-
-	# Map the page table to both virtual addresses 0x00000000 and 0xC0000000.
 	movl $(first_page_table - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 0
 	movl $(first_page_table - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 768 * 4
 
+
+	movl $(second_page_table - 0xC0000000), %edi
+
+	movl $0, %esi
+	# Map 256 pages. 
+	movl $256, %ecx
+
+
+4:
+	cmpl $(0x100000), %esi
+	jge 5f
+
+	# Map physical address as "present, writable". Note that this maps
+	# .text and .rodata as writable. Mind security and map them as non-writable.
+	movl %esi, %edx
+	orl $0x003, %edx
+	movl %edx, (%edi)
+
+	# Size of page is 4096 bytes.
+	addl $4096, %esi
+	# Size of entries in first_page_table is 4 bytes.
+	addl $4, %edi
+	# Loop to the next entry if we haven't finished.
+	loop 4b
+
+
+5:
+	
+	
+	
 	# Set cr3 to the address of the page_directory.
 	movl $(page_directory - 0xC0000000), %ecx
 	movl %ecx, %cr3
@@ -104,17 +122,15 @@ _start:
 	movl %ecx, %cr0
 
 	# Jump to higher half with an absolute jump. 
-	lea 4f, %ecx
+	lea 6f, %ecx
 	jmp *%ecx
 
 .section .text
 
-4:
+6:
 
 	# At this point, paging is fully set up and enabled.
-
-	# Unmap the identity mapping as it is now unnecessary. 
-	movl $0, page_directory + 0
+	movl $(second_page_table + 0x003), page_directory + 0
 
 	# Reload crc3 to force a TLB flush so the changes to take effect.
 	movl %cr3, %ecx
@@ -122,6 +138,12 @@ _start:
 
 	# Set up the stack.
 	mov $stack_top, %esp
+	
+	# Multiboot headers
+	pushl %ebx
+	pushl %eax
+
+	call early_kernel
 
 	call _init
 
@@ -130,6 +152,6 @@ _start:
 
 	# Infinite loop if the system has nothing more to do.
 	cli
-1:	hlt
-	jmp 1b
+7:	hlt
+	jmp 7b
 

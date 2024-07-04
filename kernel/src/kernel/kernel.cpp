@@ -35,72 +35,75 @@
 
 #include <hardware/pic8259.hpp>
 #include <Memory/Memory.hpp>
+#include <Memory/PhysicalMemory.hpp>
 
 #include <kernel/banner.h>
 #include <Drivers/mouse.hpp>
 #include <Drivers/keyboard.hpp>
 
-extern uint32_t _kernel_start;
-extern uint32_t kernel_physical_start;
-extern uint32_t _kernel_end;
-extern uint32_t kernel_physical_end;
-	
+static uint32_t multiboot_bootloader_magic;
+static uint32_t multiboot_info_addr;
+
+/**
+ * @brief Early entry point of ParsOS. 
+ * Called before global constructor initialization
+ * 
+ */
+extern "C" void early_kernel(uint32_t magic, uint32_t addr)
+{
+    multiboot_bootloader_magic = magic;
+    multiboot_info_addr = addr;
+}
+
 /**
  * @brief entry point of ParsOS
  *
  */
-extern "C" void kernel_main(uint32_t magic, uint32_t addr)
+extern "C" void kernel_main()
 {
-    
+
     terminal_initialize();
 
     ParsOSBanner();
-    
-    printf("Kernel virt: \t start: %x end: %x \n", &_kernel_start, &_kernel_end);
-    printf("Kernel  phy: \t start: %x end: %x \n", &kernel_physical_start, &kernel_physical_end);
 
-    GDT::Init();
     
+    GDT::Init();
+
     IDT::Init();
 
-    asm volatile("int $0x00");
-
-    PIC8259::Init();
-
-    keyboard::Init();
-
-
-    while (1)
+    if (multiboot_bootloader_magic != MULTIBOOT_BOOTLOADER_MAGIC)
     {
-        auto c = keyboard::GetKey();
-
-        if(!c)
-            continue;
-        
-        printf("Key pressed : %c \n", c);
+        kernel_panic("magic number is invalid.");
     }
+
+
+
+
+    Memory::Init((multiboot_info_t*)multiboot_info_addr);
     
-   
-    //mouse_init();
 
     //asm volatile("int $0x00");
-    //if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
-    //{
-    //    kernel_panic("magic number is invalid.");
-    //}
-//
-    //multiboot_info_t* bootInfo = (multiboot_info_t*)addr;
-    //uint32_t mod1 = *(uint32_t*)(bootInfo->mods_addr + 4);
-    //uint32_t physicalAllocStart = (mod1 + 0xFFF) & ~0xFFF;
-//
-//
-//
-    //Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
-    //Memory::initMemory(0,0);
-   
 
+    // PIC8259::Init();
 
-    //BIOSInit();
+    // keyboard::Init();
 
-    while (1);
+    // mouse_init();
+
+    // asm volatile("int $0x00");
+
+    //
+
+    // uint32_t mod1 = *(uint32_t*)(bootInfo->mods_addr + 4);
+    // uint32_t physicalAllocStart = (mod1 + 0xFFF) & ~0xFFF;
+    //
+    //
+    //
+    // Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
+    // Memory::initMemory(0,0);
+
+    // BIOSInit();
+
+    while (1)
+        ;
 }

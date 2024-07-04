@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+struct multiboot_info;
+typedef struct multiboot_info multiboot_info_t;
+
 namespace Memory
 {
     /**
@@ -58,13 +61,15 @@ namespace Memory
      * @param memHigh 
      * @param physicalAllocStart 
      */
-    void initMemory(uint32_t memHigh, uint32_t physicalAllocStart);
+    void Init(const multiboot_info_t *bootInfo);
 
     /**
      * @brief Get the Page Size 
      * 
      */
     uint32_t getPageSize();
+
+    void *get_physaddr(void *virtualaddr);
 
 } // namespace Memory
 

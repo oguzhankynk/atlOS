@@ -28,7 +28,7 @@
 namespace PhysicalMemory
 {
 
-    void Init(const void *start_address, uint32_t size);
+     void Init(const void *start_address, uint32_t physical_memory_size, uint32_t block_size);
     void AddMemoryRegion(const void *base_address, uint32_t size);
     void RemoveMemoryRegion(const void *base_address, uint32_t size);
     void *AllocateBlock(uint32_t num_blocks);
