@@ -21,20 +21,19 @@
 
 #include "stdint.h"
 
-/**
- * @brief
- *
- */
-namespace PhysicalMemory
+namespace Memory
 {
+    namespace PhysicalMemory
+    {
 
-     void Init(const void *start_address, uint32_t physical_memory_size, uint32_t block_size);
-    void AddMemoryRegion(const void *base_address, uint32_t size);
-    void RemoveMemoryRegion(const void *base_address, uint32_t size);
-    void *AllocateBlock(uint32_t num_blocks);
-    void FreeBlocks(const void *addr, uint32_t num_blocks);
-    uint32_t GetMaxBlockSize();
+        void Init(const void *start_address, uint32_t physical_memory_size, uint32_t block_size);
+        void AddMemoryRegion(const void *base_address, uint32_t size);
+        void RemoveMemoryRegion(const void *base_address, uint32_t size);
+        void *AllocateBlock(uint32_t num_blocks);
+        void FreeBlocks(const void *addr, uint32_t num_blocks);
+        uint32_t GetMaxBlockSize();
 
-}; // namespace PhysicalMemory
+    }; // namespace PhysicalMemory
+}; // namespace Memory
 
 #endif /* D83E69E7_DE4E_42CB_A05E_FA455D9BAF9F */

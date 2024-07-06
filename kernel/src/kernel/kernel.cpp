@@ -99,8 +99,6 @@ extern "C" void kernel_main()
     //
     //
     //
-    // Memory::initMemory(bootInfo->mem_upper * 1024, physicalAllocStart);
-    // Memory::initMemory(0,0);
 
     // BIOSInit();
 
