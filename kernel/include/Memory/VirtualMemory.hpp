@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include <Memory/MemoryConstants.hpp>
+
 namespace Memory
 {
     namespace VirtualMemory
@@ -13,7 +15,7 @@ namespace Memory
          * A single entry in a page directory. It contains the physical address of a page table
          * and various control bits.
          */
-        struct PageDirectory
+        struct PageDirectoryEntry
         {
             uint32_t present : 1;     /**< Page table present in memory */
             uint32_t rw : 1;          /**< Read/write permission */
@@ -26,8 +28,8 @@ namespace Memory
             uint32_t ignored : 4;     /**< Ignored bits */
             uint32_t table_addr : 20; /**< Physical address of the page table (shifted right 12 bits) */
 
-            PageDirectory() = default;
-            PageDirectory(uint32_t value);
+            PageDirectoryEntry() = default;
+            PageDirectoryEntry(uint32_t value);
         };
 
         /**
@@ -54,8 +56,12 @@ namespace Memory
             PageTableEntry(uint32_t value);
         };
 
+        using PageDirectory = PageDirectoryEntry[PAGE_DIR_SIZE];
+        using PageTable = PageTableEntry[PAGE_TABLE_SIZE];
+
         void Init();
-        
+       
+
     }; // namespace VirtualMemory
 }; // namespace Memory
 #endif /* A85ADD73_9A97_40E4_AB3B_BAB8F30BD473 */

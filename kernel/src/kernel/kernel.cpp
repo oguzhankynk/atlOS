@@ -76,12 +76,8 @@ extern "C" void kernel_main()
         kernel_panic("magic number is invalid.");
     }
 
-
-
-
     Memory::Init((multiboot_info_t*)multiboot_info_addr);
     
-
     //asm volatile("int $0x00");
 
     // PIC8259::Init();

@@ -35,6 +35,17 @@ namespace Memory
         static uint32_t maxBlocks{};
         static uint32_t usedBlocks{};
 
+        static inline void SetBlock(uint32_t bit)
+        {
+            memory[bit / 32] |= (1 << (bit % 32));
+        }
+
+        static inline void UnsetBlock(uint32_t bit)
+        {
+            memory[bit / 32] &= ~(1 << (bit % 32));
+        }
+
+
         static int32_t FirstFreeBlock(uint32_t num_blocks)
         {
             if (num_blocks == 0)
@@ -79,26 +90,15 @@ namespace Memory
 
             return -1; // No free region of memory large enough
         }
-
-        static void SetBlock(uint32_t bit)
-        {
-            memory[bit / 32] |= (1 << (bit % 32));
-        }
-
-        static void UnsetBlock(uint32_t bit)
-        {
-            memory[bit / 32] &= ~(1 << (bit % 32));
-        }
-
+        
         void Init(const void *start_address, uint32_t physical_memory_size, uint32_t block_size)
         {
             blockSize = block_size;
             memory = (uint32_t *)start_address;
             maxBlocks = physical_memory_size / blockSize;
-            usedBlocks = maxBlocks; // To start off, every block will be "used/reserved"
+            usedBlocks = maxBlocks; 
 
-            // By default, set all memory in use (used blocks/bits = 1, every block is set)
-            // Each byte of memory map holds 8 bits/blocks
+            // set all memory in use 
             memset(memory, 0xFF, maxBlocks / 8);
         }
 
@@ -128,7 +128,7 @@ namespace Memory
 
         void *AllocateBlock(uint32_t num_blocks)
         {
-            // If # of free blocks left is not enough, we can't allocate any more, return
+            // If # of free blocks left is not enough, return
             if ((maxBlocks - usedBlocks) <= num_blocks)
                 return 0;
 

@@ -18,6 +18,11 @@ namespace Memory
 
     void *VirtToPhysAddr(void *virtualaddr);
 
+    void map(void* PhysicalAddr, void* VirtualAddr);
+
+    void unmap(void *virtualaddr);
+    
+
 } // namespace Memory
 
 #endif /* AA43D675_0DC2_4B6E_8A42_68A48886962B */

@@ -31,9 +31,6 @@ page_directory:
 .global first_page_table
 first_page_table:
 	.skip 4096
-.global second_page_table
-second_page_table:
-	.skip 4096
 # Further page tables may be required if the kernel grows beyond 3 MiB.
 
 # The kernel entry point.
@@ -81,35 +78,7 @@ _start:
 	movl $(0x000B8000 | 0x003), first_page_table - 0xC0000000 + 1023 * 4
 	movl $(first_page_table - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 0
 	movl $(first_page_table - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 768 * 4
-
-
-	movl $(second_page_table - 0xC0000000), %edi
-
-	movl $0, %esi
-	# Map 256 pages. 
-	movl $256, %ecx
-
-
-4:
-	cmpl $(0x100000), %esi
-	jge 5f
-
-	# Map physical address as "present, writable". Note that this maps
-	# .text and .rodata as writable. Mind security and map them as non-writable.
-	movl %esi, %edx
-	orl $0x003, %edx
-	movl %edx, (%edi)
-
-	# Size of page is 4096 bytes.
-	addl $4096, %esi
-	# Size of entries in first_page_table is 4 bytes.
-	addl $4, %edi
-	# Loop to the next entry if we haven't finished.
-	loop 4b
-
-
-5:
-	
+	movl $(page_directory - 0xC0000000 + 0x003), page_directory - 0xC0000000 + 1023 * 4
 	
 	
 	# Set cr3 to the address of the page_directory.
@@ -122,15 +91,15 @@ _start:
 	movl %ecx, %cr0
 
 	# Jump to higher half with an absolute jump. 
-	lea 6f, %ecx
+	lea 4f, %ecx
 	jmp *%ecx
 
 .section .text
 
-6:
+4:
 
 	# At this point, paging is fully set up and enabled.
-	movl $(second_page_table + 0x003), page_directory + 0
+	movl $0, page_directory + 0
 
 	# Reload crc3 to force a TLB flush so the changes to take effect.
 	movl %cr3, %ecx
@@ -152,6 +121,6 @@ _start:
 
 	# Infinite loop if the system has nothing more to do.
 	cli
-7:	hlt
-	jmp 7b
+5:	hlt
+	jmp 5b
 

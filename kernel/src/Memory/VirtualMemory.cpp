@@ -14,7 +14,7 @@ namespace Memory
          * @brief Page directory defined at boot.S
          *
          */
-        extern "C" PageDirectory page_directory[PAGE_DIR_SIZE];
+        extern "C" PageDirectoryEntry page_directory[PAGE_DIR_SIZE];
 
         /**
          * @brief First page table defined at boot.S
@@ -41,11 +41,11 @@ namespace Memory
         }
 
         /**
-         * @brief Construct a new Page PageDirectory object
+         * @brief Construct a new Page PageDirectoryEntry object
          *
          * @param value
          */
-        PageDirectory::PageDirectory(uint32_t value)
+        PageDirectoryEntry::PageDirectoryEntry(uint32_t value)
         {
             present = (value >> 0) & 0x1;
             rw = (value >> 1) & 0x1;
