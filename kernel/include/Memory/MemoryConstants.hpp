@@ -22,6 +22,38 @@ namespace Memory
     constexpr uint32_t PAGE_TABLE_SIZE = 1024;
 
     constexpr uint32_t KERNEL_LOAD_ADDR = (uint32_t)0xC0000000;
+
+        /**
+     * @brief Start address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the start address of
+     * the kernel in virtual memory.
+     */
+    extern "C" uint32_t _kernel_start;
+
+    /**
+     * @brief End address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the end address of
+     * the kernel in virtual memory.
+     */
+    extern "C" uint32_t _kernel_end;
+
+    /**
+     * @brief Physical start address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the start address of
+     * the kernel in physical memory.
+     */
+    extern "C" uint32_t kernel_physical_start;
+
+    /**
+     * @brief Physical end address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the end address of
+     * the kernel in physical memory.
+     */
+    extern "C" uint32_t kernel_physical_end;
 };
 
 #endif /* E3B89885_6058_4A97_A247_B94C13DBD57E */

@@ -26,38 +26,6 @@ namespace Memory
     static uint8_t bitmap[4 * 128 * 1024 * 1024UL / PAGE_SIZE];
 
     /**
-     * @brief Start address of the kernel.
-     *
-     * This variable is defined at linker.ld and represents the start address of
-     * the kernel in virtual memory.
-     */
-    extern "C" uint32_t _kernel_start;
-
-    /**
-     * @brief End address of the kernel.
-     *
-     * This variable is defined at linker.ld and represents the end address of
-     * the kernel in virtual memory.
-     */
-    extern "C" uint32_t _kernel_end;
-
-    /**
-     * @brief Physical start address of the kernel.
-     *
-     * This variable is defined at linker.ld and represents the start address of
-     * the kernel in physical memory.
-     */
-    extern "C" uint32_t kernel_physical_start;
-
-    /**
-     * @brief Physical end address of the kernel.
-     *
-     * This variable is defined at linker.ld and represents the end address of
-     * the kernel in physical memory.
-     */
-    extern "C" uint32_t kernel_physical_end;
-
-    /**
      * @brief
      *
      * @param memHigh
@@ -115,6 +83,7 @@ namespace Memory
 
         PhysicalMemory::RemoveMemoryRegion(0, 1024 * 1024);
         PhysicalMemory::RemoveMemoryRegion(&kernel_physical_start, (uint32_t)&kernel_physical_end - (uint32_t)&kernel_physical_start);
+
     }
 
     /**
@@ -125,9 +94,7 @@ namespace Memory
      */
     void *VirtToPhysAddr(void *virtualaddr)
     {
-        using namespace VirtualMemory;
-
-        uint32_t pdindex = (unsigned long)virtualaddr >> 22 & 0x3FF;
+        uint32_t pdindex = (unsigned long)virtualaddr >> 22;
         uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
         uint32_t offset = (uint32_t)virtualaddr & 0xFFF;
 
@@ -136,7 +103,7 @@ namespace Memory
             return 0;
         }
 
-        PageTableEntry *page_table = (PageTableEntry *)(0xFFC00000 + (pdindex * 0x1000));
+        VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
 
         if (!page_table[ptindex].present)
         {
@@ -153,7 +120,7 @@ namespace Memory
         if ((uint32_t)virtualaddr % PAGE_SIZE != 0)
             return;
 
-        uint32_t pdindex = (unsigned long)virtualaddr >> 22 & 0x3FF;
+        uint32_t pdindex = (unsigned long)virtualaddr >> 22 ;
         uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
 
         VirtualMemory::PageDirectoryEntry &pd_entry = page_directory[pdindex];
@@ -170,7 +137,8 @@ namespace Memory
             pd_entry = (uint32_t)new_pt | 3; // present , rw
         }
 
-        VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)(0xFFC00000 + (pdindex * 0x1000)); // virt addr of page table
+        
+        VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
 
         if (!page_table[ptindex].present)
         {
@@ -194,7 +162,7 @@ namespace Memory
 
         if (pd_entry.present)
         {
-            VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)(0xFFC00000 + (pdindex * 0x1000)); // virt addr of page table
+            VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
             if (page_table[ptindex].present)
             {
                 page_table[ptindex] = 0;

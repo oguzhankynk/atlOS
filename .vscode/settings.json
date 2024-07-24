@@ -4,7 +4,9 @@
         "stdio.h": "c",
         "vga.h": "c",
         "systemenclosurechassis.hpp": "c",
-        "bios.h": "c"
+        "bios.h": "c",
+        "liballoc_1_1.h": "c",
+        "stdint.h": "c"
     },
     "doxygen_runner.configuration_file_override": "${workspaceFolder}/Doxyfile",
     "doxdocgen.generic.authorEmail": "",

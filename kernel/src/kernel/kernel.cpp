@@ -30,12 +30,14 @@
 #include <kernel/sys/IOPort.hpp>
 #include <kernel/panic.h>
 
+
 #include <arch/i386/GDT/gdt.hpp>
 #include <arch/i386/IDT/idt.hpp>
 
 #include <hardware/pic8259.hpp>
 #include <Memory/Memory.hpp>
 #include <Memory/PhysicalMemory.hpp>
+#include <Memory/KHeap.h>
 
 #include <kernel/banner.h>
 #include <Drivers/mouse.hpp>

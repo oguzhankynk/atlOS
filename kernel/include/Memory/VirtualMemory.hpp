@@ -60,6 +60,10 @@ namespace Memory
         using PageTable = PageTableEntry[PAGE_TABLE_SIZE];
 
         void Init();
+        void *getPageTableVirtAddr(uint32_t pdindex);
+        uint32_t MapPages(uint32_t page_index, uint32_t num_pages);
+        void *AllocatePage(uint32_t num_pages);
+        int FreePage(const void *addr, uint32_t num_pages);
        
 
     }; // namespace VirtualMemory
