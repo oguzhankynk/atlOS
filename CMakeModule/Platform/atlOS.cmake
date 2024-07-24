@@ -1,7 +1,7 @@
-# ParsOS platform file
+# atlOS platform file
 
 # Operating system name
-set(CMAKE_SYSTEM_NAME ParsOS)
+set(CMAKE_SYSTEM_NAME atlOS)
 
 # Operating system architecture
 set(CMAKE_SYSTEM_PROCESSOR i686)

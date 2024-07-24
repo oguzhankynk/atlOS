@@ -1,7 +1,7 @@
 /**
  * @file banner.cpp
  * @author Oguzhan KAYNAK 
- * @brief PArsOS banner printer
+ * @brief atlOS banner printer
  * 
  * Copyright © 2024 Oguzhan KAYNAK
  * 
@@ -23,7 +23,7 @@
 
 static const char* banner = "\
 |============================================|\n\
-|          Welcome to ParsOS                 |\n\
+|          Welcome to atlOS                 |\n\
 |   Developed by: Oguzhan KAYNAK             |\n\
 |                                            |\n\
 | Your reliable and efficient operating      |\n\
@@ -32,11 +32,11 @@ static const char* banner = "\
 "
 ;
 
-void ParsOSBanner()
+void atlOSBanner()
 {
     printf("%s",banner);
     char version[256];
-    sprintf(version, "ParsOS Version: %d.%d.%d Build Time: %s",
+    sprintf(version, "atlOS Version: %d.%d.%d Build Time: %s",
              MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, BUILD_TIME);
     printf("%s\n", version);
 }

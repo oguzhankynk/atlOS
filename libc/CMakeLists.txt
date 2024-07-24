@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-# Include the ParsOS platform-specific settings
-include(${CMAKE_MODULE_PATH}/Platform/ParsOS.cmake)
+# Include the atlOS platform-specific settings
+include(${CMAKE_MODULE_PATH}/Platform/atlOS.cmake)
 
 # Check if SYSROOT is defined
 if(NOT DEFINED SYSROOT)
@@ -10,7 +10,7 @@ if(NOT DEFINED SYSROOT)
 endif()
 
 # Define the project name
-project(ParsOS_libk)
+project(atlOS_libk)
 
 # Define C++ compiler flags for the project
 SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include \

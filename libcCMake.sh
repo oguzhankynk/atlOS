@@ -26,7 +26,7 @@ cd "$BUILD_DIR" || exit
 
 echo "Running CMake..."
 cmake "$PROJECT_DIR" \
-    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/CMakeModule/ParsOS.toolchain.cmake" \
+    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/CMakeModule/atlOS.toolchain.cmake" \
     -DCMAKE_MODULE_PATH="${SCRIPT_DIR}/CMakeModule" \
     -DSYSROOT="${SYSROOT}" \
     -B"${PROJECT_DIR}/build"

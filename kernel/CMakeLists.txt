@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-# Include the ParsOS platform-specific settings
-include(${CMAKE_MODULE_PATH}/Platform/ParsOS.cmake)
+# Include the atlOS platform-specific settings
+include(${CMAKE_MODULE_PATH}/Platform/atlOS.cmake)
 
 # Check if SYSROOT is defined
 if(NOT DEFINED SYSROOT)
@@ -11,7 +11,7 @@ endif()
 
 
 # Define the project name and specify that the project uses C and C++ languages
-project(ParsOS_kernel C CXX ASM)
+project(atlOS_kernel C CXX ASM)
 
 # Specify compiler flags for C and C++ sources
 SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function -std=c++11 -fno-exceptions -fno-rtti -D__is_kernel")
@@ -46,27 +46,27 @@ add_library( ${CRTS_FILES} OBJECT
     ${ARCHDIR}/crt/crtn.S
 )
 
-# Create the ParsOS.kernel executable
-add_executable(ParsOS.kernel  
+# Create the atlOS.kernel executable
+add_executable(atlOS.kernel  
     ${KERNEL_FILES}
 )
 
-target_link_options(ParsOS.kernel PRIVATE
+target_link_options(atlOS.kernel PRIVATE
     -T${ARCHDIR}/linker.ld -nostdlib -ffreestanding  
 )
 
 # Link order and list for the executable
-target_link_libraries(ParsOS.kernel PRIVATE
+target_link_libraries(atlOS.kernel PRIVATE
     k
     gcc
 )
 
-target_link_directories(ParsOS.kernel PRIVATE
+target_link_directories(atlOS.kernel PRIVATE
     ${SYSROOT}/usr/lib
 )
 
 # This ensures the boot.o crti.o, crtn.o to be build prior to BARE_METAL target
-add_dependencies( ParsOS.kernel  ${CRTS_FILES} )
+add_dependencies( atlOS.kernel  ${CRTS_FILES} )
 
 # Ask GCC to get the full path name of crtbegin. and crtend.o
 execute_process( COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=crtbegin.o OUTPUT_VARIABLE CRTBEGIN_O OUTPUT_STRIP_TRAILING_WHITESPACE )
@@ -86,10 +86,10 @@ set( CMAKE_CXX_LINK_EXECUTABLE
  ${CRTEND_O} \
  ${CMAKE_BINARY_DIR}/CMakeFiles/${CRTS_FILES}.dir/arch/i386/crt/crtn.S.obj" )
 
-# Add a custom command to copy ParsOS.kernel to SYSROOT/boot
+# Add a custom command to copy atlOS.kernel to SYSROOT/boot
 add_custom_command(
-    TARGET ParsOS.kernel POST_BUILD
-    COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/ParsOS.kernel ${SYSROOT}/boot
+    TARGET atlOS.kernel POST_BUILD
+    COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/atlOS.kernel ${SYSROOT}/boot
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 

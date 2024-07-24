@@ -28,7 +28,7 @@ extern "C" {
  * @brief Prints banner and version infoormation
  * 
  */
-void ParsOSBanner();
+void atlOSBanner();
 
 
 

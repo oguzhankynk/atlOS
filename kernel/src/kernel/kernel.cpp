@@ -47,7 +47,7 @@ static uint32_t multiboot_bootloader_magic;
 static uint32_t multiboot_info_addr;
 
 /**
- * @brief Early entry point of ParsOS. 
+ * @brief Early entry point of atlOS. 
  * Called before global constructor initialization
  * 
  */
@@ -58,7 +58,7 @@ extern "C" void early_kernel(uint32_t magic, uint32_t addr)
 }
 
 /**
- * @brief entry point of ParsOS
+ * @brief entry point of atlOS
  *
  */
 extern "C" void kernel_main()
@@ -66,7 +66,7 @@ extern "C" void kernel_main()
 
     terminal_initialize();
 
-    ParsOSBanner();
+    atlOSBanner();
 
     
     GDT::Init();
