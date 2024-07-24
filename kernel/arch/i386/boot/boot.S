@@ -112,8 +112,6 @@ _start:
 	pushl %ebx
 	pushl %eax
 
-	call early_kernel
-
 	call _init
 
 	# Enter the high-level kernel.

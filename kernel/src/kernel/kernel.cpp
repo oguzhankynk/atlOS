@@ -43,25 +43,12 @@
 #include <Drivers/mouse.hpp>
 #include <Drivers/keyboard.hpp>
 
-static uint32_t multiboot_bootloader_magic;
-static uint32_t multiboot_info_addr;
-
-/**
- * @brief Early entry point of atlOS. 
- * Called before global constructor initialization
- * 
- */
-extern "C" void early_kernel(uint32_t magic, uint32_t addr)
-{
-    multiboot_bootloader_magic = magic;
-    multiboot_info_addr = addr;
-}
 
 /**
  * @brief entry point of atlOS
  *
  */
-extern "C" void kernel_main()
+extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multiboot_info_addr)
 {
 
     terminal_initialize();
