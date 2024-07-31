@@ -65,7 +65,7 @@ public:
     uint16_t getHandle() const { return *getHandleAddr(); }
 
     /// @brief Gets the socket designation.
-    uint8_t *getSocketDesignation() const { return getSocketDesignationAddr(); }
+    uint8_t getSocketDesignation() const { return *getSocketDesignationAddr(); }
 
     /// @brief Gets the processor type.
     uint8_t getProcessorType() const { return *getProcessorTypeAddr(); }
@@ -139,7 +139,7 @@ public:
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
         printf("Handle: %u\n", getHandle());
-        printf("Socket Designation: %d\n", getSocketDesignation());
+        printf("Socket Designation: %u\n", getSocketDesignation());
         printf("Processor Type: %u\n", getProcessorType());
         printf("Processor Family: %u\n", getProcessorFamily());
         printf("Processor Manufacturer: %u\n", getProcessorManufacturer());

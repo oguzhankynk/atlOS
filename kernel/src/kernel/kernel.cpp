@@ -43,7 +43,6 @@
 #include <Drivers/mouse.hpp>
 #include <Drivers/keyboard.hpp>
 
-
 /**
  * @brief entry point of atlOS
  *
@@ -55,7 +54,7 @@ extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multib
 
     atlOSBanner();
 
-    
+
     GDT::Init();
 
     IDT::Init();
@@ -65,8 +64,9 @@ extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multib
         kernel_panic("magic number is invalid.");
     }
 
+
     Memory::Init((multiboot_info_t*)multiboot_info_addr);
-    
+
     //asm volatile("int $0x00");
 
     // PIC8259::Init();

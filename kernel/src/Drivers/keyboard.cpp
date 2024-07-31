@@ -137,10 +137,10 @@ namespace keyboard
         return c;
     }
 
-    static char *_qwertzuiop = "qwertzuiop"; // 0x10-0x1c
-    static char *_asdfghjkl = "asdfghjkl";
-    static char *_yxcvbnm = "yxcvbnm";
-    static char *_num = "123456789";
+    static const  char *_qwertzuiop = "qwertzuiop"; // 0x10-0x1c
+    static const char *_asdfghjkl = "asdfghjkl";
+    static const char *_yxcvbnm = "yxcvbnm";
+    static const char *_num = "123456789";
 
     uint8_t ToASCII(uint8_t key)
     {

@@ -1,4 +1,5 @@
 #include <Memory/liballoc/liballoc_1_1.h>
+#include <stddef.h>
 
 /**  Durand's Amazing Super Duper Memory functions.  */
 //#define DEBUG

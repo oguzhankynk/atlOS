@@ -10,7 +10,7 @@
           "compilerPath": "/home/oguzhan/opt/cross/bin/i686-elf-gcc",
           "cStandard": "gnu17",
           "cppStandard": "gnu++14",
-          "intelliSenseMode": "gcc-x64",
+          "intelliSenseMode": "linux-gcc-x64",
           "compilerArgs": [
               "--sysroot=${workspaceFolder}/sysroot",
               "-ffreestanding"

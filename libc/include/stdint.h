@@ -160,10 +160,6 @@ typedef uint64_t uintmax_t;
  */
 typedef uint64_t uintptr_t;
 
-#ifdef __cplusplus
-#define NULL 0
-#else
-#define NULL ((void *)0)
-#endif
+
 
 #endif /* BA22560F_9F55_4018_A630_CB062C833243 */
