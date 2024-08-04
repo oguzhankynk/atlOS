@@ -1,5 +1,5 @@
 /**
- * @file pic8259.hpp
+ * @file pic.hpp
  * @author Oguzhan KAYNAK ()
  * @brief Class for interfacing with the 8259 Programmable Interrupt Controller (PIC).
  *
@@ -24,7 +24,7 @@
 /**
  * @brief Namespace for interfacing with the 8259 Programmable Interrupt Controller (PIC).
  */
-namespace PIC8259
+namespace PIC
 {
     /**
      * @brief Initializes the PIC8259.
@@ -90,6 +90,6 @@ namespace PIC8259
      */
     void irq_enable(uint8_t irq);
 
-}; // namespace PIC8259
+}; // namespace PIC
 
 #endif /* AD370CF8_142A_4BD1_845C_6DBAF45AC5BC */

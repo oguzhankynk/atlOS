@@ -34,13 +34,12 @@
 #include <arch/i386/GDT/gdt.hpp>
 #include <arch/i386/IDT/idt.hpp>
 
-#include <hardware/pic8259.hpp>
+#include <hardware/pic.hpp>
 #include <Memory/Memory.hpp>
 #include <Memory/PhysicalMemory.hpp>
 #include <Memory/KHeap.h>
 
 #include <kernel/banner.h>
-#include <Drivers/mouse.hpp>
 #include <Drivers/keyboard.hpp>
 
 /**
@@ -69,11 +68,14 @@ extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multib
 
     //asm volatile("int $0x00");
 
-    // PIC8259::Init();
+    PIC::Init();
 
-    // keyboard::Init();
+    keyboard::Init();
 
-    // mouse_init();
+    while(1)
+    {
+        printf("%c", keyboard::GetKey());
+    }
 
     // asm volatile("int $0x00");
 

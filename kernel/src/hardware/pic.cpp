@@ -1,5 +1,5 @@
 /**
- * @file pic8259.cpp
+ * @file pic.cpp
  * @author Oguzhan KAYNAK ()
  * @brief Implemantation for interfacing with the 8259 Programmable Interrupt Controller (PIC).
  *
@@ -17,10 +17,11 @@
  *
  */
 
-#include <hardware/pic8259.hpp>
+#include <hardware/pic.hpp>
 #include <kernel/sys/IOPort.hpp>
+#include <stdio.h>
 
-namespace PIC8259
+namespace PIC
 {
 
     // I/O port addresses for the master and slave PICs
@@ -72,7 +73,13 @@ namespace PIC8259
     // Initializes the PIC8259.
     void Init()
     {
-        IOPort::DisableInterrupts();
+       // IOPort::DisableInterrupts();
+
+        unsigned char mask1 = IOPort::inportb(MASTER_DATA_PORT);
+	    unsigned char mask2 = IOPort::inportb(SLAVE_DATA_PORT);
+
+        printf("mask1: %u mask2: %u \n", (uint32_t)mask1, (uint32_t)mask2);
+
         // Initialization command words (ICW) for master and slave PICs
         uint8_t master_icw1 = 0x11; // ICW1: Start initialization, edge triggered, cascade mode
         uint8_t slave_icw1 = 0x11;  // ICW1: Start initialization, edge triggered, cascade mode
@@ -104,6 +111,10 @@ namespace PIC8259
         // Mask all interrupts on master and slave PICs initially
         IOPort::outportb(MASTER_DATA_PORT, 0xFF); // Mask all interrupts
         IOPort::outportb(SLAVE_DATA_PORT, 0xFF);  // Mask all interrupts
+
+        IOPort::outportb(MASTER_DATA_PORT,  ~(0x2)); // Mask all interrupts
+        IOPort::outportb(SLAVE_DATA_PORT,  ~(0x2)); // Mask all interrupts
+
 
         IOPort::EnableInterrupts();
     }
@@ -205,4 +216,4 @@ namespace PIC8259
             IOPort::outportb(SLAVE_DATA_PORT, mask);
         }
     }
-}; // namespace PIC8259
+}; // namespace PIC
