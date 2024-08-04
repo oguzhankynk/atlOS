@@ -73,12 +73,7 @@ namespace PIC
     // Initializes the PIC8259.
     void Init()
     {
-       // IOPort::DisableInterrupts();
-
-        unsigned char mask1 = IOPort::inportb(MASTER_DATA_PORT);
-	    unsigned char mask2 = IOPort::inportb(SLAVE_DATA_PORT);
-
-        printf("mask1: %u mask2: %u \n", (uint32_t)mask1, (uint32_t)mask2);
+        // IOPort::DisableInterrupts();
 
         // Initialization command words (ICW) for master and slave PICs
         uint8_t master_icw1 = 0x11; // ICW1: Start initialization, edge triggered, cascade mode

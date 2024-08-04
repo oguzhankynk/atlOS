@@ -41,6 +41,7 @@
 
 #include <kernel/banner.h>
 #include <Drivers/keyboard.hpp>
+#include <Interfaces/serial.hpp>
 
 /**
  * @brief entry point of atlOS
@@ -70,22 +71,11 @@ extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multib
 
     PIC::Init();
 
-    keyboard::Init();
+    Keyboard::Init();
 
-    while(1)
-    {
-        printf("%c", keyboard::GetKey());
-    }
+    int stat_serial_init = SerialPort::Init();
 
-    // asm volatile("int $0x00");
-
-    //
-
-    // uint32_t mod1 = *(uint32_t*)(bootInfo->mods_addr + 4);
-    // uint32_t physicalAllocStart = (mod1 + 0xFFF) & ~0xFFF;
-    //
-    //
-    //
+    printf("stat_serial_init: %d \n", stat_serial_init);
 
     // BIOSInit();
 

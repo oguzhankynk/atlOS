@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-namespace keyboard
+namespace Keyboard
 {
     /**
      * @brief Keyboard Scan Codes: Set 1
@@ -179,7 +179,7 @@ namespace keyboard
 
         if (irq_register_stat == false)
         {
-            printf("keyboard: AddInterruptHandler error \n");
+            printf("Keyboard: AddInterruptHandler error \n");
             return;
         }
     }
@@ -281,4 +281,4 @@ namespace keyboard
 
     }
 
-}; // namespace keyboard
+}; // namespace Keyboard
