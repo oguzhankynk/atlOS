@@ -60,6 +60,8 @@ void* memset(void* ptr, int value, size_t size);
 /// @return Returns the number of characters in the string, excluding the terminating null character.
 size_t strlen(const char* str);
 
+int strcmp(const char *s1, const char *s2);
+char * strcpy( char *des, const char *src );
 
 #ifdef __cplusplus
 }
