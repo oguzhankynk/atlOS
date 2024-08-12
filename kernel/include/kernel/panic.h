@@ -33,6 +33,7 @@ extern "C" {
  * @return void
  */
 void kernel_panic(const char* str);
+void kernel_panic_assert(bool condition);
 
 #if defined(__cplusplus)
 } /* extern "C" */

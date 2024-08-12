@@ -31,3 +31,11 @@ void kernel_panic(const char* str)
         
     }
 }
+
+void kernel_panic_assert(bool condition)
+{
+    if(!condition)
+    {
+        kernel_panic("ASSERTION-FAILED");
+    }
+}
