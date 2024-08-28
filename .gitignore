@@ -1,2 +1,3 @@
 ﻿libc/build
 kernel/build
+VirtualDisk/disk.img
