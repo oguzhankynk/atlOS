@@ -21,7 +21,7 @@ namespace IOPort
 {
 
 /**
- * @brief Writes a byte to the specified I/O port using inline assembly.
+ * @brief Writes a byte to the specified I/O port.
  *
  * @param port The I/O port to write to.
  * @param value The byte value to write to the port.
@@ -32,7 +32,7 @@ void outportb(uint16_t port, uint8_t value)
 }
 
 /**
- * @brief Reads a byte from the specified I/O port using inline assembly.
+ * @brief Reads a byte from the specified I/O port.
  *
  * @param port The I/O port to read from.
  * @return The byte value read from the port.
@@ -43,6 +43,38 @@ uint8_t inportb(uint16_t port)
     asm volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
     return value;
 }
+
+/**
+ * @brief Writes a word to the specified I/O port.
+ * 
+ * @param port The I/O port to write to.
+ * @param data The word value to write to the port.
+ */
+void outportw(uint16_t port, uint16_t data) 
+{
+    asm volatile("outw %%ax, %%dx"
+             :
+             : "a"(data), "d"(port));
+}
+
+/**
+ * @brief Reads a word from the specified I/O port.
+ * 
+ * @param port The I/O port to read from.
+ * @return uint16_t The word value read from the port.
+ */
+uint16_t inportw(uint16_t port) 
+{
+    uint16_t result;
+
+    asm volatile("inw %%dx, %%ax"
+                 : "=a"(result)
+                 : "d"(port));
+
+    return result;
+}
+
+
 
 /**
  * @brief Enable Interrupts 

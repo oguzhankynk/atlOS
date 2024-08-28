@@ -17,6 +17,7 @@
     ],
     "git.ignoreMissingGitWarning": true,
     "editor.wordWrap": "off",
-    "doxdocgen.generic.commandSuggestionAddPrefix": true
+    "doxdocgen.generic.commandSuggestionAddPrefix": true,
+    "format": "hex"
     
 }

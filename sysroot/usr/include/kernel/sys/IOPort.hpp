@@ -41,6 +41,23 @@ void outportb(uint16_t port, uint8_t value);
 uint8_t inportb(uint16_t port);
 
 /**
+ * @brief Writes a word to the specified I/O port.
+ * 
+ * @param port The I/O port to write to.
+ * @param data The word value to write to the port.
+ */
+void outportw(uint16_t port, uint16_t data);
+
+/**
+ * @brief Reads a word from the specified I/O port.
+ * 
+ * @param port The I/O port to read from.
+ * @return uint16_t The word value read from the port.
+ */
+uint16_t inportw(uint16_t port);
+
+
+/**
  * @brief Enable Interrupts 
  * 
  */
