@@ -2,7 +2,7 @@
 
 # File name and size of the image
 IMAGE_FILE="VirtualDisk/disk.img"
-IMAGE_SIZE_MB=100
+IMAGE_SIZE_MB=8
 
 # Loop device
 LOOP_DEVICE="/dev/loop0"
@@ -35,12 +35,12 @@ sudo partprobe $LOOP_DEVICE || sudo partx -u $LOOP_DEVICE
 echo "Verifying partition"
 sudo fdisk -l $LOOP_DEVICE
 
-# Set partition type to unused (0x00)
-echo "Changing partition type to unused (0x00)"
+# Set partition type to FAT12 (0x01)
+echo "Changing partition type to FAT12 (0x01)"
 (
 echo t   # Change a partition's system id
 #echo 1   # Partition number 1
-echo 00  # Unused type code
+echo 01  # FAT12
 echo w   # Write changes
 ) | sudo fdisk $LOOP_DEVICE
 
@@ -48,12 +48,16 @@ echo w   # Write changes
 echo "Updating partition table after type change"
 sudo partprobe $LOOP_DEVICE || sudo partx -u $LOOP_DEVICE
 
-# Format the partition with FAT12 (commented out for now)
-# echo "Formatting: FAT12"
-# sudo mkfs.fat -F 12 ${LOOP_DEVICE}p1
-
 # Detach the loop device
 echo "Detaching: $LOOP_DEVICE"
 sudo losetup -d $LOOP_DEVICE
 
-echo "Process completed: $IMAGE_FILE has been successfully created, partitioned, and remains raw."
+
+echo "Process completed: $IMAGE_FILE has been successfully created, partitioned."
+
+echo "Formatting: FAT12"
+sudo losetup -P $LOOP_DEVICE $IMAGE_FILE
+sudo partx -u $LOOP_DEVICE
+sudo mkfs.fat -F 12 ${LOOP_DEVICE}p1
+sudo fdisk -l $LOOP_DEVICE
+sudo losetup -d $LOOP_DEVICE
