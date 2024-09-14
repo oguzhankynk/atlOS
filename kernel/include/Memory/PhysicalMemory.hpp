@@ -19,14 +19,15 @@
 #ifndef D83E69E7_DE4E_42CB_A05E_FA455D9BAF9F
 #define D83E69E7_DE4E_42CB_A05E_FA455D9BAF9F
 
-#include "stdint.h"
+#include <stdint.h>
+
 
 namespace Memory
 {
     namespace PhysicalMemory
     {
 
-        void Init(const void *start_address, uint32_t physical_memory_size, uint32_t block_size);
+        void Init();
         void AddMemoryRegion(const void *base_address, uint32_t size);
         void RemoveMemoryRegion(const void *base_address, uint32_t size);
         void *AllocateBlock(uint32_t num_blocks);

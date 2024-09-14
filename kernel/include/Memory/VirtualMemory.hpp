@@ -54,6 +54,7 @@ namespace Memory
 
             PageTableEntry() = default;
             PageTableEntry(uint32_t value);
+            void* getFrameAddress() const;
         };
 
         using PageDirectory = PageDirectoryEntry[PAGE_DIR_SIZE];

@@ -20,12 +20,6 @@ namespace Memory
     extern "C" VirtualMemory::PageDirectoryEntry page_directory[PAGE_DIR_SIZE];
 
     /**
-     * @brief Bitmap for manege physical memory
-     *
-     */
-    static uint8_t bitmap[4 * 128 * 1024 * 1024UL / PAGE_SIZE];
-
-    /**
      * @brief
      *
      * @param memHigh
@@ -36,12 +30,12 @@ namespace Memory
         printf("Kernel virt: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&_kernel_start, (uint32_t)&_kernel_end);
         printf("Kernel  phy: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&kernel_physical_start, (uint32_t)&kernel_physical_end);
 
+        PhysicalMemory::Init();
         VirtualMemory::Init();
 
         auto totalMemorySizeKB = bootInfo->mem_lower + bootInfo->mem_upper;
         printf("Total memory size: 0x%x KB\n", totalMemorySizeKB);
 
-        PhysicalMemory::Init(bitmap, totalMemorySizeKB * 1024, PAGE_SIZE);
 
         for (int i = 0; i < bootInfo->mmap_length; i += sizeof(multiboot_mmap_entry))
         {
@@ -69,14 +63,14 @@ namespace Memory
                 }
             };
 
-            printf("Addr: 0x%x | Length: 0x%x | size: 0x%x | Type: %s \n",
-                   base_addr,
-                   length,
-                   mmmt->size,
-                   getType(mmmt->type));
 
             if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE)
             {
+                printf("Addr: 0x%x | Length: 0x%x | size: 0x%x | Type: %s \n",
+                    base_addr,
+                    length,
+                    mmmt->size,
+                    getType(mmmt->type));
                 PhysicalMemory::AddMemoryRegion((void *)base_addr, length);
             }
         }
