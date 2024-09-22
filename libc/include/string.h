@@ -27,41 +27,80 @@
 extern "C" {
 #endif
 
-/// @brief Compares two memory blocks.
-/// @param ptr1 Pointer to the first memory block.
-/// @param ptr2 Pointer to the second memory block.
-/// @param size Number of bytes to compare.
-/// @return Returns an integer less than, equal to, or greater than zero if the first block is found, respectively, to be less than, to match, or be greater than the second block.
+/**
+ * @brief Compares two memory blocks.
+ * 
+ * @param ptr1 Pointer to the first memory bl
+ * @param ptr2 Pointer to the second memory b
+ * @param size Number of bytes to compare.
+ * @return int Returns an integer less than, equal to, or greater than zero if the first block is found, respectively, to be less than, to match, or be greater than the second block.
+ */
 int memcmp(const void* ptr1, const void* ptr2, size_t size);
 
-/// @brief Copies bytes from one memory area to another.
-/// @param dest Pointer to the destination memory area.
-/// @param src Pointer to the source memory area.
-/// @param size Number of bytes to copy.
-/// @return Returns a pointer to the destination memory area.
+/**
+ * @brief Copies bytes from one memory area to another.
+ * 
+ * @param dest Pointer to the destination memor
+ * @param src Pointer to the source memory area
+ * @param size Number of bytes to copy.
+ * @return void* Returns a pointer to the destination memory area.
+ */
 void* memcpy(void* dest, const void* src, size_t size);
 
-/// @brief Copies bytes from one memory area to another, handling overlapping memory blocks.
-/// @param dest Pointer to the destination memory area.
-/// @param src Pointer to the source memory area.
-/// @param size Number of bytes to copy.
-/// @return Returns a pointer to the destination memory area.
+/**
+ * @brief Copies bytes from one memory area to another, handling overlapping memory blocks.
+ * 
+ * @param dest Pointer to the destination memory area.
+ * @param src Pointer to the source memory area.
+ * @param size Number of bytes to copy.
+ * @return void* Returns a pointer to the destination memory area.
+ */
 void* memmove(void* dest, const void* src, size_t size);
 
-/// @brief Fills a block of memory with a specified value.
-/// @param ptr Pointer to the memory block.
-/// @param value Value to be set.
-/// @param size Number of bytes to be set to the value.
-/// @return Returns a pointer to the memory block.
+/**
+ * @brief Fills a block of memory with a specified value.
+ * 
+ * @param ptr Pointer to the memory block.
+ * @param value Value to be set.
+ * @param size Number of bytes to be set to the value.
+ * @return void* Returns a pointer to the memory block.
+ */
 void* memset(void* ptr, int value, size_t size);
 
-/// @brief Calculates the length of a null-terminated string.
-/// @param str Pointer to the null-terminated string.
-/// @return Returns the number of characters in the string, excluding the terminating null character.
+/**
+ * @brief Calculates the length of a null-terminated string.
+ * 
+ * @param str Pointer to the null-terminated string.
+ * @return size_t Returns the number of characters in the string, excluding the terminating null character. 
+ */
 size_t strlen(const char* str);
 
-int strcmp(const char *s1, const char *s2);
-char * strcpy( char *des, const char *src );
+/**
+ * @brief Compares the C string str1 to the C string str2.
+ * 
+ * @param str1 C string to be compared.
+ * @param str2 C string to be compared.
+ * @return int Returns an integral value indicating the relationship between the strings:
+ * <0 : the first character that does not match has a lower value in ptr1 than in ptr2
+ *  0 : the contents of both strings are equal
+ * >0 : the first character that does not match has a greater value in ptr1 than in ptr2
+ */
+int strcmp(const char *str1, const char *str2);
+
+/**
+ * @brief Compares up to num characters of the C string str1 to those of the C string str2.
+ * 
+ * @param str1 C string to be compared.
+ * @param str2 C string to be compared.
+ * @param num Maximum number of characters to compare.
+ * @return int Returns an integral value indicating the relationship between the strings:
+ * <0 : the first character that does not match has a lower value in str1 than in str2
+ *  0 : the contents of both strings are equal
+ * >0 : the first character that does not match has a greater value in str1 than in str2
+ */
+int strncmp(const char * str1, const char * str2, size_t num );
+
+char * strcpy(char *des, const char *src );
 
 #ifdef __cplusplus
 }
