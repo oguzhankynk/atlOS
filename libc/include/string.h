@@ -100,7 +100,17 @@ int strcmp(const char *str1, const char *str2);
  */
 int strncmp(const char * str1, const char * str2, size_t num );
 
-char * strcpy(char *des, const char *src );
+/**
+ * @brief Returns a pointer to the first occurrence of character in the C string str.
+ * 
+ * @param str C string.
+ * @param character Character to be located. It is passed as its int promotion, but it is internally converted back to char for the comparison.
+ * @return char* A pointer to the first occurrence of character in str.
+        If the character is not found, the function returns a null pointer.
+*/
+char* strchr (const char * str, int character);
+
+char* strcpy(char *des, const char *src );
 
 #ifdef __cplusplus
 }

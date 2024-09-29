@@ -20,7 +20,7 @@
 #define _STDDEF_H
 
 typedef long int ptrdiff_t;
-typedef unsigned int size_t;
+typedef long unsigned int size_t;
 
 #ifdef __cplusplus
 #define NULL 0

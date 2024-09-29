@@ -22,6 +22,7 @@ file(GLOB_RECURSE SOURCES
     stdio/*.cpp
     stdlib/*.cpp
     string/*.cpp
+    ctype/*.cpp
 )
 
 # Print the list of found sources
