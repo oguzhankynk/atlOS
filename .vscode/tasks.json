@@ -34,7 +34,7 @@
         {
             "label": "Run",
             "type": "shell",
-            "command": "./run.sh run",
+            "command": "./run.sh iso run",
             "group": {
                 "kind": "test",
                 "isDefault": true
@@ -48,7 +48,7 @@
             "command": "./run.sh clean build-all iso run",
             "group": {
                 "kind": "test",
-                "isDefault": true
+                "isDefault": false
             },
             "problemMatcher": []
         },

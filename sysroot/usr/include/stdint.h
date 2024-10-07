@@ -63,7 +63,13 @@ typedef unsigned long long int uint64_t;
  * @brief size_t
  *
  */
-typedef uint32_t size_t;
+typedef long unsigned int size_t;
+
+/**
+ * @brief ssize_t
+ *
+ */
+typedef long int ssize_t;
 
 /**
  * @brief Minimum value of int8_t.

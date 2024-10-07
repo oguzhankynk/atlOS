@@ -100,7 +100,39 @@ int strcmp(const char *str1, const char *str2);
  */
 int strncmp(const char * str1, const char * str2, size_t num );
 
-char * strcpy(char *des, const char *src );
+/**
+ * @brief Returns a pointer to the first occurrence of character in the C string str.
+ * 
+ * @param str C string.
+ * @param character Character to be located. It is passed as its int promotion, but it is internally converted back to char for the comparison.
+ * @return char* A pointer to the first occurrence of character in str.
+        If the character is not found, the function returns a null pointer.
+*/
+char* strchr (const char * str, int character);
+
+/**
+ * @brief Copies the C string pointed by source into the array pointed by destination, 
+ * including the terminating null character (and stopping at that point).
+ * 
+ * @param des Pointer to the destination array where the content is to be copied.
+ * @param src C string to be copied.
+ * @return char* des is returned.
+ */
+char* strcpy(char *des, const char *src );
+
+/**
+ * @brief Copies the first num characters of source to destination. 
+ * If the end of the source C string (which is signaled by a null-character) is found before num characters have been copied, 
+ * destination is padded with zeros until a total of num characters have been written to it. No null-character is implicitly
+ * appended at the end of destination if source is longer than num. Thus, in this case, 
+ * destination shall not be considered a null terminated C string (reading it as such would overflow).
+ * 
+ * @param des Pointer to the destination array where the content is to be copied.
+ * @param src C string to be copied.
+ * @param num Maximum number of characters to copy.
+ * @return char* des is returned.
+ */
+char* strncpy(char *des, const char *src, size_t num );
 
 #ifdef __cplusplus
 }

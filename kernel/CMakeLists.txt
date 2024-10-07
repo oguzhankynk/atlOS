@@ -36,6 +36,7 @@ message(STATUS "Found kernel objects: ${KERNEL_FILES} ")
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${SYSROOT}/usr/include
+    ${SYSROOT}/usr/include/cpp
 )
 
 set( CRTS_FILES crts )

@@ -1,14 +1,4 @@
 {
     "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Run Custom Command",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/run.sh",
-            "args": ["clean", "build-all", "iso", "run"], // Burada args kısmını istediğiniz komutlarla değiştirebilirsiniz.
-            "preLaunchTask": "Build & Run", // Burada tasks.json'daki görev etiketini kullanabilirsiniz.
-            "cwd": "${workspaceFolder}"
-        }
-    ]
+    "configurations": []
 }

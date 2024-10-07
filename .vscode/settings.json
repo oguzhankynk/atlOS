@@ -6,7 +6,8 @@
         "systemenclosurechassis.hpp": "c",
         "bios.h": "c",
         "liballoc_1_1.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "new": "c"
     },
     "doxygen_runner.configuration_file_override": "${workspaceFolder}/Doxyfile",
     "doxdocgen.generic.authorEmail": "",

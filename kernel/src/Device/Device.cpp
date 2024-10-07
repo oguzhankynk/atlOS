@@ -1,6 +1,6 @@
 /**
- * @file ATA.hpp
- * @author Oguzhan KAYNAK 
+ * @file Device.cpp
+ * @author Oguzhan KAYNAK ()
  * @brief 
  * 
  * Copyright © 2024 Oguzhan KAYNAK
@@ -16,17 +16,16 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef D2A30C7E_444F_4393_BCBF_81177EB71649
-#define D2A30C7E_444F_4393_BCBF_81177EB71649
+#include <Device/Device.hpp>
 
-#include <stdint.h>
+#include <string.h>
 
-namespace ATA
+Device::Device(const char* name)
 {
-    void ata_read_sector(uint32_t lba, uint8_t *buffer);
+    strncpy(m_name, name, sizeof(m_name));
+}
 
-    void ata_write_sector(uint32_t lba, const uint8_t *buffer);
-    void ata_write_sectors(uint32_t lba_start, const uint8_t* buffer, size_t size);
-    
-};//namespace ATA
-#endif /* D2A30C7E_444F_4393_BCBF_81177EB71649 */
+const char* Device::getName() const
+{
+    return m_name;
+}
