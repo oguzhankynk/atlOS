@@ -115,7 +115,7 @@ _start:
 	call _init
 
 	# Enter the high-level kernel.
-	call kernel_main
+	call kernelMain
 
 	# Infinite loop if the system has nothing more to do.
 	cli

@@ -39,12 +39,13 @@
 #include <Memory/PhysicalMemory.hpp>
 #include <Memory/KHeap.h>
 
+#include <Schduler/schduler.hpp>
 
 /**
  * @brief entry point of atlOS
  *
  */
-extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multiboot_info_addr)
+extern "C" void kernelMain(uint32_t multiboot_bootloader_magic, uint32_t multiboot_info_addr)
 {
 
     terminal_initialize();
@@ -63,6 +64,8 @@ extern "C" void kernel_main(uint32_t multiboot_bootloader_magic, uint32_t multib
     Memory::Init((multiboot_info_t*)multiboot_info_addr);
 
     DeviceManager::Init();
+
+    Schedular::Init();
 
     printf("end of kernel \n");
 

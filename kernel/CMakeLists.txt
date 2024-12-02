@@ -25,6 +25,7 @@ file(GLOB_RECURSE KERNEL_FILES
     ${ARCHDIR}/**/*.c 
     ${ARCHDIR}/**/*.cpp
     ${ARCHDIR}/IDT/ISR.S
+    ${ARCHDIR}/cpu/context.S
     src/**/*.c 
     src/**/*.cpp
 )
