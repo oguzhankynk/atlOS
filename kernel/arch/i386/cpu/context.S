@@ -1,38 +1,83 @@
-.set TCB_esp,   0
-.set TCB_ebp,   4
-.set TCB_ebx,   8
-.set TCB_esi,   12
-.set TCB_edi,   16
-.set TCB_eip,   20
-.set TCB_cr3,   24
-.set TCB_eflag, 28
-
-
-# Call in C with switchCPUContext(TCB* currentThread, TCB nextThread);
+.equ Registers.eax, 0
+.equ Registers.ebx, 4
+.equ Registers.ecx, 8
+.equ Registers.edx, 12
+.equ Registers.esi, 16
+.equ Registers.edi, 20
+.equ Registers.esp, 24
+.equ Registers.ebp, 28
+.equ Registers.eip, 32
+.equ Registers.eflags, 36
+.equ Registers.cr3, 40
 
 .section .text
-.global switchCPUContext
-switchCPUContext:
-  # save currentThread registers
+.global switchTask
+switchTask:
+    #void switchTask(Registers *from, Registers *to);
 
-    movl 4(%esp), %edi        # currentThread = %edi
-    movl %esp, TCB_esp(%edi)  # currentThread->esp = esp
-    movl %ebx, TCB_ebx(%edi)  # currentThread->ebx = ebx
-    movl %esi, TCB_esi(%edi)  # currentThread->esi = esi
-    movl %edi, TCB_edi(%edi)  # currentThread->edi = edi
-    movl %ebp, TCB_ebp(%edi)  # currentThread->ebp = ebp
+    pusha #push EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI :  8 reg = 8×4 = +32 byte
+    pushf #push EFLAGS #: +4 byte
+    mov %cr3, %eax #Push CR3
+    push %eax #:  +4 byte
 
-    lea 1f, %eax          
-    movl %eax, TCB_eip(%edi)  # currentThread->eip = eip
-   
-    movl 8(%esp), %esi         # nextThread
-    movl TCB_esp(%esi), %esp   # esp = nextThread->esp
-    movl TCB_ebx(%esi), %ebx   # ebx = nextThread->ebx
-    movl TCB_esi(%esi), %esi   # esi = nextThread->esi
-    movl TCB_edi(%esi), %edi   # edi = nextThread->edi
-    movl TCB_ebp(%esi), %ebp   # ebp = nextThread->ebp
-    movl TCB_eip(%esi), %eax   # eax = nextThread->eip
-    jmp *%eax  # Yeni iş parçacığını başlat
+    #   stack view:
+    #   ESP →             [ CR3 value ]                 ← push %eax
+    #   ESP+4 →           [ EFLAGS ]                    ← pushf
+    #   ESP+8 →           [ EDI ]
+    #   ESP+12 →          [ ESI ]
+    #   ESP+16 →          [ EBP ]
+    #   ESP+20 →          [ ESP (prev value) ]
+    #   ESP+24 →          [ EBX ]
+    #   ESP+28 →          [ EDX ]
+    #   ESP+32 →          [ ECX ]
+    #   ESP+36 →          [ EAX ]
+    #   ESP+40 →          [ return address ]            ← call switchTask
+    #   ESP+44 →          [ froRegisters *from ]                
+    #   ESP+48 →          [ Registers *to ]              
 
-    #ret    
-1:                  
+    mov 44(%esp), %eax #The first argument, where to save
+    mov %ebx, 4(%eax)
+    mov %ecx, 8(%eax)
+    mov %edx, 12(%eax)
+    mov %esi, 16(%eax)
+    mov %edi, 20(%eax)
+    mov 36(%esp), %ebx #EAX
+    mov 40(%esp), %ecx #IP
+    mov 20(%esp), %edx #ESP
+    add $4, %edx #Remove the return value ;)
+    mov 16(%esp), %esi #EBP
+    mov 4(%esp), %edi #EFLAGS
+    mov %ebx, (%eax)
+    mov %edx, 24(%eax)
+    mov %esi, 28(%eax)
+    mov %ecx, 32(%eax)
+    mov %edi, 36(%eax)
+    pop %ebx #CR3
+    mov %ebx, 40(%eax)
+    push %ebx #Goodbye again ;)
+
+    mov 48(%esp), %eax #Now it is the new object
+    mov 4(%eax), %ebx #EBX
+    mov 8(%eax), %ecx #ECX
+    mov 12(%eax), %edx #EDX
+    mov 16(%eax), %esi #ESI
+    mov 20(%eax), %edi #EDI
+    mov 28(%eax), %ebp #EBP
+
+    push %eax
+    mov 36(%eax), %eax #EFLAGS
+    push %eax
+    popf
+    pop %eax
+    mov 24(%eax), %esp #ESP
+    push %eax
+
+    mov 40(%eax), %eax #CR3
+    mov %eax, %cr3
+    pop %eax
+    
+    push %eax
+    mov 32(%eax), %eax #EIP
+    xchg (%esp), %eax #We do not have any more registers to use as tmp storage
+    mov (%eax), %eax #EAX
+    ret #This ends all!

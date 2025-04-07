@@ -24,129 +24,187 @@
 #include "kernel/sys/IOPort.hpp"
 #include "kernel/assert.h"
 #include <kernel/Logger.hpp>
+#include <Memory/KHeap.h>
 
- /**
-  * @brief Architecture spesific context switch. Defined at arch/x/context.S
-  *
-  * @param currentThread
-  * @param nextThread
-  */
-extern "C" void switchCPUContext(Threading::TCB* currentThread, Threading::TCB* nextThread);
+extern "C" void switchTask(Threading::Registers* old_regs, Threading::Registers* new_regs); // The function which actually switches
+
+//extern "C" void switchTask(void* old_regs, void* new_regs); // The function which actually switches
 
 namespace Schedular
 {
-    static constexpr LogFlag DBG_LOG = LogFlag::Log;
-    static constexpr LogFlag INF_LOG = LogFlag::Log;
-    static constexpr LogFlag ERR_LOG = LogFlag::Log;
+    static void idleThreadFunction();
 
-    static uint16_t currThreadIndex{};
-    static uint16_t threadCount{};
-
-    static constexpr size_t MAX_THREAD = 255;
-
-    static Threading::Thread* ThreadList[MAX_THREAD]{};
-
-    static void busyWait() {
-        for (volatile int i = 0; i < 1000000; i++) {
-            // Zaman harcamak için bekleme (Busy wait)
-        }
-    }
-
-    static void IdleThread()
+    class ThreadList
     {
-          while (true) {
-            busyWait();    // Zamanı doldurmak için bekleme
-            printf( "IdleThread calisiyor\n");
-            yield();    // Diğer task'lere geçiş yap
+    public:
+
+        struct Node
+        {
+            Threading::Thread* thread{};
+            Node* next{};
+        };
+
+    private:
+
+        Node* m_head{};
+        Node* m_tail{};
+        Node* m_current{};
+        uint32_t m_threadCount{};
+
+    public:
+
+        ThreadList()
+        {
+            auto mainThread = new Node();
+            mainThread->thread = new Threading::Thread(nullptr, false);
+
+            m_head = mainThread;
+            m_tail = mainThread;
+            m_current = mainThread;
+            m_tail->next = m_head;
+
+            auto idleThread = new Threading::Thread(idleThreadFunction, false);
+
+            m_threadCount = 1;
+
+            addThread(*idleThread);
+
         }
 
-    }
-    static void exampleTask1() {
-        while (true) {
-            busyWait();
-            printf( "Task 1 calisiyor\n");
-            yield(); 
+        void addThread(Threading::Thread& thread)
+        {
+            auto newNode = new Node();
+            newNode->thread = &thread;
+            m_tail->next = newNode;
+            m_tail = newNode;
+            m_tail->next = m_head;
+            m_threadCount++;
         }
-    }
-    
-    static void exampleTask2() {
-        while (true) {
-            busyWait();
-            printf( "Task 2 calisiyor\n");
+
+        void removeThread(Threading::Thread& thread)
+        {
+            Node* current = m_head;
+            Node* prev = m_tail;
+            m_threadCount--;
+            while (current != m_tail)
+            {
+                if (current->thread == &thread)
+                {
+                    prev->next = current->next;
+                    
+                    return;
+                }
+                prev = current;
+                current = current->next;
+            }
+        }
+
+        Node* switchToNextThread(Node*& current)
+        {
+            current = m_current;
+            while (true)
+            {
+                m_current = m_current->next;
+                if (m_current->thread->getTCB().state == Threading::ThreadState::TERMINATED)
+                {
+                    continue; // Skip terminated threads
+                }
+                else
+                {
+                    break; // Found a thread that is not terminated
+                }
+            }
+            return m_current;
+        }
+
+        uint32_t getThreadCount() const
+        {
+            return m_threadCount;
+        }
+
+        void controlThreads()
+        {
+            Node* current = m_head;
+            for(uint32_t i = 0; i < m_threadCount; ++i)
+            {
+                if (current->thread->getTCB().state == Threading::ThreadState::TERMINATED)
+                {
+                    printf("Thread %s will be terminated.\n", current->thread->getName());
+                    removeThread(*current->thread);
+                    delete current->thread; // Free the thread object
+                }
+                current = current->next;
+            }
+            printf("Thread count: %d\n", m_threadCount);
+        }
+
+
+    };
+
+    static ThreadList* threadList = nullptr;
+
+    static void idleThreadFunction()
+    {
+        while(1)
+        {
+            printf("idleThreadFunction!"); // Not implemented here...
+            threadList->controlThreads();
             yield();
         }
     }
 
+    
+
+    void initTasking() {
+        threadList = new ThreadList();
+
+    }
+
+    void yield() {
+        ThreadList::Node* last = nullptr;
+        auto nextThread = threadList->switchToNextThread(last);
+
+        switchTask(&last->thread->getTCB().regs, &nextThread->thread->getTCB().regs);
+    }
+
+
+    void helloWorldThreadFunction()
+    {
+        printf("Hello from helloWorldThreadFunction!\n");
+        yield();
+        printf("Hello again from helloWorldThreadFunction!\n");
+    }
+
     void Init()
     {
-        ThreadList[0] = new Threading::Thread(IdleThread);
-        ThreadList[1] = new Threading::Thread(exampleTask1);
-        ThreadList[2] = new Threading::Thread(exampleTask2);
+        initTasking();
 
+        printf(" mainTask0!\n");
+        yield();
 
-        currThreadIndex = 0;
-        threadCount = 3;
+        printf("Returned to mainTask1!\n");
 
-        Threading::TCB tempTCB{};
+        auto newThread = new Threading::Thread(helloWorldThreadFunction, false);
+        addTask(*newThread);
 
-        switchCPUContext(&tempTCB, &(ThreadList[0]->getTCB()));
+        yield();
+        printf("Returned to mainTask2!\n");
+
+        
+        yield();
+
+        printf("Returned to mainTask3!\n");
+
+        yield();
+
+        printf("Returned to mainTask4!\n");
+
 
     }
 
     void addTask(Threading::Thread& thread)
     {
-        for (auto& threadSlot : ThreadList)
-        {
-            if (threadSlot == nullptr)
-            {
-                threadSlot = &thread;
-                threadCount++;
-                return;
-            }
-        }
-        kernel_panic("Maximum thread number is reached \n");
-    }
-
-    void switchToThread(Threading::Thread& nextThread,  uint32_t indx)
-    {
-        auto currThread = ThreadList[currThreadIndex];
-        currThreadIndex = indx;
-        switchCPUContext(&currThread->getTCB(), &nextThread.getTCB());
-
-        printf("geri geldim. currThreadIndex:%d name:%s \n", currThreadIndex, ThreadList[currThreadIndex]->getName());
-        printf("esp:%x eip:%x \n", ThreadList[currThreadIndex]->getTCB().esp, ThreadList[currThreadIndex]->getTCB().eip);
-    }
-
-    void yield()
-    {
-
-        const auto currThread = ThreadList[currThreadIndex];
-
-        auto indx = (currThreadIndex + 1) % MAX_THREAD;
-
-        LOG_MSG(DBG_LOG, "curr task-> name:%s indx: %u \n", currThread->getName(), currThreadIndex);
-
-        for (;;)
-        {
-            auto& thread = ThreadList[indx];
-
-            if (thread != nullptr)
-            {
-                if (thread != currThread)
-                {
-                    LOG_MSG(DBG_LOG, "switch to task-> name:%s indx: %u \n", thread->getName(), indx);
-                    
-                    switchToThread(*thread, indx);
-
-                    
-                }
-                break;
-            }
-            else
-            {
-                indx = (indx + 1) % MAX_THREAD;
-            }
-        }
+        threadList->addThread(thread);
 
     }
 

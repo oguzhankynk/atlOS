@@ -31,17 +31,14 @@ namespace Threading
         TERMINATED
     };
 
-    struct TCB
-    {
-        uint32_t esp{};    /// kernel stack pointer (ESP)
-        uint32_t ebp{};    /// Stack frame pointer (EBP)
-        uint32_t ebx{};    /// General purpose register (EBX)
-        uint32_t esi{};    /// Source index register (ESI)
-        uint32_t edi{};    /// Destination index register (EDI)
-        uint32_t eip{};    /// Instruction pointer (EIP)
-        uint32_t cr3{};    /// Page directory base address (CR3)
-        uint32_t eflags{}; /// CPU flags (EFLAGS)
-    } __attribute__((packed));;
+    struct Registers {
+        uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp, eip, eflags, cr3;
+    } __attribute__((packed));
+
+    struct TCB {
+        Registers regs;
+        ThreadState state;
+    };
 
     class ThreadImpl;
 
@@ -50,19 +47,24 @@ namespace Threading
     class Thread
     {
     public:
-        
-        Thread(EntryPoint entry);
+
+        Thread(EntryPoint entry, bool addToScheduler = true);
 
         Thread(const Thread&) = delete;
+
+        ~Thread();
 
         Thread& operator=(const Thread&) = delete;
 
         TCB& getTCB();
 
         const char* getName() const;
+
     private:
-        ThreadImpl *m_impl{};
+        ThreadImpl* m_impl{};
     };
+
+   
 
 } // namespace Thread
 #endif /* BE0C6057_D75F_4A2E_807F_8CFDF75C8093 */
