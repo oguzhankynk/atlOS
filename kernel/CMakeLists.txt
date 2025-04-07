@@ -14,9 +14,9 @@ endif()
 project(atlOS_kernel C CXX ASM)
 
 # Specify compiler flags for C and C++ sources
-SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function -std=c++11 -fno-exceptions -fno-rtti -D__is_kernel")
-SET (CMAKE_C_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function  -fno-exceptions -fno-rtti -D__is_kernel")
-SET (CMAKE_ASM_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function  -fno-exceptions -fno-rtti -D__is_kernel")
+SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -g -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function -std=c++11 -fno-exceptions -fno-rtti -D__is_kernel")
+SET (CMAKE_C_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -g -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function  -fno-exceptions -fno-rtti -D__is_kernel")
+SET (CMAKE_ASM_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include  -g -ffreestanding -Wall -Wno-unused-variable -Wno-unused-function  -fno-exceptions -fno-rtti -D__is_kernel")
 
 # Define the ARCHDIR as kernel/arch/i386
 set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/i386)
