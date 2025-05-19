@@ -36,7 +36,6 @@ namespace Memory
         auto totalMemorySizeKB = bootInfo->mem_lower + bootInfo->mem_upper;
         printf("Total memory size: 0x%x KB\n", totalMemorySizeKB);
 
-
         for (int i = 0; i < bootInfo->mmap_length; i += sizeof(multiboot_mmap_entry))
         {
             auto *mmmt = (multiboot_mmap_entry *)(bootInfo->mmap_addr + i);
@@ -63,21 +62,19 @@ namespace Memory
                 }
             };
 
-
             if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE)
             {
                 printf("Addr: 0x%x | Length: 0x%x | size: 0x%x | Type: %s \n",
-                    base_addr,
-                    length,
-                    mmmt->size,
-                    getType(mmmt->type));
+                       base_addr,
+                       length,
+                       mmmt->size,
+                       getType(mmmt->type));
                 PhysicalMemory::AddMemoryRegion((void *)base_addr, length);
             }
         }
 
         PhysicalMemory::RemoveMemoryRegion(0, 1024 * 1024);
         PhysicalMemory::RemoveMemoryRegion(&kernel_physical_start, (uint32_t)&kernel_physical_end - (uint32_t)&kernel_physical_start);
-
     }
 
     /**
@@ -114,7 +111,7 @@ namespace Memory
         if ((uint32_t)virtualaddr % PAGE_SIZE != 0)
             return;
 
-        uint32_t pdindex = (unsigned long)virtualaddr >> 22 ;
+        uint32_t pdindex = (unsigned long)virtualaddr >> 22;
         uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
 
         VirtualMemory::PageDirectoryEntry &pd_entry = page_directory[pdindex];
@@ -131,7 +128,6 @@ namespace Memory
             pd_entry = (uint32_t)new_pt | 3; // present , rw
         }
 
-        
         VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
 
         if (!page_table[ptindex].present)

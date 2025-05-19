@@ -36,25 +36,25 @@ namespace Memory
 
         /**
          * @brief Maximum physical memoryy size (byte)
-         * 
+         *
          */
         static constexpr auto MAX_MEMORY_SIZE = 4ULL * 1024ULL * 1024ULL * 1024ULL; /// Max memory = 4GB
 
         /**
          * @brief Maximum count of physical pages
-         * 
+         *
          */
         static constexpr auto MAX_PAGE_COUNT = MAX_MEMORY_SIZE / PAGE_SIZE;
 
         /**
          * @brief Physical memory bitmap size (byte)
-         * 
+         *
          */
         static constexpr auto BITMAP_SIZE = MAX_PAGE_COUNT / 8;
 
         /**
          * @brief Bitmap for manege physical memory
-         * 
+         *
          */
         static uint8_t bitmap[BITMAP_SIZE];
 
@@ -72,16 +72,15 @@ namespace Memory
             bitmap[bit / 8] &= ~(1 << (bit % 8));
         }
 
-
         static int32_t FirstFreeBlock(uint32_t num_blocks)
         {
-            LOG_MSG(INF_LOG, "PMM: FirstFreeBlock: number of requested blocks:%u free block:%u \n", num_blocks, maxBlocks-usedBlocks);
+            LOG_MSG(INF_LOG, "PMM: FirstFreeBlock: number of requested blocks:%u free block:%u \n", num_blocks, maxBlocks - usedBlocks);
 
             if (num_blocks == 0)
                 return -1; // Can't return no memory, error
 
-            uint32_t consecutive_free = 0;  // Counter for consecutive 0 bits
-            uint32_t start_index = 0;  // Index of the start of the free block series
+            uint32_t consecutive_free = 0; // Counter for consecutive 0 bits
+            uint32_t start_index = 0;      // Index of the start of the free block series
 
             for (uint32_t bit_index = 0; bit_index < maxBlocks; bit_index++)
             {
@@ -94,7 +93,7 @@ namespace Memory
                     if (consecutive_free == 0)
                     {
                         LOG_MSG(DBG_LOG, "PMM: FirstFreeBlock: the current bit is 0 : %u \n", bit_index);
-                        start_index = bit_index;  // Save the start index of the series
+                        start_index = bit_index; // Save the start index of the series
                     }
                     consecutive_free++;
 
@@ -107,9 +106,9 @@ namespace Memory
                 else
                 {
                     if (consecutive_free != 0)
-                        LOG_MSG(DBG_LOG, "PMM: FirstFreeBlock: the current bit is 1 : %u \n", consecutive_free); 
+                        LOG_MSG(DBG_LOG, "PMM: FirstFreeBlock: the current bit is 1 : %u \n", consecutive_free);
 
-                    consecutive_free = 0;  // Reset if a 1 bit is encountered
+                    consecutive_free = 0; // Reset if a 1 bit is encountered
                 }
             }
 
@@ -118,21 +117,20 @@ namespace Memory
 
         void Init()
         {
-            // set all memory in use 
+            // set all memory in use
             memset(bitmap, 0xFF, sizeof(bitmap));
 
             blockSize = PAGE_SIZE;
             maxBlocks = MAX_MEMORY_SIZE / blockSize;
             usedBlocks = maxBlocks;
 
-
-            LOG_MSG(INF_LOG, "PMM: Init: blockSize:%u maxBlocks:%u usedBlocks:%u \n", blockSize,  maxBlocks, usedBlocks);
+            LOG_MSG(INF_LOG, "PMM: Init: blockSize:%u maxBlocks:%u usedBlocks:%u \n", blockSize, maxBlocks, usedBlocks);
         }
 
-        void AddMemoryRegion(const void* base_address, uint32_t size)
+        void AddMemoryRegion(const void *base_address, uint32_t size)
         {
             uint32_t block_indx = (uint32_t)base_address / blockSize; // Convert memory address to blocks
-            uint32_t num_blocks = size / blockSize;              // Convert size to blocks
+            uint32_t num_blocks = size / blockSize;                   // Convert size to blocks
 
             LOG_MSG(INF_LOG, "PMM: MemoryRegion add: start_indx: %u num_blocks:%u ", block_indx, num_blocks);
 
@@ -144,13 +142,12 @@ namespace Memory
             }
 
             LOG_MSG(INF_LOG, " usedBlocks:%u \n", usedBlocks);
-
         }
 
-        void RemoveMemoryRegion(const void* base_address, uint32_t size)
+        void RemoveMemoryRegion(const void *base_address, uint32_t size)
         {
-            int32_t block_indx = (uint32_t)base_address / blockSize; // Convert memory address to blocks
-            int32_t num_blocks = ROUND_UP_TO_PAGE_SIZE(size) / blockSize;              // Convert size to blocks
+            int32_t block_indx = (uint32_t)base_address / blockSize;      // Convert memory address to blocks
+            int32_t num_blocks = ROUND_UP_TO_PAGE_SIZE(size) / blockSize; // Convert size to blocks
 
             LOG_MSG(INF_LOG, "PMM: MemoryRegion remove: start_indx: %u num_blocks:%u ", block_indx, num_blocks);
 
@@ -164,7 +161,7 @@ namespace Memory
             LOG_MSG(INF_LOG, " usedBlocks:%u \n", usedBlocks);
         }
 
-        void* AllocateBlock(uint32_t num_blocks)
+        void *AllocateBlock(uint32_t num_blocks)
         {
             LOG_MSG(INF_LOG, "PMM: AllocateBlock: num_blocks:%u \n", num_blocks);
 
@@ -180,7 +177,6 @@ namespace Memory
                 return 0; // Couldn't find that many blocks in a row to allocate
             }
 
-
             // Found free blocks, set them as used
             for (uint32_t i = 0; i < num_blocks; i++)
                 SetBlock(starting_block + i);
@@ -191,14 +187,14 @@ namespace Memory
             uint32_t address = starting_block * blockSize;
 
             LOG_MSG(DBG_LOG, "PMM: AllocateBlock: usedBlocks: %u  address:%u \n", usedBlocks, address);
-            return (uint32_t*)address; // Physical memory location of allocated blocks
+            return (uint32_t *)address; // Physical memory location of allocated blocks
         }
 
-        void FreeBlocks(const void* addr, uint32_t num_blocks)
+        void FreeBlocks(const void *addr, uint32_t num_blocks)
         {
             int32_t starting_block = (uint32_t)addr / blockSize; // Convert address to blocks
 
-            //printf("PMM: FreeBlocks: starting block indx:%u adr:%u number of blocks:%u \n", starting_block, (uint32_t)addr,  num_blocks);
+            // printf("PMM: FreeBlocks: starting block indx:%u adr:%u number of blocks:%u \n", starting_block, (uint32_t)addr,  num_blocks);
 
             for (uint32_t i = 0; i < num_blocks; i++)
                 UnsetBlock(starting_block + i); // Unset bits/blocks in memory map, to free

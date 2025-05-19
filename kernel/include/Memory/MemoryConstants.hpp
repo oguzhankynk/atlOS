@@ -24,11 +24,11 @@ namespace Memory
     constexpr uint32_t KERNEL_LOAD_ADDR = (uint32_t)0xC0000000;
 
     /**
- * @brief Start address of the kernel.
- *
- * This variable is defined at linker.ld and represents the start address of
- * the kernel in virtual memory.
- */
+     * @brief Start address of the kernel.
+     *
+     * This variable is defined at linker.ld and represents the start address of
+     * the kernel in virtual memory.
+     */
     extern "C" uint32_t _kernel_start;
 
     /**

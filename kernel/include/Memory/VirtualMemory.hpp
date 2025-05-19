@@ -54,7 +54,7 @@ namespace Memory
 
             PageTableEntry() = default;
             PageTableEntry(uint32_t value);
-            void* getFrameAddress() const;
+            void *getFrameAddress() const;
         };
 
         using PageDirectory = PageDirectoryEntry[PAGE_DIR_SIZE];
@@ -65,7 +65,6 @@ namespace Memory
         uint32_t MapPages(uint32_t page_index, uint32_t num_pages);
         void *AllocatePage(uint32_t num_pages);
         int FreePage(const void *addr, uint32_t num_pages);
-       
 
     }; // namespace VirtualMemory
 }; // namespace Memory

@@ -1,8 +1,8 @@
 /**
  * @file new.cpp
  * @author Oguzhan KAYNAK ()
- * @brief 
- * 
+ * @brief
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -20,34 +20,33 @@
 #include <new>
 #include <Memory/KHeap.h>
 
-void* operator new(std::size_t size)
+void *operator new(std::size_t size)
 {
     return kmalloc(size);
 }
 
-void operator delete(void* p)
+void operator delete(void *p)
 {
     kfree(p);
 }
 
-void operator delete(void* p, std::size_t size)
+void operator delete(void *p, std::size_t size)
 {
     (void)size;
     kfree(p);
 }
 
-void* operator new[](std::size_t size)
+void *operator new[](std::size_t size)
 {
     return kmalloc(size);
 }
 
-void operator delete[](void* p)
+void operator delete[](void *p)
 {
     kfree(p);
-    
 }
 
-void operator delete[](void* p, std::size_t size)
+void operator delete[](void *p, std::size_t size)
 {
     (void)size;
     kfree(p);

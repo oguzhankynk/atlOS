@@ -61,11 +61,11 @@ extern "C" void kernelMain(uint32_t multiboot_bootloader_magic, uint32_t multibo
         kernel_panic("magic number is invalid.");
     }
 
-    Memory::Init((multiboot_info_t*)multiboot_info_addr);
+    Memory::Init((multiboot_info_t *)multiboot_info_addr);
 
     DeviceManager::Init();
 
-    //Schedular::Init();
+    // Schedular::Init();
 
     printf("end of kernel \n");
 
@@ -73,5 +73,4 @@ extern "C" void kernelMain(uint32_t multiboot_bootloader_magic, uint32_t multibo
     {
         asm volatile("hlt");
     }
-
 }

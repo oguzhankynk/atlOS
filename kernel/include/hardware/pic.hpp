@@ -21,29 +21,30 @@
 
 #include <stdint.h>
 
- /**
-  * @brief Namespace for interfacing with the 8259 Programmable Interrupt Controller (PIC).
-  */
+/**
+ * @brief Namespace for interfacing with the 8259 Programmable Interrupt Controller (PIC).
+ */
 namespace PIC
 {
     // IRQ  (x86 - 8259 PIC)
-    enum class IRQ : uint8_t {
-        Timer = 0,            // IRQ0 - Sistem Timer (PIT)
-        Keyboard = 1,         // IRQ1 - Klavye
-        Cascade = 2,          // IRQ2 - PIC Cascade (Slave to Master)
-        COM2 = 3,             // IRQ3 - COM2 (Serial Port 2)
-        COM1 = 4,             // IRQ4 - COM1 (Serial Port 1)
-        LPT2 = 5,             // IRQ5 - LPT2 (Parallel Port 2)
-        Floppy = 6,           // IRQ6 - Floppy Disk Controller
-        LPT1 = 7,             // IRQ7 - LPT1 (Parallel Port 1)
-        RTC = 8,              // IRQ8 - CMOS Real-Time Clock (RTC)
-        Redirected = 9,       // IRQ9 - Free (Redirected to IRQ2)
-        Free10 = 10,          // IRQ10 - Free (Genel Kullanım)
-        Free11 = 11,          // IRQ11 - Free (Genel Kullanım)
-        PS2Mouse = 12,        // IRQ12 - PS/2 Mouse
-        FPU = 13,             // IRQ13 - FPU (Floating Point Unit) / Co-Processor
-        PrimaryATA = 14,      // IRQ14 - Primary ATA / IDE Controller
-        SecondaryATA = 15     // IRQ15 - Secondary ATA / IDE Controller
+    enum class IRQ : uint8_t
+    {
+        Timer = 0,        // IRQ0 - Sistem Timer (PIT)
+        Keyboard = 1,     // IRQ1 - Keyboard
+        Cascade = 2,      // IRQ2 - PIC Cascade (Slave to Master)
+        COM2 = 3,         // IRQ3 - COM2 (Serial Port 2)
+        COM1 = 4,         // IRQ4 - COM1 (Serial Port 1)
+        LPT2 = 5,         // IRQ5 - LPT2 (Parallel Port 2)
+        Floppy = 6,       // IRQ6 - Floppy Disk Controller
+        LPT1 = 7,         // IRQ7 - LPT1 (Parallel Port 1)
+        RTC = 8,          // IRQ8 - CMOS Real-Time Clock (RTC)
+        Redirected = 9,   // IRQ9 - Free (Redirected to IRQ2)
+        Free10 = 10,      // IRQ10 - Free
+        Free11 = 11,      // IRQ11 - Free
+        PS2Mouse = 12,    // IRQ12 - PS/2 Mouse
+        FPU = 13,         // IRQ13 - FPU (Floating Point Unit) / Co-Processor
+        PrimaryATA = 14,  // IRQ14 - Primary ATA / IDE Controller
+        SecondaryATA = 15 // IRQ15 - Secondary ATA / IDE Controller
     };
 
     /**
@@ -102,6 +103,17 @@ namespace PIC
      * @param irq Interrupt request number (IRQ) to enable.
      */
     void irq_enable(IRQ irq);
+
+    /**
+     * @brief Adds an interrupt request (IRQ) handler.
+     *
+     * @param irq Interrupt request number (IRQ) to add the handler for.
+     * @param handler Function pointer to the handler function.
+     * @param arg Argument to be passed to the handler function.
+     *
+     * @return true if the handler was successfully added, false otherwise.
+     */
+    bool add_irq_handler(IRQ irq, void (*handler)(void *), void *arg = nullptr);
 
 }; // namespace PIC
 

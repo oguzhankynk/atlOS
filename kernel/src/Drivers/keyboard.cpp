@@ -1,6 +1,5 @@
 #include <Drivers/keyboard.hpp>
 #include <kernel/sys/IOPort.hpp>
-#include <kernel/sys/handlers.hpp>
 #include <hardware/pic.hpp>
 #include <stdio.h>
 #include <string.h>
@@ -175,11 +174,11 @@ namespace Keyboard
 
     void Init()
     {
-        bool irq_register_stat = Handlers::AddInterruptHandler(33, (interrupt_handle_function)keyboard_irq, nullptr);
+        bool irq_register_stat = PIC::add_irq_handler(PIC::IRQ::Keyboard, keyboard_irq, (void *)nullptr);
 
         if (irq_register_stat == false)
         {
-            printf("Keyboard: AddInterruptHandler error \n");
+            printf("Keyboard: add_irq_handler error \n");
             return;
         }
 

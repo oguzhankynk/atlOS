@@ -27,18 +27,17 @@
 
 #include <kernel/sys/IOPort.hpp>
 
-
 namespace SerialPort
 {
 
-    static constexpr uint16_t PORT = 0x3F8;// COM1
-    //static constexpr uint16_t PORT = 0x2F8;// COM2
-    //static constexpr uint16_t PORT = 0x3E8;// COM3
-    //static constexpr uint16_t PORT = 0x2E8;// COM4
-    //static constexpr uint16_t PORT = 0x5F8;// COM5
-    //static constexpr uint16_t PORT = 0x4F8;// COM6
-    //static constexpr uint16_t PORT = 0x5E8;// COM7
-    //static constexpr uint16_t PORT = 0x4E8;// COM8
+    static constexpr uint16_t PORT = 0x3F8; // COM1
+    // static constexpr uint16_t PORT = 0x2F8;// COM2
+    // static constexpr uint16_t PORT = 0x3E8;// COM3
+    // static constexpr uint16_t PORT = 0x2E8;// COM4
+    // static constexpr uint16_t PORT = 0x5F8;// COM5
+    // static constexpr uint16_t PORT = 0x4F8;// COM6
+    // static constexpr uint16_t PORT = 0x5E8;// COM7
+    // static constexpr uint16_t PORT = 0x4E8;// COM8
 
     static int is_transmit_empty();
 
@@ -52,15 +51,15 @@ namespace SerialPort
      */
     int Init()
     {
-        IOPort::outportb(PORT + 1, 0x00);    // Disable all interrupts
-        IOPort::outportb(PORT + 3, 0x80);    // Enable DLAB (set baud rate divisor)
-        IOPort::outportb(PORT + 0, 0x03);    // Set divisor to 3 (lo byte) 38400 baud
-        IOPort::outportb(PORT + 1, 0x00);    //                  (hi byte)
-        IOPort::outportb(PORT + 3, 0x03);    // 8 bits, no parity, one stop bit
-        IOPort::outportb(PORT + 2, 0xC7);    // Enable FIFO, clear them, with 14-byte threshold
-        IOPort::outportb(PORT + 4, 0x0B);    // IRQs enabled, RTS/DSR set
-        IOPort::outportb(PORT + 4, 0x1E);    // Set in loopback mode, test the serial chip
-        IOPort::outportb(PORT + 0, 0xAE);    // Test serial chip (send byte 0xAE and check if serial returns same byte)
+        IOPort::outportb(PORT + 1, 0x00); // Disable all interrupts
+        IOPort::outportb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
+        IOPort::outportb(PORT + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
+        IOPort::outportb(PORT + 1, 0x00); //                  (hi byte)
+        IOPort::outportb(PORT + 3, 0x03); // 8 bits, no parity, one stop bit
+        IOPort::outportb(PORT + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+        IOPort::outportb(PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
+        IOPort::outportb(PORT + 4, 0x1E); // Set in loopback mode, test the serial chip
+        IOPort::outportb(PORT + 0, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
 
         // Check if the serial port is properly initialized
         if (IOPort::inportb(PORT + 0) != 0xAE)
@@ -80,7 +79,8 @@ namespace SerialPort
     char read_serial()
     {
         // Wait until the serial port is ready to read
-        while (!(IOPort::inportb(PORT + 5) & 0x01));
+        while (!(IOPort::inportb(PORT + 5) & 0x01))
+            ;
         return IOPort::inportb(PORT);
     }
 
@@ -92,13 +92,15 @@ namespace SerialPort
     void write_serial(char a)
     {
         // Wait until the serial port is ready to write
-        while (!is_transmit_empty());
+        while (!is_transmit_empty())
+            ;
         IOPort::outportb(PORT, a);
     }
 
-    void write_serial(const char* data, size_t size)
+    void write_serial(const char *data, size_t size)
     {
-        while (!is_transmit_empty());
+        while (!is_transmit_empty())
+            ;
 
         while (size > 0)
         {
@@ -108,7 +110,7 @@ namespace SerialPort
         }
     }
 
-    int is_transmit_empty() 
+    int is_transmit_empty()
     {
         return IOPort::inportb(PORT + 5) & 0x20;
     }

@@ -25,34 +25,36 @@
 
 /**
  * @brief Enum class to control logging behavior.
- * 
+ *
  * This enum defines two states:
  * - LogFlag::Log: Enable logging.
  * - LogFlag::NoLog: Disable logging.
  */
-enum class LogFlag 
+enum class LogFlag
 {
     NoLog, ///< Disables logging.
     Log    ///< Enables logging.
 };
 
 /**
- * @brief Logs a formatted message if the flag is set to LogFlag::Log. 
+ * @brief Logs a formatted message if the flag is set to LogFlag::Log.
  * If the flag is set to LogFlag::NoLog, the function does nothing.
- * 
- * @param flag If LogFlag::NoLog, the function does nothing. If LogFlag::Log, it prints the formatted message. 
+ *
+ * @param flag If LogFlag::NoLog, the function does nothing. If LogFlag::Log, it prints the formatted message.
  * @param format A C-string that contains the format of the message, similar to `printf`.
  * @param ... A variable number of arguments to match the format specifiers in the format string.
- * 
+ *
  * @note This function uses variadic arguments to support formatted messages.
  */
-static inline void LOG_MSG(LogFlag flag, const char* format, ...) 
+static inline void LOG_MSG(LogFlag flag, const char *format, ...)
 {
-    if (flag == LogFlag::NoLog) {
-        return; // Do nothing 
+    if (flag == LogFlag::NoLog)
+    {
+        return; // Do nothing
     }
 
-    if (flag == LogFlag::Log) {
+    if (flag == LogFlag::Log)
+    {
         va_list args;
         va_start(args, format);
         vprintf(format, args); // Print the formatted message

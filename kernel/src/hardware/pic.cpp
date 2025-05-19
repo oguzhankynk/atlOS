@@ -19,6 +19,7 @@
 
 #include <hardware/pic.hpp>
 #include <kernel/sys/IOPort.hpp>
+#include <kernel/sys/handlers.hpp>
 #include <stdio.h>
 
 namespace PIC
@@ -70,7 +71,12 @@ namespace PIC
         IOPort::outportb(SLAVE_DATA_PORT, data);
     }
 
-    // Initializes the PIC8259.
+    /**
+     * @brief Initializes the PIC8259.
+     *
+     * This function initializes the master and slave PICs with the desired settings.
+     * It performs the initial configuration of the PICs for use in the system.
+     */
     void Init()
     {
         // IOPort::DisableInterrupts();
@@ -107,17 +113,20 @@ namespace PIC
         IOPort::outportb(MASTER_DATA_PORT, 0xFF); // Mask all interrupts
         IOPort::outportb(SLAVE_DATA_PORT, 0xFF);  // Mask all interrupts
 
-        IOPort::outportb(MASTER_DATA_PORT,  ~(0x2)); // Mask all interrupts
-        IOPort::outportb(SLAVE_DATA_PORT,  ~(0x2)); // Mask all interrupts
-
+        IOPort::outportb(MASTER_DATA_PORT, ~(0x2)); // Mask all interrupts
+        IOPort::outportb(SLAVE_DATA_PORT, ~(0x2));  // Mask all interrupts
 
         IOPort::EnableInterrupts();
     }
 
-    // Sends an end-of-interrupt (EOI) signal to the PIC.
+    /**
+     * @brief Sends an end-of-interrupt (EOI) signal to the PIC.
+     *
+     * @param irq Interrupt request number (IRQ) that has been serviced.
+     */
     void send_eoi(IRQ irq)
     {
-        
+
         if (static_cast<uint8_t>(irq) >= 8)
         {
             // Send EOI to master PIC
@@ -128,7 +137,11 @@ namespace PIC
         IOPort::outportb(MASTER_COMMAND_PORT, 0x20);
     }
 
-    // Masks a specific interrupt request (IRQ) on the master PIC.
+    /**
+     * @brief Masks a specific interrupt request (IRQ) on the master PIC.
+     *
+     * @param irq Interrupt request number (IRQ) to mask.
+     */
     void mask_master_irq(IRQ irq)
     {
         // Read current mask
@@ -139,7 +152,11 @@ namespace PIC
         IOPort::outportb(MASTER_DATA_PORT, mask);
     }
 
-    // Masks a specific interrupt request (IRQ) on the slave PIC.
+    /**
+     * @brief Masks a specific interrupt request (IRQ) on the slave PIC.
+     *
+     * @param irq Interrupt request number (IRQ) to mask.
+     */
     void mask_slave_irq(IRQ irq)
     {
         // Read the current interrupt mask
@@ -150,7 +167,11 @@ namespace PIC
         IOPort::outportb(SLAVE_DATA_PORT, mask);
     }
 
-    // Unmasks a specific interrupt request (IRQ) on the master PIC.
+    /**
+     * @brief Unmasks a specific interrupt request (IRQ) on the master PIC.
+     *
+     * @param irq Interrupt request number (IRQ) to unmask.
+     */
     void unmask_master_irq(IRQ irq)
     {
         // Read the current interrupt mask
@@ -161,7 +182,11 @@ namespace PIC
         IOPort::outportb(MASTER_DATA_PORT, mask);
     }
 
-    // Unmasks a specific interrupt request (IRQ) on the slave PIC.
+    /**
+     * @brief Unmasks a specific interrupt request (IRQ) on the slave PIC.
+     *
+     * @param irq Interrupt request number (IRQ) to unmask.
+     */
     void unmask_slave_irq(IRQ irq)
     {
         // Read the current interrupt mask
@@ -172,7 +197,11 @@ namespace PIC
         IOPort::outportb(SLAVE_DATA_PORT, mask);
     }
 
-    // Disables a specific interrupt request (IRQ).
+    /**
+     * @brief Disables a specific interrupt request (IRQ).
+     *
+     * @param irq Interrupt request number (IRQ) to disable.
+     */
     void irq_disable(IRQ irq)
     {
         if (static_cast<uint8_t>(irq) < 8)
@@ -191,7 +220,11 @@ namespace PIC
         }
     }
 
-    // Enables a specific interrupt request (IRQ).
+    /**
+     * @brief Enables a specific interrupt request (IRQ).
+     *
+     * @param irq Interrupt request number (IRQ) to enable.
+     */
     void irq_enable(IRQ irq)
     {
         if (static_cast<uint8_t>(irq) < 8)
@@ -205,8 +238,22 @@ namespace PIC
         {
             // IRQ is in the range of the slave PIC
             uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
-            mask &= ~(1 << (static_cast<uint8_t>(irq)-8)); // Clear the bit to unmask the IRQ
+            mask &= ~(1 << (static_cast<uint8_t>(irq) - 8)); // Clear the bit to unmask the IRQ
             IOPort::outportb(SLAVE_DATA_PORT, mask);
         }
+    }
+
+    /**
+     * @brief Adds an interrupt request (IRQ) handler.
+     *
+     * @param irq Interrupt request number (IRQ) to add the handler for.
+     * @param handler Function pointer to the handler function.
+     * @param arg Argument to be passed to the handler function.
+     *
+     * @return true if the handler was successfully added, false otherwise.
+     */
+    bool add_irq_handler(IRQ irq, void (*handler)(void *), void *arg)
+    {
+        return Handlers::AddInterruptHandler(static_cast<uint32_t>(irq) + 32, handler, arg);
     }
 }; // namespace PIC

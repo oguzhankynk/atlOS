@@ -166,7 +166,7 @@ enum class SegmentSelect : uint16_t
 /// @brief Structure representing the state of x86 registers at exception time.
 struct X86ExceptionInfo
 {
-    uint32_t ds;  ///< Data segment 
+    uint32_t ds;  ///< Data segment
     uint32_t edi; ///< Extended Destination Index register
     uint32_t esi; ///< Extended Source Index register
     uint32_t ebp; ///< Extended Base Pointer register

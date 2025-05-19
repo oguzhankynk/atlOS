@@ -29,8 +29,10 @@ namespace PIT
      * @brief Initializes the PIT8253/8254 with the desired settings.
      *
      * @param period_ns The desired period in nanoseconds.
+     * @param handler A function pointer to the interrupt handler that will be called when the timer triggers.
+     * @param args Optional arguments to be passed to the handler function.
      */
-    void init(uint32_t period_ns);
+    void init(uint32_t period_ns, void (*handler)(void *), void *args = nullptr);
 
 }
 

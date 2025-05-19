@@ -8,7 +8,6 @@
 #include <Memory/MemoryConstants.hpp>
 #include <Memory/PhysicalMemory.hpp>
 
-
 namespace Memory
 {
     namespace VirtualMemory
@@ -32,40 +31,38 @@ namespace Memory
 
         /**
          * @brief For BIOS & bootloader data area
-         * 
+         *
          */
         PageTableEntry temp_page_table[PAGE_TABLE_SIZE] __attribute__((aligned(4096)));
 
         static uint32_t FindContiguousFreePages(size_t num_pages);
         static uint32_t UnmapPages(uint32_t page_index, uint32_t num_pages);
 
-        static void loadPageDirectory(uint32_t* page_directory);
+        static void loadPageDirectory(uint32_t *page_directory);
         static void enablePaging();
 
-        static inline uint32_t PAGE_INDEX(const void* virt_addr)
+        static inline uint32_t PAGE_INDEX(const void *virt_addr)
         {
             return (uint32_t)virt_addr / PAGE_SIZE;
         }
 
-        static inline void* PAGE_INDEX_TO_VIRTADDR(uint32_t index)
+        static inline void *PAGE_INDEX_TO_VIRTADDR(uint32_t index)
         {
-            return (void*)((index)*PAGE_SIZE);
+            return (void *)((index)*PAGE_SIZE);
         }
 
         void Init()
         {
             memset(temp_page_table, 0, sizeof(temp_page_table));
 
-            //idendity mapping for BIOS & bootloader area
+            // idendity mapping for BIOS & bootloader area
 
             for (uint32_t addr = 0, i = 0; addr < 1024 * 1024; addr += PAGE_SIZE, i++)
             {
                 temp_page_table[i] = addr | 3;
             }
 
-            page_directory[0] = (uint32_t)Memory::VirtToPhysAddr((void*)temp_page_table) | 3; //idendity mapping
-
-
+            page_directory[0] = (uint32_t)Memory::VirtToPhysAddr((void *)temp_page_table) | 3; // idendity mapping
         }
 
         /**
@@ -109,33 +106,31 @@ namespace Memory
 
         /**
          * @brief get Physical frame address
-         * 
-         * @return void* 
+         *
+         * @return void*
          */
-        void* PageTableEntry::getFrameAddress() const
+        void *PageTableEntry::getFrameAddress() const
         {
-            return (void*)(frame << 12);
+            return (void *)(frame << 12);
         }
 
-        void* getPageTableVirtAddr(uint32_t pdindex)
+        void *getPageTableVirtAddr(uint32_t pdindex)
         {
             // because of page_directory[1023] set to page_directory self,
             // 0xFFC00000 points to page_directory
-            return (void*)(0xFFC00000 + (pdindex * PAGE_SIZE));
+            return (void *)(0xFFC00000 + (pdindex * PAGE_SIZE));
         }
-
-
 
         uint32_t MapPages(uint32_t page_index, uint32_t num_pages)
         {
             uint32_t pdindex = page_index / PAGE_TABLE_SIZE;
             uint32_t ptindex = page_index % PAGE_TABLE_SIZE;
 
-            PageTable* pt = (PageTable*)getPageTableVirtAddr(pdindex);
+            PageTable *pt = (PageTable *)getPageTableVirtAddr(pdindex);
 
             LOG_MSG(INF_LOG, "VMM: Map: page_index:%u num_pages:%u pdindex:%u ptindex:%u \n", page_index, num_pages, pdindex, ptindex);
 
-            void* physicalFramesStart = PhysicalMemory::AllocateBlock(num_pages);
+            void *physicalFramesStart = PhysicalMemory::AllocateBlock(num_pages);
 
             LOG_MSG(DBG_LOG, "VMM: Map: physicalFramesStart: %p \n", physicalFramesStart);
 
@@ -151,32 +146,31 @@ namespace Memory
             {
                 if (!page_directory[pdindex].present)
                 {
-                    void* new_pagetable = PhysicalMemory::AllocateBlock(1);
+                    void *new_pagetable = PhysicalMemory::AllocateBlock(1);
 
                     if (new_pagetable == nullptr)
                     {
                         kernel_panic("VMM: Map: not enough physical frame for pagetable \n ");
                     }
 
-                    page_directory[pdindex] = (uint32_t)new_pagetable | 3; //present , rw
+                    page_directory[pdindex] = (uint32_t)new_pagetable | 3; // present , rw
 
                     LOG_MSG(DBG_LOG, "VMM: Map: new page table allocated. pdindex:%u \n", pdindex);
                 }
 
-                PageTableEntry& pte = (*pt)[ptindex];
+                PageTableEntry &pte = (*pt)[ptindex];
 
                 if (pte.present)
                 {
                     LOG_MSG(ERR_LOG, "page_index: 0x%x num_pages: 0x%x pdindex: 0x%x ptindex: 0x%x pte: 0x%x \n",
-                        page_index, num_pages, pdindex, ptindex, pte);
+                            page_index, num_pages, pdindex, ptindex, pte);
 
                     kernel_panic("VMM: Map: page already mapped \n ");
                 }
 
+                (*pt)[ptindex] = (uint32_t)physicalFrame | 3; // present , rw
 
-                (*pt)[ptindex] = (uint32_t)physicalFrame | 3; //present , rw
-
-                void* virtaddr = PAGE_INDEX_TO_VIRTADDR(pdindex * PAGE_TABLE_SIZE + ptindex);
+                void *virtaddr = PAGE_INDEX_TO_VIRTADDR(pdindex * PAGE_TABLE_SIZE + ptindex);
 
                 asm volatile("invlpg (%0)" : : "a"(virtaddr));
 
@@ -196,7 +190,7 @@ namespace Memory
 
                     ptindex = 0;
 
-                    pt = (PageTable*)getPageTableVirtAddr(pdindex);
+                    pt = (PageTable *)getPageTableVirtAddr(pdindex);
                 }
             }
 
@@ -207,13 +201,13 @@ namespace Memory
 
         static uint32_t UnmapPages(uint32_t page_index, uint32_t num_pages)
         {
-            
+
             uint32_t pdindex = page_index / PAGE_TABLE_SIZE;
             uint32_t ptindex = page_index % PAGE_TABLE_SIZE;
 
-            LOG_MSG(INF_LOG, "VMM: UnMap: pages start indx:%u number of pages:%u pd:%u pt:%u \n", page_index, num_pages, pdindex, ptindex );
+            LOG_MSG(INF_LOG, "VMM: UnMap: pages start indx:%u number of pages:%u pd:%u pt:%u \n", page_index, num_pages, pdindex, ptindex);
 
-            PageTable* pt = (PageTable*)getPageTableVirtAddr(pdindex);
+            PageTable *pt = (PageTable *)getPageTableVirtAddr(pdindex);
 
             uint32_t deallocated{};
 
@@ -224,18 +218,18 @@ namespace Memory
                     kernel_panic("VMM: UnMap: page table not present \n");
                 }
 
-                PageTableEntry& pte = (*pt)[ptindex];
+                PageTableEntry &pte = (*pt)[ptindex];
 
                 if (!pte.present)
                 {
                     kernel_panic("VMM: UnMap: page not present \n");
                 }
 
-                PhysicalMemory::FreeBlocks( pte.getFrameAddress(), 1);
+                PhysicalMemory::FreeBlocks(pte.getFrameAddress(), 1);
 
                 memset(&pte, 0, sizeof(PageTableEntry));
 
-                void* virtaddr = PAGE_INDEX_TO_VIRTADDR(pdindex * PAGE_TABLE_SIZE + ptindex);
+                void *virtaddr = PAGE_INDEX_TO_VIRTADDR(pdindex * PAGE_TABLE_SIZE + ptindex);
 
                 asm volatile("invlpg (%0)" : : "a"(virtaddr));
 
@@ -253,14 +247,14 @@ namespace Memory
 
                     ptindex = 0;
 
-                    pt = (PageTable*)getPageTableVirtAddr(pdindex);
+                    pt = (PageTable *)getPageTableVirtAddr(pdindex);
                 }
             }
 
             return deallocated;
         }
 
-        void* AllocatePage(uint32_t num_pages)
+        void *AllocatePage(uint32_t num_pages)
         {
             uint32_t PageIndexStart = FindContiguousFreePages(num_pages);
 
@@ -273,7 +267,7 @@ namespace Memory
             return PAGE_INDEX_TO_VIRTADDR(PageIndexStart);
         }
 
-        int FreePage(const void* addr, uint32_t num_pages)
+        int FreePage(const void *addr, uint32_t num_pages)
         {
             auto deallocated = UnmapPages(PAGE_INDEX(addr), num_pages);
 
@@ -288,7 +282,7 @@ namespace Memory
 
         static uint32_t FindContiguousFreePages(size_t num_pages)
         {
-            uint32_t start_pdindex = PAGE_INDEX((void*)KERNEL_LOAD_ADDR) / PAGE_TABLE_SIZE;
+            uint32_t start_pdindex = PAGE_INDEX((void *)KERNEL_LOAD_ADDR) / PAGE_TABLE_SIZE;
             uint32_t end_pdindex = PAGE_INDEX(&_kernel_end) / PAGE_TABLE_SIZE;
 
             LOG_MSG(INF_LOG, "VMM: Find Free Pages: num_pages: %u start_pdindex:%u end_pdindex:%u \n", num_pages, start_pdindex, end_pdindex);
@@ -318,7 +312,7 @@ namespace Memory
 
                 for (uint32_t ptindex = 0; ptindex < PAGE_TABLE_SIZE; ptindex++)
                 {
-                    PageTableEntry& pte = ((PageTableEntry*)getPageTableVirtAddr(pdindex))[ptindex];
+                    PageTableEntry &pte = ((PageTableEntry *)getPageTableVirtAddr(pdindex))[ptindex];
 
                     if (pte.present)
                     {
@@ -359,14 +353,14 @@ namespace Memory
          *
          * @param page_directory A pointer to the page directory to load into CR3.
          */
-        static void loadPageDirectory(uint32_t* page_directory)
+        static void loadPageDirectory(uint32_t *page_directory)
         {
             __asm__ __volatile__(
                 "movl %0, %%cr3" // %0 placeholder, replaced by page_directory
                 :
-            : "r"(page_directory) // Input operand as page_directory
+                : "r"(page_directory) // Input operand as page_directory
                 : "memory"            // Indicates that the inline assembly has memory side effects
-                );
+            );
         }
 
         /**
@@ -383,9 +377,9 @@ namespace Memory
                 "or $0x80000001, %%eax;" // Set the most significant bit in EAX register (paging bit)
                 "mov %%eax, %%cr0;"      // Move the modified value back into CR0 register
                 :
-            :
+                :
                 : "eax", "memory" // Indicates that EAX register is modified and memory has side effects
-                );
+            );
         }
     }; // namespace VirtualMemory
 }; // namespace Memory

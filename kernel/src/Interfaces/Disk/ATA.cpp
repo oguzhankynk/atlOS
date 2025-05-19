@@ -21,8 +21,6 @@
 
 #include <string.h>
 
-
-
 static constexpr uint32_t ATA_PRIMARY_IO_BASE = 0x1F0;
 static constexpr uint32_t ATA_PRIMARY_CTRL_BASE = 0x3F6;
 
@@ -50,12 +48,14 @@ static constexpr uint32_t ATA_STATUS_BSY = 1U << 7;
 
 static inline void ata_wait_bsy()
 {
-    while (IOPort::inportb(ATA_PRIMARY_IO_BASE + ATA_REG_STATUS) & ATA_STATUS_BSY);
+    while (IOPort::inportb(ATA_PRIMARY_IO_BASE + ATA_REG_STATUS) & ATA_STATUS_BSY)
+        ;
 }
 
 static inline void ata_wait_drq()
 {
-    while (!(IOPort::inportb(ATA_PRIMARY_IO_BASE + ATA_REG_STATUS) & ATA_STATUS_DRQ));
+    while (!(IOPort::inportb(ATA_PRIMARY_IO_BASE + ATA_REG_STATUS) & ATA_STATUS_DRQ))
+        ;
 }
 
 static inline void delay_400ns()
@@ -66,10 +66,9 @@ static inline void delay_400ns()
     IOPort::inportb(ATA_PRIMARY_IO_BASE + ATA_REG_STATUS);
 }
 
-ATA::ATA(const char* name) noexcept
-:Disk(name)
+ATA::ATA(const char *name) noexcept
+    : Disk(name)
 {
-    
 }
 
 /**
@@ -78,10 +77,9 @@ ATA::ATA(const char* name) noexcept
  * @param lba The Logical Block Address (LBA) of the sector to read.
  * @param buffer Pointer to the buffer where the data will be stored.
  */
-void ATA::read_sector(uint32_t lba, uint8_t* buffer) const
+void ATA::read_sector(uint32_t lba, uint8_t *buffer) const
 {
     ata_wait_bsy();
-
 
     IOPort::outportb(ATA_PRIMARY_IO_BASE + ATA_REG_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
     IOPort::outportb(ATA_PRIMARY_IO_BASE + ATA_REG_SECCOUNT, 1);
@@ -95,8 +93,9 @@ void ATA::read_sector(uint32_t lba, uint8_t* buffer) const
     ata_wait_bsy();
     ata_wait_drq();
 
-    for (int i = 0; i < 256; i++) {
-        ((uint16_t*)buffer)[i] = IOPort::inportw(ATA_PRIMARY_IO_BASE + ATA_REG_DATA);
+    for (int i = 0; i < 256; i++)
+    {
+        ((uint16_t *)buffer)[i] = IOPort::inportw(ATA_PRIMARY_IO_BASE + ATA_REG_DATA);
     }
 
     ata_wait_bsy();
@@ -109,7 +108,7 @@ void ATA::read_sector(uint32_t lba, uint8_t* buffer) const
  * @param buffer Pointer to the buffer where the data will be stored.
  * @param size The size of data to read in bytes.
  */
-void ATA::read(uint32_t lba_start, uint8_t* buffer, size_t size) const
+void ATA::read(uint32_t lba_start, uint8_t *buffer, size_t size) const
 {
     auto step = 0;
 
@@ -134,10 +133,9 @@ void ATA::read(uint32_t lba_start, uint8_t* buffer, size_t size) const
  * @param lba The Logical Block Address (LBA) of the sector to write.
  * @param buffer Pointer to the buffer containing the data to write.
  */
-void ATA::write_sector(uint32_t lba, const uint8_t* buffer) const
+void ATA::write_sector(uint32_t lba, const uint8_t *buffer) const
 {
     ata_wait_bsy();
-
 
     IOPort::outportb(ATA_PRIMARY_IO_BASE + ATA_REG_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
     IOPort::outportb(ATA_PRIMARY_IO_BASE + ATA_REG_SECCOUNT, 1);
@@ -149,9 +147,9 @@ void ATA::write_sector(uint32_t lba, const uint8_t* buffer) const
     ata_wait_bsy();
     ata_wait_drq();
 
-
-    for (int i = 0; i < 256; i++) {
-        IOPort::outportw(ATA_PRIMARY_IO_BASE + ATA_REG_DATA, ((uint16_t*)buffer)[i]);
+    for (int i = 0; i < 256; i++)
+    {
+        IOPort::outportw(ATA_PRIMARY_IO_BASE + ATA_REG_DATA, ((uint16_t *)buffer)[i]);
     }
 
     ata_wait_bsy();
@@ -164,7 +162,7 @@ void ATA::write_sector(uint32_t lba, const uint8_t* buffer) const
  * @param buffer Pointer to the buffer containing the data to write.
  * @param size The size of data to write in bytes.
  */
-void ATA::write(uint32_t lba_start, const uint8_t* buffer, size_t size) const
+void ATA::write(uint32_t lba_start, const uint8_t *buffer, size_t size) const
 {
     auto step = 0;
 
@@ -182,4 +180,3 @@ void ATA::write(uint32_t lba_start, const uint8_t* buffer, size_t size) const
         write_sector(lba_start + step, data);
     }
 }
-

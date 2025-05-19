@@ -33,8 +33,8 @@ namespace Handlers
 
     /**
      * @brief Default handler function
-     * 
-     * @param param 
+     *
+     * @param param
      */
     static void DEFAULT_HANDLER_FUNCTION(void *param)
     {
@@ -88,7 +88,8 @@ namespace Handlers
         fn(arg);
 
         // Send EOI if exception_no is in the range of IRQs (32-47)
-        if (exception_no >= 32 && exception_no < 48) {
+        if (exception_no >= 32 && exception_no < 48)
+        {
             PIC::send_eoi(static_cast<PIC::IRQ>(exception_no - 32));
         }
     }

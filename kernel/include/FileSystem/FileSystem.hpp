@@ -30,7 +30,7 @@ namespace FileSystem
 
     struct File
     {
-        IFileSystem* owner{};
+        IFileSystem *owner{};
         size_t position{};
         size_t size{};
         bool isOpen{};
@@ -39,30 +39,28 @@ namespace FileSystem
     class IFileSystem
     {
     protected:
-        const Disk& m_device;
+        const Disk &m_device;
         uint32_t m_lbaFirstSector;
 
     public:
-        IFileSystem(const Disk& device, uint32_t lbaFirsSector) noexcept
-            : m_device{ device }, m_lbaFirstSector{ lbaFirsSector }
+        IFileSystem(const Disk &device, uint32_t lbaFirsSector) noexcept
+            : m_device{device}, m_lbaFirstSector{lbaFirsSector}
         {
-
         }
         virtual ~IFileSystem() noexcept = default;
 
         virtual bool mount() = 0;
-        virtual File* open(const char* filename) = 0;
-        virtual ssize_t read(File* File, void* buffer, size_t size) = 0;
-        virtual ssize_t write(File* File, const void* buffer, size_t size) = 0;
-        virtual int close(File* File) = 0;
-        virtual int remove(const char* filename) = 0;
+        virtual File *open(const char *filename) = 0;
+        virtual ssize_t read(File *File, void *buffer, size_t size) = 0;
+        virtual ssize_t write(File *File, const void *buffer, size_t size) = 0;
+        virtual int close(File *File) = 0;
+        virtual int remove(const char *filename) = 0;
         virtual void printFilelist() = 0;
-        virtual const Disk& getDisk() const 
+        virtual const Disk &getDisk() const
         {
             return m_device;
         }
     };
-
 
 } // namespace FileSystem
 

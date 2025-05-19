@@ -26,9 +26,9 @@
 #include <kernel/Logger.hpp>
 #include <Memory/KHeap.h>
 
-extern "C" void switchTask(Threading::Registers* old_regs, Threading::Registers* new_regs); // The function which actually switches
+extern "C" void switchTask(Threading::Registers *old_regs, Threading::Registers *new_regs); // The function which actually switches
 
-//extern "C" void switchTask(void* old_regs, void* new_regs); // The function which actually switches
+// extern "C" void switchTask(void* old_regs, void* new_regs); // The function which actually switches
 
 namespace Schedular
 {
@@ -37,22 +37,19 @@ namespace Schedular
     class ThreadList
     {
     public:
-
         struct Node
         {
-            Threading::Thread* thread{};
-            Node* next{};
+            Threading::Thread *thread{};
+            Node *next{};
         };
 
     private:
-
-        Node* m_head{};
-        Node* m_tail{};
-        Node* m_current{};
+        Node *m_head{};
+        Node *m_tail{};
+        Node *m_current{};
         uint32_t m_threadCount{};
 
     public:
-
         ThreadList()
         {
             auto mainThread = new Node();
@@ -68,10 +65,9 @@ namespace Schedular
             m_threadCount = 1;
 
             addThread(*idleThread);
-
         }
 
-        void addThread(Threading::Thread& thread)
+        void addThread(Threading::Thread &thread)
         {
             auto newNode = new Node();
             newNode->thread = &thread;
@@ -81,17 +77,17 @@ namespace Schedular
             m_threadCount++;
         }
 
-        void removeThread(Threading::Thread& thread)
+        void removeThread(Threading::Thread &thread)
         {
-            Node* current = m_head;
-            Node* prev = m_tail;
+            Node *current = m_head;
+            Node *prev = m_tail;
             m_threadCount--;
             while (current != m_tail)
             {
                 if (current->thread == &thread)
                 {
                     prev->next = current->next;
-                    
+
                     return;
                 }
                 prev = current;
@@ -99,7 +95,7 @@ namespace Schedular
             }
         }
 
-        Node* switchToNextThread(Node*& current)
+        Node *switchToNextThread(Node *&current)
         {
             current = m_current;
             while (true)
@@ -124,8 +120,8 @@ namespace Schedular
 
         void controlThreads()
         {
-            Node* current = m_head;
-            for(uint32_t i = 0; i < m_threadCount; ++i)
+            Node *current = m_head;
+            for (uint32_t i = 0; i < m_threadCount; ++i)
             {
                 if (current->thread->getTCB().state == Threading::ThreadState::TERMINATED)
                 {
@@ -137,15 +133,13 @@ namespace Schedular
             }
             printf("Thread count: %d\n", m_threadCount);
         }
-
-
     };
 
-    static ThreadList* threadList = nullptr;
+    static ThreadList *threadList = nullptr;
 
     static void idleThreadFunction()
     {
-        while(1)
+        while (1)
         {
             printf("idleThreadFunction!"); // Not implemented here...
             threadList->controlThreads();
@@ -153,20 +147,18 @@ namespace Schedular
         }
     }
 
-    
-
-    void initTasking() {
+    void initTasking()
+    {
         threadList = new ThreadList();
-
     }
 
-    void yield() {
-        ThreadList::Node* last = nullptr;
+    void yield()
+    {
+        ThreadList::Node *last = nullptr;
         auto nextThread = threadList->switchToNextThread(last);
 
         switchTask(&last->thread->getTCB().regs, &nextThread->thread->getTCB().regs);
     }
-
 
     void helloWorldThreadFunction()
     {
@@ -190,7 +182,6 @@ namespace Schedular
         yield();
         printf("Returned to mainTask2!\n");
 
-        
         yield();
 
         printf("Returned to mainTask3!\n");
@@ -198,14 +189,11 @@ namespace Schedular
         yield();
 
         printf("Returned to mainTask4!\n");
-
-
     }
 
-    void addTask(Threading::Thread& thread)
+    void addTask(Threading::Thread &thread)
     {
         threadList->addThread(thread);
-
     }
 
-}// namespace Schedular
+} // namespace Schedular

@@ -31,40 +31,39 @@ namespace Threading
         TERMINATED
     };
 
-    struct Registers {
+    struct Registers
+    {
         uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp, eip, eflags, cr3;
     } __attribute__((packed));
 
-    struct TCB {
+    struct TCB
+    {
         Registers regs;
         ThreadState state;
     };
 
     class ThreadImpl;
 
-    using EntryPoint = void(*)(void);
+    using EntryPoint = void (*)(void);
 
     class Thread
     {
     public:
-
         Thread(EntryPoint entry, bool addToScheduler = true);
 
-        Thread(const Thread&) = delete;
+        Thread(const Thread &) = delete;
 
         ~Thread();
 
-        Thread& operator=(const Thread&) = delete;
+        Thread &operator=(const Thread &) = delete;
 
-        TCB& getTCB();
+        TCB &getTCB();
 
-        const char* getName() const;
+        const char *getName() const;
 
     private:
-        ThreadImpl* m_impl{};
+        ThreadImpl *m_impl{};
     };
-
-   
 
 } // namespace Thread
 #endif /* BE0C6057_D75F_4A2E_807F_8CFDF75C8093 */

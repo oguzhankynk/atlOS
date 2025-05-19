@@ -148,6 +148,11 @@ namespace DeviceManager
         }
     }
 
+    void picHander(void *args)
+    {
+        printf("PIC interrupt \n");
+    }
+
     void Init()
     {
         PIC::Init();
@@ -160,6 +165,6 @@ namespace DeviceManager
 
         detectATADevices();
 
-        PIT::init(100000000000); // 1ms
+        PIT::init(100000000000, picHander); // 1ms
     }
 } // namespace DeviceManager

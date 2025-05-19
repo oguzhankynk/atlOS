@@ -24,11 +24,10 @@ protected:
     char m_name[32];
 
 public:
-    Device(const char* name) noexcept;
+    Device(const char *name) noexcept;
     ~Device() noexcept = default;
 
-    virtual const char* getName() const;
+    virtual const char *getName() const;
 };
 
 #endif /* BDEFD3E4_7189_4188_B85A_DA86472239FF */
-

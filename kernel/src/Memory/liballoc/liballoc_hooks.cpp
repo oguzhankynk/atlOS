@@ -19,7 +19,7 @@ int liballoc_unlock()
  * \return NULL if the pages were not allocated.
  * \return A pointer to the allocated memory.
  */
-void* liballoc_alloc(size_t num_pages)
+void *liballoc_alloc(size_t num_pages)
 {
     return Memory::VirtualMemory::AllocatePage(num_pages);
 }
@@ -32,7 +32,7 @@ void* liballoc_alloc(size_t num_pages)
  *
  * \return 0 if the memory was successfully freed.
  */
-extern int liballoc_free(void* addr ,size_t num_pages)
+extern int liballoc_free(void *addr, size_t num_pages)
 {
     return Memory::VirtualMemory::FreePage(addr, num_pages);
 }

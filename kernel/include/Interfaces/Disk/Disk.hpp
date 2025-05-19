@@ -2,7 +2,7 @@
  * @file Disk.hpp
  * @author Oguzhan KAYNAK ()
  * @brief  Defines the Disk interface for low-level disk operations such as reading and writing sectors.
- * 
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -25,18 +25,17 @@
 /**
  * @class Disk
  * @brief Abstract base class for disk operations.
- * 
+ *
  */
 class Disk : public Device
 {
-    public:
-
-    Disk(const char* name) noexcept ;
+public:
+    Disk(const char *name) noexcept;
     virtual ~Disk() noexcept = default;
-    
+
     /**
      * @brief Reads a single sector from the disk into the buffer.
-     * 
+     *
      * @param lba The Logical Block Address (LBA) of the sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      */
@@ -44,16 +43,16 @@ class Disk : public Device
 
     /**
      * @brief Reads multiple sectors from the disk into the buffer.
-     * 
+     *
      * @param lba_start The starting LBA of the first sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      * @param size The size of data to read in bytes.
      */
-    virtual void read(uint32_t lba_start, uint8_t* buffer, size_t size) const = 0;
+    virtual void read(uint32_t lba_start, uint8_t *buffer, size_t size) const = 0;
 
     /**
      * @brief Writes a single sector to the disk from the buffer.
-     * 
+     *
      * @param lba The Logical Block Address (LBA) of the sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      */
@@ -61,13 +60,12 @@ class Disk : public Device
 
     /**
      * @brief Writes multiple sectors to the disk from the buffer.
-     * 
+     *
      * @param lba_start The starting LBA of the first sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      * @param size The size of data to write in bytes.
      */
-    virtual void write(uint32_t lba_start, const uint8_t* buffer, size_t size) const = 0;
-    
+    virtual void write(uint32_t lba_start, const uint8_t *buffer, size_t size) const = 0;
 };
 
 #endif /* BD59F1FB_C457_438E_825E_35E2E4AB50BA */

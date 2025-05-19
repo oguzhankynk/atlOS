@@ -1,8 +1,8 @@
 /**
  * @file Device.cpp
  * @author Oguzhan KAYNAK ()
- * @brief 
- * 
+ * @brief
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -20,12 +20,12 @@
 
 #include <string.h>
 
-Device::Device(const char* name)
+Device::Device(const char *name)
 {
     strncpy(m_name, name, sizeof(m_name));
 }
 
-const char* Device::getName() const
+const char *Device::getName() const
 {
     return m_name;
 }

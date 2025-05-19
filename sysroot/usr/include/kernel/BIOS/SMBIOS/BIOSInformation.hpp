@@ -2,19 +2,19 @@
  * @file BIOSInformation.hpp
  * @author Oguzhan KAYNAK
  * @brief Reading the BIOS Information (Type 0) structure field in SMBIOS
- * 
+ *
  * Copyright © 2024 Oguzhan KAYNAK
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
  * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
  * persons to whom the Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  */
 #ifndef AB42FE93_A33B_4AA5_9CF2_CBC263FCA5AE
 #define AB42FE93_A33B_4AA5_9CF2_CBC263FCA5AE
@@ -87,7 +87,7 @@ public:
 
     /// @brief Returns the handle field of the BIOS structure.
     /// @return Handle field of the BIOS structure.
-    uint16_t getHandle() const 
+    uint16_t getHandle() const
     {
         return *getHandleAddr();
     }
@@ -122,7 +122,7 @@ public:
 
     /// @brief Returns the ROM size field of the BIOS structure.
     /// @return ROM size field of the BIOS structure.
-    uint8_t getRomSize() const 
+    uint8_t getRomSize() const
     {
         return *getRomSizeAddr();
     }
@@ -136,7 +136,7 @@ public:
 
     /// @brief Returns the system BIOS major release field of the BIOS structure.
     /// @return System BIOS major release field of the BIOS structure.
-    uint8_t getSystemBiosMajorRelease() const 
+    uint8_t getSystemBiosMajorRelease() const
     {
         return *getSystemBiosMajorReleaseAddr();
     }
@@ -150,14 +150,14 @@ public:
 
     /// @brief Returns the embedded controller firmware major release field of the BIOS structure.
     /// @return Embedded controller firmware major release field of the BIOS structure.
-    uint8_t getEmbeddedControllerFirmwareMajorRelease() const 
+    uint8_t getEmbeddedControllerFirmwareMajorRelease() const
     {
         return *getEmbeddedControllerFirmwareMajorReleaseAddr();
     }
 
     /// @brief Returns the embedded controller firmware minor release field of the BIOS structure.
     /// @return Embedded controller firmware minor release field of the BIOS structure.
-    uint8_t getEmbeddedControllerFirmwareMinorRelease() const 
+    uint8_t getEmbeddedControllerFirmwareMinorRelease() const
     {
         return *getEmbeddedControllerFirmwareMinorReleaseAddr();
     }
@@ -174,7 +174,7 @@ public:
         printf("Release Date: %u\n", getReleaseDateString());
         printf("ROM Size: %u\n", getRomSize());
         printf("Characteristics: %llu\n", (unsigned long long)getCharacteristics());
-        //printf("Extension Byte 1: %u\n", );
+        // printf("Extension Byte 1: %u\n", );
         printf("System BIOS Major Release: %u\n", getSystemBiosMajorRelease());
         printf("System BIOS Minor Release: %u\n", getSystemBiosMinorRelease());
         printf("Embedded Controller Firmware Major Release: %u\n", getEmbeddedControllerFirmwareMajorRelease());
@@ -217,7 +217,7 @@ private:
     }
 
     /// @brief Returns the address of the vendor string field in the BIOS structure.
-    uint8_t *getVendorStringAddr() const 
+    uint8_t *getVendorStringAddr() const
     {
         return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 4);
     }

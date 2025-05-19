@@ -3,7 +3,7 @@
  * @author Oguzhan KAYNAK ()
  * @brief This header was originally in the C standard library as <stddef.h>.
  * This header is part of the utility library.
- * 
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -22,21 +22,21 @@
 
 #include <cstddef>
 
-void* operator new(std::size_t size);
-void operator delete(void* p);
-void operator delete(void* p, std::size_t size);
+void *operator new(std::size_t size);
+void operator delete(void *p);
+void operator delete(void *p, std::size_t size);
 
-void* operator new[](std::size_t size);
-void operator delete[](void* p);
-void operator delete[](void* p, std::size_t size);
+void *operator new[](std::size_t size);
+void operator delete[](void *p);
+void operator delete[](void *p, std::size_t size);
 
-inline void* operator new(std::size_t size, void* p)
+inline void *operator new(std::size_t size, void *p)
 {
     (void)size;
     return p;
 }
 
-inline void* operator new[](std::size_t size, void* p)
+inline void *operator new[](std::size_t size, void *p)
 {
     (void)size;
     return p;

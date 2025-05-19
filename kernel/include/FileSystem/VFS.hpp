@@ -23,22 +23,20 @@
 
 #include <FileSystem/FileSystem.hpp>
 
-
-
 namespace FileSystem
 {
 	namespace VFS
 	{
 
-		File* open(const char* filename);
-		ssize_t read(File* File, void* buffer, size_t size);
-		ssize_t write(File* File, const void* buffer, size_t size);
-		int close(File* File);
+		File *open(const char *filename);
+		ssize_t read(File *File, void *buffer, size_t size);
+		ssize_t write(File *File, const void *buffer, size_t size);
+		int close(File *File);
 		int remove(const char *filename);
 
-		bool AddFileSystem(IFileSystem& fs);
+		bool AddFileSystem(IFileSystem &fs);
 
-	} //namespace VFS
+	} // namespace VFS
 } // namespace FileSystem
 
 #endif /* D8146028_ADEC_4A31_A0B3_BE8F58ED3E8F */

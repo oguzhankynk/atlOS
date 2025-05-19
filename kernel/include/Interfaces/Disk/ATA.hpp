@@ -1,8 +1,8 @@
 /**
  * @file ATA.hpp
- * @author Oguzhan KAYNAK 
+ * @author Oguzhan KAYNAK
  * @brief Defines the ATA class that implements disk operations using the ATA protocol.
- * 
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -24,50 +24,49 @@
 #include <Interfaces/Disk/Disk.hpp>
 
 /**
- * 
+ *
  * @class ATA
  * @brief Represents an ATA disk driver for reading and writing sectors.
- * 
+ *
  */
 class ATA : public Disk
 {
-    public:
-
-    ATA(const char* name) noexcept ;
+public:
+    ATA(const char *name) noexcept;
     virtual ~ATA() noexcept = default;
 
     /**
      * @brief Reads a single sector from the disk into the buffer.
-     * 
+     *
      * @param lba The Logical Block Address (LBA) of the sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      */
-    void read_sector(uint32_t lba, uint8_t *buffer) const override ;
+    void read_sector(uint32_t lba, uint8_t *buffer) const override;
 
     /**
      * @brief Reads multiple sectors from the disk into the buffer.
-     * 
+     *
      * @param lba_start The starting LBA of the first sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      * @param size The size of data to read in bytes.
      */
-    void read(uint32_t lba_start, uint8_t* buffer, size_t size) const override;
+    void read(uint32_t lba_start, uint8_t *buffer, size_t size) const override;
 
     /**
      * @brief Writes a single sector to the disk from the buffer.
-     * 
+     *
      * @param lba The Logical Block Address (LBA) of the sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      */
-    void write_sector(uint32_t lba, const uint8_t *buffer) const override ;
+    void write_sector(uint32_t lba, const uint8_t *buffer) const override;
 
     /**
      * @brief Writes multiple sectors to the disk from the buffer.
-     * 
+     *
      * @param lba_start The starting LBA of the first sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      * @param size The size of data to write in bytes.
      */
-    void write(uint32_t lba_start, const uint8_t* buffer, size_t size) const override ;
+    void write(uint32_t lba_start, const uint8_t *buffer, size_t size) const override;
 };
 #endif /* D2A30C7E_444F_4393_BCBF_81177EB71649 */

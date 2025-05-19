@@ -126,8 +126,10 @@ namespace PIT
      * @brief Initializes the PIT8253/8254 with the desired settings.
      *
      * @param period_ns The desired period in nanoseconds.
+     * @param handler A function pointer to the interrupt handler that will be called when the timer triggers.
+     * @param args Optional arguments to be passed to the handler function.
      */
-    void init(uint32_t period_ns)
+    void init(uint32_t period_ns, void (*handler)(void *), void *args)
     {
 
         uint32_t divisor = (PIT_BASE_FREQUENCY * period_ns) / 1000000000;
@@ -148,7 +150,13 @@ namespace PIT
         IOPort::outportb(PIT_CHANNEL_0, static_cast<uint8_t>(divisor & 0xFF));        // Lobyte
         IOPort::outportb(PIT_CHANNEL_0, static_cast<uint8_t>((divisor >> 8) & 0xFF)); // Hibyte
 
-        Handlers::AddInterruptHandler(32, pitHandler, nullptr);
+        bool irq_register_stat = PIC::add_irq_handler(PIC::IRQ::Timer, handler, args);
+        if (irq_register_stat == false)
+        {
+            printf("PIT: add_irq_handler error \n");
+            return;
+        }
+
         PIC::irq_enable(PIC::IRQ::Timer); // Enable PIT interrupt
     }
 

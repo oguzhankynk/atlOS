@@ -4,13 +4,13 @@
  * @brief Reading the Memory Array Mapped Address (Type 19) structure field in SMBIOS
  *
  * Copyright © 2024 Oguzhan KAYNAK
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
  * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
  * persons to whom the Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -47,7 +47,8 @@ public:
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
 
-        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++) ;
+        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
+            ;
 
         m_pEnd = ptr + end + 1;
 
@@ -183,8 +184,8 @@ public:
         printf("Extended Size: %u\n", *getExtendedSizeAddr());
         printf("Configured Memory Clock Speed: %u\n", *getConfiguredMemoryClockSpeedAddr());
         printf("Minimum Voltage: %u Maximum Voltage: %u Configured Voltage: %u \n",
-            *getMinimumVoltageAddr(), *getMaximumVoltageAddr(), *getConfiguredVoltageAddr());
-   
+               *getMinimumVoltageAddr(), *getMaximumVoltageAddr(), *getConfiguredVoltageAddr());
+
         for (size_t i = 0; i < StringCount; ++i)
         {
             printf("[%d]:%s ", i, m_strings[i]);
@@ -251,7 +252,7 @@ private:
 
     /// @brief Gets the address of the Device Locator field.
     /// @return Pointer to the Device Locator field.
-    uint8_t *getDeviceLocatorAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t *>(m_pStart) + 0x10); }
+    uint8_t *getDeviceLocatorAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x10); }
 
     /// @brief Gets the address of the Bank Locator field.
     /// @return Pointer to the Bank Locator field.
@@ -308,7 +309,6 @@ private:
     /// @brief Gets the address of the Configured Voltage field.
     /// @return Pointer to the Configured Voltage field.
     uint16_t *getConfiguredVoltageAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x26); }
-
 };
 
 #endif /* CADF833A_320D_4F60_9ABA_A209CDA30F4C */

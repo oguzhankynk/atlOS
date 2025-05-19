@@ -4,13 +4,13 @@
  * @brief Reading the Physical Memory Array (Type 16) structure field in SMBIOS
  *
  * Copyright © 2024 Oguzhan KAYNAK
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
  * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
  * persons to whom the Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -47,7 +47,8 @@ public:
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
 
-        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++) ;
+        for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
+            ;
 
         m_pEnd = ptr + end + 1;
 
@@ -80,7 +81,7 @@ public:
 
     /// @brief Gets the maximum capacity of the memory array.
     /// @return Maximum capacity of the memory array.
-    uint32_t getMaximumCapacity()const  { return *getMaximumCapacityAddr(); }
+    uint32_t getMaximumCapacity() const { return *getMaximumCapacityAddr(); }
 
     /// @brief Gets the memory error information handle.
     /// @return Memory error information handle.
@@ -108,6 +109,7 @@ public:
         printf("Number of Memory Devices: %u\n", getNumberOfMemoryDevices());
         printf("Extended Maximum Capacity: %llu bytes\n", getExtendedMaximumCapacity());
     }
+
 private:
     void *m_pStart{}; ///< Start address of the structure.
     void *m_pEnd{};   ///< End address of the structure.

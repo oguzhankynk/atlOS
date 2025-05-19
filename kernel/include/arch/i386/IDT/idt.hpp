@@ -166,6 +166,6 @@ namespace IDT
      */
     void Init();
 
-};// namespace IDT
+}; // namespace IDT
 
 #endif /* E3243051_550C_401D_85B2_82DEB27080D5 */

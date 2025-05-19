@@ -30,19 +30,18 @@ namespace Threading
     class ThreadImpl
     {
     public:
-        ThreadImpl(EntryPoint entry); // Constructor to initialize the thread
-        TCB m_tcb{}; // Thread Control Block (TCB) to store thread context
-        EntryPoint m_entry{}; // Entry point function for the thread
-        char m_name[16]{}; // Thread name (for debugging purposes)
+        ThreadImpl(EntryPoint entry);              // Constructor to initialize the thread
+        TCB m_tcb{};                               // Thread Control Block (TCB) to store thread context
+        EntryPoint m_entry{};                      // Entry point function for the thread
+        char m_name[16]{};                         // Thread name (for debugging purposes)
         static constexpr size_t STACK_SIZE = 4096; // Stack size for the thread
-        uint8_t stack[STACK_SIZE]; // Stack for the thread
-        static void threadStartPoint(void* obj); // Static function to start the thread
+        uint8_t stack[STACK_SIZE];                 // Stack for the thread
+        static void threadStartPoint(void *obj);   // Static function to start the thread
     };
 
     ThreadImpl::ThreadImpl(EntryPoint entry)
-        :
-        m_tcb{Registers{}, ThreadState::READY},
-        m_entry{ entry }
+        : m_tcb{Registers{}, ThreadState::READY},
+          m_entry{entry}
     {
         snprintf(m_name, 16, "t%d", s_TaskIdCounter++);
 
@@ -58,20 +57,21 @@ namespace Threading
         m_tcb.regs.edi = 0;
 
         // get the EFLAGS and CR3 registers
-        asm volatile("pushfl; movl (%%esp), %%eax; movl %%eax, %0; popfl;":"=m"(m_tcb.regs.eflags)::"%eax");
-        asm volatile("movl %%cr3, %%eax; movl %%eax, %0;":"=m"(m_tcb.regs.cr3)::"%eax");
+        asm volatile("pushfl; movl (%%esp), %%eax; movl %%eax, %0; popfl;" : "=m"(m_tcb.regs.eflags)::"%eax");
+        asm volatile("movl %%cr3, %%eax; movl %%eax, %0;" : "=m"(m_tcb.regs.cr3)::"%eax");
 
         // Set up the instruction pointer
         m_tcb.regs.eip = reinterpret_cast<uintptr_t>(threadStartPoint);
 
-        //Pointer to the stack
-        // The stack grows downwards, so we need to set the stack pointer to the top of the stack
-        uint8_t* sp = stack + STACK_SIZE;
+        // Pointer to the stack
+        //  The stack grows downwards, so we need to set the stack pointer to the top of the stack
+        uint8_t *sp = stack + STACK_SIZE;
 
-        auto push = [](uint8_t*& sp, auto value) {
+        auto push = [](uint8_t *&sp, auto value)
+        {
             using Type = decltype(value);
             sp -= sizeof(Type);
-            *reinterpret_cast<Type*>(sp) = value;
+            *reinterpret_cast<Type *>(sp) = value;
         };
 
         // Push the first argument to the stack (the object itself)
@@ -84,31 +84,28 @@ namespace Threading
         m_tcb.regs.esp = reinterpret_cast<uint32_t>(sp);
     }
 
-
-    void ThreadImpl::threadStartPoint(void* obj)
+    void ThreadImpl::threadStartPoint(void *obj)
     {
         // Cast the object pointer back to ThreadImpl
-        auto* thread = static_cast<ThreadImpl*>(obj);
+        auto *thread = static_cast<ThreadImpl *>(obj);
         printf("Thread %s is running.\n", thread->m_name);
-        
+
         // Set the thread state to RUNNING
         thread->m_tcb.state = ThreadState::RUNNING;
 
         // Call the entry point function
         thread->m_entry();
-    
+
         // Thread has finished execution, set state to TERMINATED
         printf("Thread %s finished execution.\n", thread->m_name);
 
         thread->m_tcb.state = ThreadState::TERMINATED;
 
-
         Schedular::yield();
     }
 
     Thread::Thread(EntryPoint entry, bool addToScheduler)
-        : 
-        m_impl{ new ThreadImpl(entry) }
+        : m_impl{new ThreadImpl(entry)}
     {
         if (addToScheduler)
         {
@@ -123,15 +120,14 @@ namespace Threading
         delete m_impl;
     }
 
-    TCB& Thread::getTCB()
+    TCB &Thread::getTCB()
     {
         return m_impl->m_tcb;
     }
 
-    const char* Thread::getName() const
+    const char *Thread::getName() const
     {
         return m_impl->m_name;
     }
-
 
 } // namespace Thread

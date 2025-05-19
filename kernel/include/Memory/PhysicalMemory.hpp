@@ -21,7 +21,6 @@
 
 #include <stdint.h>
 
-
 namespace Memory
 {
     namespace PhysicalMemory

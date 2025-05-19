@@ -1,8 +1,8 @@
 /**
  * @file schduler.hpp
  * @author Oguzhan KAYNAK ()
- * @brief 
- * 
+ * @brief
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -29,10 +29,10 @@ namespace Threading
 namespace Schedular
 {
     void Init();
-    void addTask(Threading::Thread& thread);
-    void switchToThread(Threading::Thread& nextThread, uint32_t indx);
+    void addTask(Threading::Thread &thread);
+    void switchToThread(Threading::Thread &nextThread, uint32_t indx);
     void yield();
 
-}// namespace Schedular
+} // namespace Schedular
 
 #endif /* E3ADD1BE_2B74_461B_B7F8_9A289895F125 */

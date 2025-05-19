@@ -9,19 +9,18 @@ typedef struct multiboot_info multiboot_info_t;
 namespace Memory
 {
     /**
-     * @brief 
-     * 
-     * @param memHigh 
-     * @param physicalAllocStart 
+     * @brief
+     *
+     * @param memHigh
+     * @param physicalAllocStart
      */
     void Init(const multiboot_info_t *bootInfo);
 
     void *VirtToPhysAddr(void *virtualaddr);
 
-    void map(void* PhysicalAddr, void* VirtualAddr);
+    void map(void *PhysicalAddr, void *VirtualAddr);
 
     void unmap(void *virtualaddr);
-    
 
 } // namespace Memory
 

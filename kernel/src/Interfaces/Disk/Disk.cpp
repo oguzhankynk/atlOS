@@ -2,7 +2,7 @@
  * @file Disk.cpp
  * @author Oguzhan KAYNAK ()
  * @brief Defines the Disk interface for low-level disk operations such as reading and writing sectors.
- * 
+ *
  * Copyright © 2024 Oguzhan KAYNAK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
@@ -16,12 +16,10 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-
 #include <Interfaces/Disk/Disk.hpp>
 #include <string.h>
 
-Disk::Disk(const char* name) noexcept
-:Device(name)
+Disk::Disk(const char *name) noexcept
+    : Device(name)
 {
-   
 }

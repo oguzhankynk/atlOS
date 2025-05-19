@@ -31,14 +31,14 @@ namespace FileSystem
 		struct FileSystemInfo
 		{
 			char name[32]{};
-			IFileSystem* fs{};
+			IFileSystem *fs{};
 		};
 
 		static constexpr uint16_t MAX_FILE_SYSTEM = 5;
 
-		static FileSystemInfo* fileSystems[MAX_FILE_SYSTEM]{};
+		static FileSystemInfo *fileSystems[MAX_FILE_SYSTEM]{};
 
-		bool AddFileSystem(IFileSystem& fs)
+		bool AddFileSystem(IFileSystem &fs)
 		{
 			int fsIndex = 0;
 
@@ -55,7 +55,7 @@ namespace FileSystem
 				return false;
 			}
 
-			auto& newFs = fileSystems[fsIndex];
+			auto &newFs = fileSystems[fsIndex];
 
 			newFs = new FileSystemInfo;
 
@@ -76,11 +76,11 @@ namespace FileSystem
 				return false;
 			}
 
-			printf("vfs: %s mounted on %s \n", newFs->name, newFs->fs->getDisk().getName() );
+			printf("vfs: %s mounted on %s \n", newFs->name, newFs->fs->getDisk().getName());
 
 			newFs->fs->printFilelist();
 
 			return true;
 		}
-	}//namespace VFS
+	} // namespace VFS
 } // namespace FileSystem

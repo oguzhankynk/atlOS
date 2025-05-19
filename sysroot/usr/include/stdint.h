@@ -166,6 +166,4 @@ typedef uint64_t uintmax_t;
  */
 typedef uint32_t uintptr_t;
 
-
-
 #endif /* BA22560F_9F55_4018_A630_CB062C833243 */
