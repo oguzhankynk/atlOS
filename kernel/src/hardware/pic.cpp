@@ -114,100 +114,98 @@ namespace PIC
         IOPort::EnableInterrupts();
     }
 
-    // Sends an end-of-interrupt (EOI) signal to the master PIC.
-    void send_master_eoi(uint8_t irq)
+    // Sends an end-of-interrupt (EOI) signal to the PIC.
+    void send_eoi(IRQ irq)
     {
-        // Send EOI to master PIC
+        
+        if (static_cast<uint8_t>(irq) >= 8)
+        {
+            // Send EOI to master PIC
+            IOPort::outportb(SLAVE_COMMAND_PORT, 0x20);
+        }
+
+        // Send EOI to slave PIC
         IOPort::outportb(MASTER_COMMAND_PORT, 0x20);
     }
 
-    // Sends an end-of-interrupt (EOI) signal to the slave PIC.
-    void send_slave_eoi(uint8_t irq)
-    {
-        // Send EOI to slave PIC
-        IOPort::outportb(SLAVE_COMMAND_PORT, 0x20);
-    }
-
     // Masks a specific interrupt request (IRQ) on the master PIC.
-    void mask_master_irq(uint8_t irq)
+    void mask_master_irq(IRQ irq)
     {
         // Read current mask
         uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
         // Set the bit for the specified IRQ to mask it
-        mask |= (1 << irq);
+        mask |= (1 << static_cast<uint8_t>(irq));
         // Write updated mask
         IOPort::outportb(MASTER_DATA_PORT, mask);
     }
 
     // Masks a specific interrupt request (IRQ) on the slave PIC.
-    void mask_slave_irq(uint8_t irq)
+    void mask_slave_irq(IRQ irq)
     {
         // Read the current interrupt mask
         uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
         // Mask the specified IRQ by setting the appropriate bit
-        mask |= (1 << irq);
+        mask |= (1 << static_cast<uint8_t>(irq));
         // Write the updated mask back to the slave PIC
         IOPort::outportb(SLAVE_DATA_PORT, mask);
     }
 
     // Unmasks a specific interrupt request (IRQ) on the master PIC.
-    void unmask_master_irq(uint8_t irq)
+    void unmask_master_irq(IRQ irq)
     {
         // Read the current interrupt mask
         uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
         // Unmask the specified IRQ by clearing the appropriate bit
-        mask &= ~(1 << irq);
+        mask &= ~(1 << static_cast<uint8_t>(irq));
         // Write the updated mask back to the master PIC
         IOPort::outportb(MASTER_DATA_PORT, mask);
     }
 
     // Unmasks a specific interrupt request (IRQ) on the slave PIC.
-    void unmask_slave_irq(uint8_t irq)
+    void unmask_slave_irq(IRQ irq)
     {
         // Read the current interrupt mask
         uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
         // Unmask the specified IRQ by clearing the appropriate bit
-        mask &= ~(1 << irq);
+        mask &= ~(1 << static_cast<uint8_t>(irq));
         // Write the updated mask back to the slave PIC
         IOPort::outportb(SLAVE_DATA_PORT, mask);
     }
 
     // Disables a specific interrupt request (IRQ).
-    void irq_disable(uint8_t irq)
+    void irq_disable(IRQ irq)
     {
-        if (irq < 8)
+        if (static_cast<uint8_t>(irq) < 8)
         {
             // IRQ is in the range of the master PIC
             uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
-            mask |= (1 << irq); // Set the bit to mask the IRQ
+            mask |= (1 << static_cast<uint8_t>(irq)); // Set the bit to mask the IRQ
             IOPort::outportb(MASTER_DATA_PORT, mask);
         }
         else
         {
             // IRQ is in the range of the slave PIC
-            irq -= 8; // Adjust IRQ number for the slave PIC
             uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
-            mask |= (1 << irq); // Set the bit to mask the IRQ
+            mask |= (1 << (static_cast<uint8_t>(irq) - 8)); // Set the bit to mask the IRQ
             IOPort::outportb(SLAVE_DATA_PORT, mask);
         }
     }
 
     // Enables a specific interrupt request (IRQ).
-    void irq_enable(uint8_t irq)
+    void irq_enable(IRQ irq)
     {
-        if (irq < 8)
+        if (static_cast<uint8_t>(irq) < 8)
         {
             // IRQ is in the range of the master PIC
             uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
-            mask &= ~(1 << irq); // Clear the bit to unmask the IRQ
+            mask &= ~(1 << static_cast<uint8_t>(irq)); // Clear the bit to unmask the IRQ
             IOPort::outportb(MASTER_DATA_PORT, mask);
         }
         else
         {
             // IRQ is in the range of the slave PIC
-            irq -= 8; // Adjust IRQ number for the slave PIC
             uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
-            mask &= ~(1 << irq); // Clear the bit to unmask the IRQ
+            mask &= ~(1 << (static_cast<uint8_t>(irq)-8)); // Clear the bit to unmask the IRQ
             IOPort::outportb(SLAVE_DATA_PORT, mask);
         }
     }

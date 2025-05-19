@@ -66,18 +66,22 @@ namespace Threading
 
         //Pointer to the stack
         // The stack grows downwards, so we need to set the stack pointer to the top of the stack
-        uintptr_t* sp = reinterpret_cast<uintptr_t*>(stack + STACK_SIZE );
-        
-        //push the first argument to the stack (the object itself)
-        --sp;  
-        *sp = reinterpret_cast<uintptr_t>(this); 
+        uint8_t* sp = stack + STACK_SIZE;
 
-        //push the return address (the next instruction after the call to threadStartPoint)
-        //return address is never used
-        --sp;  
-        *sp = reinterpret_cast<uintptr_t>(nullptr); 
-        
-        m_tcb.regs.esp = reinterpret_cast<uintptr_t>(sp);
+        auto push = [](uint8_t*& sp, auto value) {
+            using Type = decltype(value);
+            sp -= sizeof(Type);
+            *reinterpret_cast<Type*>(sp) = value;
+        };
+
+        // Push the first argument to the stack (the object itself)
+        push(sp, reinterpret_cast<uintptr_t>(this));
+
+        // Push the return address (the next instruction after the call to threadStartPoint)
+        // Return address is never used
+        push(sp, reinterpret_cast<uintptr_t>(nullptr));
+
+        m_tcb.regs.esp = reinterpret_cast<uint32_t>(sp);
     }
 
 

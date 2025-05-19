@@ -28,7 +28,7 @@
  */
 typedef void (*interrupt_handle_function)(void *);
 
-namespace Handlers 
+namespace Handlers
 {
 
     /**
@@ -42,7 +42,7 @@ namespace Handlers
      *
      * @param exception_no The Interrupt number to register the handler for.
      * @param function The function to be called when the specified exception occurs.
-     * @param Arg The argument to be passed to the registered handler function 
+     * @param Arg The argument to be passed to the registered handler function
      * @return true if the Interrupt handler was successfully registered
      * @return false otherwise
      */
@@ -50,12 +50,11 @@ namespace Handlers
 
     /**
      * @brief Call the Interrupt Handler function
-     * 
-     * @param exception_no 
+     *
+     * @param exception_no
      */
     void InterruptHandler(uint32_t exception_no);
 
-
-};//namespace Handlers 
+}; // namespace Handlers
 
 #endif /* CA54FFDF_8049_47E3_9ED3_76405AD1CF26 */

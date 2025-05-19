@@ -21,11 +21,31 @@
 
 #include <stdint.h>
 
-/**
- * @brief Namespace for interfacing with the 8259 Programmable Interrupt Controller (PIC).
- */
+ /**
+  * @brief Namespace for interfacing with the 8259 Programmable Interrupt Controller (PIC).
+  */
 namespace PIC
 {
+    // IRQ  (x86 - 8259 PIC)
+    enum class IRQ : uint8_t {
+        Timer = 0,            // IRQ0 - Sistem Timer (PIT)
+        Keyboard = 1,         // IRQ1 - Klavye
+        Cascade = 2,          // IRQ2 - PIC Cascade (Slave to Master)
+        COM2 = 3,             // IRQ3 - COM2 (Serial Port 2)
+        COM1 = 4,             // IRQ4 - COM1 (Serial Port 1)
+        LPT2 = 5,             // IRQ5 - LPT2 (Parallel Port 2)
+        Floppy = 6,           // IRQ6 - Floppy Disk Controller
+        LPT1 = 7,             // IRQ7 - LPT1 (Parallel Port 1)
+        RTC = 8,              // IRQ8 - CMOS Real-Time Clock (RTC)
+        Redirected = 9,       // IRQ9 - Free (Redirected to IRQ2)
+        Free10 = 10,          // IRQ10 - Free (Genel Kullanım)
+        Free11 = 11,          // IRQ11 - Free (Genel Kullanım)
+        PS2Mouse = 12,        // IRQ12 - PS/2 Mouse
+        FPU = 13,             // IRQ13 - FPU (Floating Point Unit) / Co-Processor
+        PrimaryATA = 14,      // IRQ14 - Primary ATA / IDE Controller
+        SecondaryATA = 15     // IRQ15 - Secondary ATA / IDE Controller
+    };
+
     /**
      * @brief Initializes the PIC8259.
      *
@@ -35,60 +55,53 @@ namespace PIC
     void Init();
 
     /**
-     * @brief Sends an end-of-interrupt (EOI) signal to the master PIC.
+     * @brief Sends an end-of-interrupt (EOI) signal to the PIC.
      *
      * @param irq Interrupt request number (IRQ) that has been serviced.
      */
-    void send_master_eoi(uint8_t irq);
-
-    /**
-     * @brief Sends an end-of-interrupt (EOI) signal to the slave PIC.
-     *
-     * @param irq Interrupt request number (IRQ) that has been serviced.
-     */
-    void send_slave_eoi(uint8_t irq);
+    void send_eoi(IRQ irq);
 
     /**
      * @brief Masks a specific interrupt request (IRQ) on the master PIC.
      *
      * @param irq Interrupt request number (IRQ) to mask.
      */
-    void mask_master_irq(uint8_t irq);
+    void mask_master_irq(IRQ irq);
 
     /**
      * @brief Masks a specific interrupt request (IRQ) on the slave PIC.
      *
      * @param irq Interrupt request number (IRQ) to mask.
      */
-    void mask_slave_irq(uint8_t irq);
+    void mask_slave_irq(IRQ irq);
 
     /**
      * @brief Unmasks a specific interrupt request (IRQ) on the master PIC.
      *
      * @param irq Interrupt request number (IRQ) to unmask.
      */
-    void unmask_master_irq(uint8_t irq);
+    void unmask_master_irq(IRQ irq);
 
     /**
      * @brief Unmasks a specific interrupt request (IRQ) on the slave PIC.
      *
      * @param irq Interrupt request number (IRQ) to unmask.
      */
-    void unmask_slave_irq(uint8_t irq);
+    void unmask_slave_irq(IRQ irq);
 
     /**
      * @brief Disables a specific interrupt request (IRQ).
      *
      * @param irq Interrupt request number (IRQ) to disable.
      */
-    void irq_disable(uint8_t irq);
+    void irq_disable(IRQ irq);
 
     /**
      * @brief Enables a specific interrupt request (IRQ).
      *
      * @param irq Interrupt request number (IRQ) to enable.
      */
-    void irq_enable(uint8_t irq);
+    void irq_enable(IRQ irq);
 
 }; // namespace PIC
 

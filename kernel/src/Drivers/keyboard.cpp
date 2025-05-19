@@ -16,7 +16,7 @@ namespace Keyboard
     {
         NULL_KEY = 0,
 
-        //MAKE Codes
+        // MAKE Codes
         A_MAKE = 0x1E,
         B_MAKE = 0x30,
         C_MAKE = 0x2E,
@@ -168,7 +168,7 @@ namespace Keyboard
     };
 
     static uint8_t ToASCII(uint8_t key);
-    static void keyboard_irq(void* Arg);
+    static void keyboard_irq(void *Arg);
     static void read_key();
 
     static KeyboardBuffer key_buffer;
@@ -182,6 +182,8 @@ namespace Keyboard
             printf("Keyboard: AddInterruptHandler error \n");
             return;
         }
+
+        PIC::irq_enable(PIC::IRQ::Keyboard); // Enable Keyboard interrupt
     }
 
     int8_t GetKey()
@@ -189,64 +191,104 @@ namespace Keyboard
         return key_buffer.getKey();
     }
 
-    static void keyboard_irq(void* Arg)
+    static void keyboard_irq(void *Arg)
     {
         key_buffer.Append(ToASCII(IOPort::inportb(0x60)));
-        PIC::send_master_eoi(33);
     }
 
     static uint8_t ToASCII(uint8_t key)
     {
         switch (key)
         {
-            // Letters
-            case A_MAKE: return 'a';
-            case B_MAKE: return 'b';
-            case C_MAKE: return 'c';
-            case D_MAKE: return 'd';
-            case E_MAKE: return 'e';
-            case F_MAKE: return 'f';
-            case G_MAKE: return 'g';
-            case H_MAKE: return 'h';
-            case I_MAKE: return 'i';
-            case J_MAKE: return 'j';
-            case K_MAKE: return 'k';
-            case L_MAKE: return 'l';
-            case M_MAKE: return 'm';
-            case N_MAKE: return 'n';
-            case O_MAKE: return 'o';
-            case P_MAKE: return 'p';
-            case Q_MAKE: return 'q';
-            case R_MAKE: return 'r';
-            case S_MAKE: return 's';
-            case T_MAKE: return 't';
-            case U_MAKE: return 'u';
-            case V_MAKE: return 'v';
-            case W_MAKE: return 'w';
-            case X_MAKE: return 'x';
-            case Y_MAKE: return 'y';
-            case Z_MAKE: return 'z';
+        // Letters
+        case A_MAKE:
+            return 'a';
+        case B_MAKE:
+            return 'b';
+        case C_MAKE:
+            return 'c';
+        case D_MAKE:
+            return 'd';
+        case E_MAKE:
+            return 'e';
+        case F_MAKE:
+            return 'f';
+        case G_MAKE:
+            return 'g';
+        case H_MAKE:
+            return 'h';
+        case I_MAKE:
+            return 'i';
+        case J_MAKE:
+            return 'j';
+        case K_MAKE:
+            return 'k';
+        case L_MAKE:
+            return 'l';
+        case M_MAKE:
+            return 'm';
+        case N_MAKE:
+            return 'n';
+        case O_MAKE:
+            return 'o';
+        case P_MAKE:
+            return 'p';
+        case Q_MAKE:
+            return 'q';
+        case R_MAKE:
+            return 'r';
+        case S_MAKE:
+            return 's';
+        case T_MAKE:
+            return 't';
+        case U_MAKE:
+            return 'u';
+        case V_MAKE:
+            return 'v';
+        case W_MAKE:
+            return 'w';
+        case X_MAKE:
+            return 'x';
+        case Y_MAKE:
+            return 'y';
+        case Z_MAKE:
+            return 'z';
 
-            // Numbers
-            case ZERO_MAKE: return '0';
-            case ONE_MAKE: return '1';
-            case TWO_MAKE: return '2';
-            case THREE_MAKE: return '3';
-            case FOUR_MAKE: return '4';
-            case FIVE_MAKE: return '5';
-            case SIX_MAKE: return '6';
-            case SEVEN_MAKE: return '7';
-            case EIGHT_MAKE: return '8';
-            case NINE_MAKE: return '9';
+        // Numbers
+        case ZERO_MAKE:
+            return '0';
+        case ONE_MAKE:
+            return '1';
+        case TWO_MAKE:
+            return '2';
+        case THREE_MAKE:
+            return '3';
+        case FOUR_MAKE:
+            return '4';
+        case FIVE_MAKE:
+            return '5';
+        case SIX_MAKE:
+            return '6';
+        case SEVEN_MAKE:
+            return '7';
+        case EIGHT_MAKE:
+            return '8';
+        case NINE_MAKE:
+            return '9';
 
-            // Special Characters
-            case SPACE_MAKE: return ' ';
-            case ENTER_MAKE: return '\n';
-            case TAB_MAKE: return '\t';
-            case ESC_MAKE: return 27; // ASCII for ESC
+        // Special Characters
+        case SPACE_MAKE:
+            return ' ';
+        case ENTER_MAKE:
+            return '\n';
+        case TAB_MAKE:
+            return '\t';
+        case ESC_MAKE:
+            return 27; // ASCII for ESC
 
-            // Other special characters could be added similarly
-            default: return '\0'; // Null character for unhandled cases
+        // Other special characters could be added similarly
+        default:
+            return '\0'; // Null character for unhandled cases
         }
     }
 
@@ -278,7 +320,6 @@ namespace Keyboard
         }
 
         return c;
-
     }
 
 }; // namespace Keyboard

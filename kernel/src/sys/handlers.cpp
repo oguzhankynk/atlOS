@@ -21,7 +21,9 @@
 #include <kernel/sys/handlers.hpp>
 
 #include <stdio.h>
+
 #include <arch/i386/IDT/idt.hpp>
+#include <hardware/pic.hpp>
 
 namespace Handlers
 {
@@ -83,8 +85,12 @@ namespace Handlers
 
         auto fn = FUNCS[exception_no];
         auto arg = ARGS[exception_no];
-
         fn(arg);
+
+        // Send EOI if exception_no is in the range of IRQs (32-47)
+        if (exception_no >= 32 && exception_no < 48) {
+            PIC::send_eoi(static_cast<PIC::IRQ>(exception_no - 32));
+        }
     }
 
 }; // namespace Handlers
