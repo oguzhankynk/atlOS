@@ -65,7 +65,7 @@ extern "C" void kernelMain(uint32_t multiboot_bootloader_magic, uint32_t multibo
 
     DeviceManager::Init();
 
-    // Schedular::Init();
+    Schedular::Init();
 
     printf("end of kernel \n");
 

@@ -52,19 +52,14 @@ namespace Schedular
     public:
         ThreadList()
         {
-            auto mainThread = new Node();
-            mainThread->thread = new Threading::Thread(nullptr, false);
+            auto idleThread = new Node();
+            idleThread->thread = new Threading::Thread(idleThreadFunction, false);
 
-            m_head = mainThread;
-            m_tail = mainThread;
-            m_current = mainThread;
+            m_head = idleThread;
+            m_tail = idleThread;
+            m_current = idleThread;
             m_tail->next = m_head;
-
-            auto idleThread = new Threading::Thread(idleThreadFunction, false);
-
             m_threadCount = 1;
-
-            addThread(*idleThread);
         }
 
         void addThread(Threading::Thread &thread)
@@ -121,6 +116,9 @@ namespace Schedular
         void controlThreads()
         {
             Node *current = m_head;
+
+            printf("controlThreads: Thread count: %d\n", m_threadCount);
+
             for (uint32_t i = 0; i < m_threadCount; ++i)
             {
                 if (current->thread->getTCB().state == Threading::ThreadState::TERMINATED)
@@ -129,27 +127,43 @@ namespace Schedular
                     removeThread(*current->thread);
                     delete current->thread; // Free the thread object
                 }
+
                 current = current->next;
             }
-            printf("Thread count: %d\n", m_threadCount);
+        }
+
+        Node *getCurrentThread()
+        {
+            return m_current;
         }
     };
-
+ 
     static ThreadList *threadList = nullptr;
+
+    static void sleep(uint32_t ms)
+    {
+        for (uint32_t i = 0; i < ms * 1000; ++i)
+        {
+            asm volatile("nop");
+        }
+    }
 
     static void idleThreadFunction()
     {
         while (1)
         {
-            printf("idleThreadFunction!"); // Not implemented here...
+            printf("idleThreadFunction!\n"); // Not implemented here...
             threadList->controlThreads();
             yield();
+            sleep(10000000);
         }
     }
 
-    void initTasking()
+    void helloWorldThreadFunction()
     {
-        threadList = new ThreadList();
+        printf("Hello from helloWorldThreadFunction!\n");
+        yield();
+        printf("Hello again from helloWorldThreadFunction!\n");
     }
 
     void yield()
@@ -160,35 +174,17 @@ namespace Schedular
         switchTask(&last->thread->getTCB().regs, &nextThread->thread->getTCB().regs);
     }
 
-    void helloWorldThreadFunction()
-    {
-        printf("Hello from helloWorldThreadFunction!\n");
-        yield();
-        printf("Hello again from helloWorldThreadFunction!\n");
-    }
-
     void Init()
     {
-        initTasking();
+        threadList = new ThreadList();
 
-        printf(" mainTask0!\n");
-        yield();
-
-        printf("Returned to mainTask1!\n");
+        auto idleThread = threadList->getCurrentThread();
 
         auto newThread = new Threading::Thread(helloWorldThreadFunction, false);
         addTask(*newThread);
 
-        yield();
-        printf("Returned to mainTask2!\n");
-
-        yield();
-
-        printf("Returned to mainTask3!\n");
-
-        yield();
-
-        printf("Returned to mainTask4!\n");
+        Threading::Registers temp;
+        switchTask(&temp, &idleThread->thread->getTCB().regs);
     }
 
     void addTask(Threading::Thread &thread)

@@ -165,6 +165,6 @@ namespace DeviceManager
 
         detectATADevices();
 
-        PIT::init(100000000000, picHander); // 1ms
+        // PIT::init(100000000000, picHander); // 1ms
     }
 } // namespace DeviceManager
