@@ -25,6 +25,7 @@
 #include "kernel/assert.h"
 #include <kernel/Logger.hpp>
 #include <Memory/KHeap.h>
+#include <hardware/pit.hpp>
 
 extern "C" void switchTask(Threading::Registers *old_regs, Threading::Registers *new_regs); // The function which actually switches
 
@@ -137,7 +138,7 @@ namespace Schedular
             return m_current;
         }
     };
- 
+
     static ThreadList *threadList = nullptr;
 
     static void sleep(uint32_t ms)
@@ -148,22 +149,35 @@ namespace Schedular
         }
     }
 
+    static void picHandler(void *args)
+    {
+        // printf("PIC Handler called!\n");
+        yield();
+    }
+
     static void idleThreadFunction()
     {
+        PIT::init(100000000000, picHandler); // 1ms
+
         while (1)
         {
             printf("idleThreadFunction!\n"); // Not implemented here...
             threadList->controlThreads();
-            yield();
+            // yield();
             sleep(10000000);
         }
     }
 
     void helloWorldThreadFunction()
     {
-        printf("Hello from helloWorldThreadFunction!\n");
-        yield();
-        printf("Hello again from helloWorldThreadFunction!\n");
+        int i = 0;
+        while (true)
+        {
+            printf("Hello from helloWorldThreadFunction %d!\n", i);
+            printf("Hello again from helloWorldThreadFunction %d!\n", i);
+            i++;
+            sleep(10000000);
+        }
     }
 
     void yield()

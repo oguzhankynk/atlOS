@@ -38,7 +38,7 @@ namespace Handlers
      */
     static void DEFAULT_HANDLER_FUNCTION(void *param)
     {
-        printf("DEFAULT_HANDLER_FUNCTION \n");
+        printf("DEFAULT_HANDLER_FUNCTION: %d \n", (uint32_t)param);
     }
 
     /**
@@ -49,7 +49,7 @@ namespace Handlers
     {
         for (auto i = 0; i < IDT::IDT_TABLE_LEN; i++)
         {
-            AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, nullptr);
+            AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, (void *)i);
         }
     }
 
@@ -83,15 +83,14 @@ namespace Handlers
         if (exception_no >= IDT::IDT_TABLE_LEN)
             return;
 
-        auto fn = FUNCS[exception_no];
-        auto arg = ARGS[exception_no];
-        fn(arg);
-
         // Send EOI if exception_no is in the range of IRQs (32-47)
         if (exception_no >= 32 && exception_no < 48)
         {
             PIC::send_eoi(static_cast<PIC::IRQ>(exception_no - 32));
         }
+        auto fn = FUNCS[exception_no];
+        auto arg = ARGS[exception_no];
+        fn(arg);
     }
 
 }; // namespace Handlers

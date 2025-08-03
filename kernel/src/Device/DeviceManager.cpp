@@ -28,7 +28,7 @@
 #include <string.h>
 
 #include <hardware/pic.hpp>
-#include <hardware/pit.hpp>
+
 #include <Interfaces/serial.hpp>
 #include <Interfaces/Disk/ATA.hpp>
 #include <Drivers/keyboard.hpp>
@@ -148,11 +148,6 @@ namespace DeviceManager
         }
     }
 
-    void picHander(void *args)
-    {
-        printf("PIC interrupt \n");
-    }
-
     void Init()
     {
         PIC::Init();
@@ -164,7 +159,5 @@ namespace DeviceManager
         printf("stat_serial_init: %d \n", stat_serial_init);
 
         detectATADevices();
-
-        // PIT::init(100000000000, picHander); // 1ms
     }
 } // namespace DeviceManager

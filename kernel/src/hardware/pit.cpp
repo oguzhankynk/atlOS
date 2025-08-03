@@ -116,12 +116,6 @@ namespace PIT
         }
     };
 
-    static void pitHandler(void *args)
-    {
-        static uint32_t count = 0;
-        // printf("PIT interruptaaaaaaaaaaaaaaaa : %d \n", count++);
-    }
-
     /**
      * @brief Initializes the PIT8253/8254 with the desired settings.
      *
