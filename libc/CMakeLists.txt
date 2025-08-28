@@ -14,8 +14,7 @@ project(atlOS_libk)
 
 # Define C++ compiler flags for the project
 SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include \
--std=c++17  -ffreestanding -Wall -Wextra  -Wall -Wno-unused-variable -Wno-unused-function\
--D__is_libc -D__is_libk ")
+-std=c++17  -ffreestanding -mcmodel=large -Wall -O0 -g -Wextra  -Wall -Wno-unused-variable -Wno-unused-function")
 
 # Recursively find all .cpp source files in stdio, stdlib, and string directories
 file(GLOB_RECURSE SOURCES
@@ -35,6 +34,13 @@ include_directories(
 
 # Create a static library 'k' using the found sources
 add_library(k STATIC  ${SOURCES})
+
+target_compile_definitions(k PRIVATE
+    __ATLOS__
+    __x86_64__
+    __is_libk
+    __is_libc
+)
 
 SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> rcs  <TARGET> <LINK_FLAGS> <OBJECTS>")
 SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> rcs  <TARGET> <LINK_FLAGS> <OBJECTS>")
