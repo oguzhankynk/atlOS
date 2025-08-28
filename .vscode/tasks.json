@@ -11,7 +11,6 @@
             },
             "problemMatcher": []
         },
-
         {
             "label": "Compile",
             "type": "shell",
@@ -20,39 +19,49 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "dependsOn": [
+                "Clear"
+            ]
         },
-
         {
             "label": "Create ISO",
             "type": "shell",
             "command": "./run.sh iso",
             "group": "build",
-            "problemMatcher": []
+            "problemMatcher": [],
+            "dependsOn": [
+                "Compile"
+            ]
         },
-
         {
             "label": "Run",
             "type": "shell",
-            "command": "./run.sh iso run",
+            "command": "./run.sh run",
             "group": {
                 "kind": "test",
                 "isDefault": true
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "dependsOn": [
+                "Create ISO"
+            ]
         },
-
         {
-            "label": "Build & Run",
+            "label": "Run QEMU Debug",
             "type": "shell",
-            "command": "./run.sh clean build-all iso run",
-            "group": {
-                "kind": "test",
-                "isDefault": false
-            },
+            "isBackground": true,
+            "command": "qemu-system-x86_64 -cdrom isodir/atlOS.iso -serial stdio -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s"
+        },
+        {
+            "label": "Debug AtlOS",
+            "dependsOn": [
+                "Create ISO",
+                "Run QEMU Debug"
+            ],
+            "dependsOrder": "sequence",
             "problemMatcher": []
         },
-
         {
             "label": "Create Disk Image (FAT16)",
             "type": "shell",
@@ -60,6 +69,5 @@
             "group": "build",
             "problemMatcher": []
         }
-
     ]
 }

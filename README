@@ -1,0 +1,46 @@
+# atlOS
+
+atlOS is an experimental operating system project designed for educational and research purposes. It aims to provide a minimal, modular, and understandable OS architecture for hobbyists and developers interested in OS development.
+
+## Features
+- Minimal kernel with modular components
+- Basic process and memory management
+- Simple file system support
+- Command-line shell interface
+- Educational codebase with clear structure
+
+## Getting Started
+
+### Prerequisites
+- QEMU or another x86 emulator (**QEMU 6.2.0** recommended)
+- **CMake**
+- **Cross-compiler toolchain** (x86_64-elf-gcc, GNU ld)
+
+#### Cross-Compiler Requirement
+atlOS requires a cross-compiler for building. The recommended toolchain versions are:
+- GNU ld (GNU Binutils for Ubuntu) 2.38
+- x86_64-elf-gcc (GCC) 13.2.0
+- GNU Make 4.3
+
+For detailed information and installation instructions, see: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.org/GCC_Cross-Compiler)
+
+### Building atlOS
+You can build and run atlOS on QEMU using the provided script:
+```sh
+./run.sh clean build-all iso run
+```
+
+
+Or boot from the generated ISO on real hardware (not recommended for production use).
+
+## Project Structure
+- `kernel/` - Core kernel source code
+- `boot/` - Bootloader and startup code
+- `fs/` - File system implementation
+- `docs/` - Documentation
+
+## Contributing
+Contributions are welcome! Please open issues or submit pull requests for improvements, bug fixes, or new features.
+
+## License
+This project is licensed under the MIT License. See the LICENSE file for details.

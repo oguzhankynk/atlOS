@@ -39,7 +39,7 @@ done
 
 for arg in "$@"; do
     if [ "$arg" == "run" ]; then
-        ./qemu.sh i386
+        ./qemu.sh 
         break
     fi
 done

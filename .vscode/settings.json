@@ -21,6 +21,5 @@
     "doxdocgen.generic.commandSuggestionAddPrefix": true,
     "debug.onTaskErrors": "debugAnyway",
     "format": "hex",
-    "C_Cpp.default.compilerPath": "/home/oguzhan/opt/cross/bin/i686-elf-gcc",
-
+    "C_Cpp.default.compilerPath": "/home/oguzhan/opt/cross/bin/x86_64-elf-gcc",
 }
