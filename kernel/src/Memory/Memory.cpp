@@ -27,7 +27,7 @@ namespace Memory
      */
     void Init(const multiboot_info_t *bootInfo)
     {
-        printf("Kernel virt: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&_kernel_start, (uint32_t)&_kernel_end);
+        printf("Kernel virt: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&kernel_virtual_start, (uint32_t)&kernel_virtual_end);
         printf("Kernel  phy: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&kernel_physical_start, (uint32_t)&kernel_physical_end);
 
         PhysicalMemory::Init();

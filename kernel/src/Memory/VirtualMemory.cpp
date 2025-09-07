@@ -283,7 +283,7 @@ namespace Memory
         static uint32_t FindContiguousFreePages(size_t num_pages)
         {
             uint32_t start_pdindex = PAGE_INDEX((void *)KERNEL_LOAD_ADDR) / PAGE_TABLE_SIZE;
-            uint32_t end_pdindex = PAGE_INDEX(&_kernel_end) / PAGE_TABLE_SIZE;
+            uint32_t end_pdindex = PAGE_INDEX(&kernel_virtual_end) / PAGE_TABLE_SIZE;
 
             LOG_MSG(INF_LOG, "VMM: Find Free Pages: num_pages: %u start_pdindex:%u end_pdindex:%u \n", num_pages, start_pdindex, end_pdindex);
 

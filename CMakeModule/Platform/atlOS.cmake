@@ -3,8 +3,7 @@
 # Operating system name
 set(CMAKE_SYSTEM_NAME atlOS)
 
-# Operating system architecture
-set(CMAKE_SYSTEM_PROCESSOR i686)
+
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY") 
 

@@ -22,7 +22,7 @@
 
 #include <stdio.h>
 
-#include <arch/i386/IDT/idt.hpp>
+#include <arch/x86_64/IDT/idt.hpp>
 #include <hardware/pic.hpp>
 
 namespace Handlers

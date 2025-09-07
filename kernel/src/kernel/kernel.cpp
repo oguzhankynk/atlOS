@@ -21,56 +21,129 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+
 #include <stdio.h>
-#include <string.h>
-
-#include <arch/i386/GDT/gdt.hpp>
-#include <arch/i386/IDT/idt.hpp>
-
+#include <inttypes.h>
 #include <kernel/tty.h>
-#include <kernel/BIOS/BIOS.h>
-#include <kernel/sys/multiboot.h>
-#include <kernel/sys/IOPort.hpp>
-#include <kernel/panic.h>
-#include <kernel/banner.h>
 
-#include <Device/DeviceManager.hpp>
-#include <Memory/Memory.hpp>
-#include <Memory/PhysicalMemory.hpp>
-#include <Memory/KHeap.h>
+struct myStruct
+{
+    void print()
+    {
+        printf("MyStruct::print() called\n");
+    }
+    myStruct(const char *str)
+    {
+        printf("MyStruct constructor called:%s\n", str);
+    }
+};
+struct myStruct2
+{
+    int x;
+};
+struct myStruct3
+{
+    int x{4};
+};
 
-#include <Schduler/schduler.hpp>
+myStruct glob{"global1"};
+myStruct glob2{"global2"};
+//  myStruct glob2{};
+//  myStruct glob3{};
+
+// myStruct2 glob4{};
+// myStruct2 glob5{3};
+//   myStruct2 glob6{};
+
+// myStruct3 glob7;
+
+typedef void (*ctor_t)();
+extern "C"
+{
+    extern uint8_t _boottext_start;
+    extern uint8_t _boottext_end;
+    extern uint8_t _bootrodata_start;
+    extern uint8_t _bootrodata_end;
+    extern uint8_t _bootdata_start;
+    extern uint8_t _bootdata_end;
+    extern uint8_t _bootbss_start;
+    extern uint8_t _bootbss_end;
+
+    extern uint8_t _text_start;
+    extern uint8_t _text_end;
+    extern uint8_t _rodata_start;
+    extern uint8_t _rodata_end;
+    extern uint8_t _data_start;
+    extern uint8_t _data_end;
+    extern uint8_t _bss_start;
+    extern uint8_t _bss_end;
+
+    extern uint8_t __init_array_start;
+    extern uint8_t __init_array_end;
+    extern uint8_t __fini_array_start;
+    extern uint8_t __fini_array_end;
+
+    extern void (*__ctors_start[])(void);
+    extern void (*__ctors_end[])(void);
+
+    extern uint8_t kernel_virtual_start;
+    extern uint8_t kernel_virtual_end;
+
+    extern uint8_t kernel_physical_start;
+    extern uint8_t kernel_physical_end;
+}
+
+void print_segment_addresses()
+{
+    printf("=== Boot Segments ===\n");
+    printf("_boottext: %p - %p, size: 0x%X\n", &_boottext_start, &_boottext_end, &_boottext_end - &_boottext_start);
+    printf("_bootrodata: %p - %p, size: 0x%X\n", &_bootrodata_start, &_bootrodata_end, &_bootrodata_end - &_bootrodata_start);
+    printf("_bootdata: %p - %p, size: 0x%X\n", &_bootdata_start, &_bootdata_end, &_bootdata_end - &_bootdata_start);
+    printf("_bootbss: %p - %p, size: 0x%X\n", &_bootbss_start, &_bootbss_end, &_bootbss_end - &_bootbss_start);
+
+    printf("\n=== Kernel Segments (VMA) ===\n");
+    printf("_text: %p - %p, size: 0x%X\n", &_text_start, &_text_end, &_text_end - &_text_start);
+    printf("_rodata: %p - %p, size: 0x%X\n", &_rodata_start, &_rodata_end, &_rodata_end - &_rodata_start);
+    printf("_data: %p - %p, size: 0x%X\n", &_data_start, &_data_end, &_data_end - &_data_start);
+    printf("_bss: %p - %p, size: 0x%X\n", &_bss_start, &_bss_end, &_bss_end - &_bss_start);
+
+    printf("__init_array: %p - %p, size: 0x%X\n", &__init_array_start, &__init_array_end, &__init_array_end - &__init_array_start);
+    printf("__fini_array: %p - %p, size: 0x%X\n", &__fini_array_start, &__fini_array_end, &__fini_array_end - &__fini_array_start);
+    printf("__ctors: %p - %p, size: 0x%zx\n",
+           (void *)__ctors_start,
+           (void *)__ctors_end,
+           (size_t)(__ctors_end - __ctors_start));
+
+    printf("\n=== Kernel Start/End ===\n");
+    printf("kernel_virtual_start: %llu, kernel_virtual_end: %llu, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);
+
+    printf("\n=== Kernel Physical ===\n");
+    printf("kernel_physical_start: %p, kernel_physical_end: %p, size: 0x%X\n", (uint64_t)&kernel_physical_start, (uint64_t)&kernel_physical_end, (uint64_t)&kernel_physical_end - (uint64_t)&kernel_physical_start);
+}
 
 /**
  * @brief entry point of atlOS
  *
  */
-extern "C" void kernelMain(uint32_t multiboot_bootloader_magic, uint32_t multiboot_info_addr)
+extern "C" void kernelMain()
 {
 
     terminal_initialize();
 
-    atlOSBanner();
+    printf("%s\n", "Welcome to atlOS!");
 
-    GDT::Init();
+    print_segment_addresses();
 
-    IDT::Init();
-
-    if (multiboot_bootloader_magic != MULTIBOOT_BOOTLOADER_MAGIC)
+    for (auto ctor = __ctors_start; ctor < __ctors_end; ++ctor)
     {
-        kernel_panic("magic number is invalid.");
+        if ((*ctor == (void (*)(void))-1) || (*ctor == (void (*)(void))0))
+            continue;
+        (*ctor)();
     }
 
-    Memory::Init((multiboot_info_t *)multiboot_info_addr);
-
-    DeviceManager::Init();
-
-    Schedular::Init();
-
-    printf("end of kernel \n");
+    myStruct local1{"local1"};
 
     while (1)
-    {
-        asm volatile("hlt");
-    }
+        ;
+    return;
 }

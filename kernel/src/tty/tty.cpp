@@ -28,8 +28,8 @@
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
-// static volatile uint16_t* VGA_MEMORY = (volatile uint16_t*) 0xB8000; //Paging disable
-static volatile uint16_t *const VGA_MEMORY = (volatile uint16_t *)0xC03FF000; // Paging enable
+static volatile uint16_t *VGA_MEMORY = (volatile uint16_t *)0xB8000; // Paging disable
+// static volatile uint16_t *const VGA_MEMORY = (volatile uint16_t *)0xC03FF000; // Paging enable
 
 static size_t terminal_row;
 static size_t terminal_column;

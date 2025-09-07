@@ -29,7 +29,7 @@ namespace Memory
      * This variable is defined at linker.ld and represents the start address of
      * the kernel in virtual memory.
      */
-    extern "C" uint32_t _kernel_start;
+    extern "C" uint32_t kernel_virtual_start;
 
     /**
      * @brief End address of the kernel.
@@ -37,7 +37,7 @@ namespace Memory
      * This variable is defined at linker.ld and represents the end address of
      * the kernel in virtual memory.
      */
-    extern "C" uint32_t _kernel_end;
+    extern "C" uint32_t kernel_virtual_end;
 
     /**
      * @brief Physical start address of the kernel.
