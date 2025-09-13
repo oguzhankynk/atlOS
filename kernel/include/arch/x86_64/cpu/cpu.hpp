@@ -161,42 +161,54 @@ enum class SegmentSelect : uint16_t
 
     KERNELDATA = 0x10, ///< Kernel data segment selector.
 
-    USERCODE = 0x23, ///< User code segment selector.
+    USERCODE = 0x1b, ///< User code segment selector.
 
-    USERDATA = 0x1b, ///< User data segment selector.
+    USERDATA = 0x23, ///< User data segment selector.
 
     TSS = 0x28 ///< Task State Segment (TSS) selector.
 };
 
-/// @brief Structure representing the state of x86 registers at exception time.
-struct X86ExceptionInfo
+/// @brief Structure representing the state of x86_64 registers at exception/interrupt time.
+struct X86_64ExceptionInfo
 {
-    uint32_t ds;  ///< Data segment
-    uint32_t edi; ///< Extended Destination Index register
-    uint32_t esi; ///< Extended Source Index register
-    uint32_t ebp; ///< Extended Base Pointer register
-    uint32_t esp; ///< Extended Stack Pointer register
-    uint32_t ebx; ///< Extended Base register
-    uint32_t edx; ///< Extended Data register
-    uint32_t ecx; ///< Extended Counter register
-    uint32_t eax; ///< Extended Accumulator register
+    // General-purpose registers (64-bit)
+    uint64_t r15;
+    uint64_t r14;
+    uint64_t r13;
+    uint64_t r12;
+    uint64_t r11;
+    uint64_t r10;
+    uint64_t r9;
+    uint64_t r8;
+    uint64_t rsi;
+    uint64_t rdi;
+    uint64_t rbp;
+    uint64_t rdx;
+    uint64_t rcx;
+    uint64_t rbx;
+    uint64_t rax;
 
-    uint32_t int_no;   ///< Interrupt number or exception code
-    uint32_t err_code; ///< Error code (if applicable)
+    // Interrupt number and error code
+    uint64_t int_no;
+    uint64_t err_code;
 
-    uint32_t eip, cs, eflags, u_esp, ss; ///< Other registers
+    // Pushed automatically by CPU on interrupt/exception
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
 
-    /**
-     * @brief print register's status.
-     *
-     */
     void print() const
     {
-        printf("REGISTERS:\n");
-        printf("err_code=0x%x int_no=0x%x\n", err_code, int_no);
-        printf("eax=0x%x, ebx=0x%x, ecx=0x%x, edx=0x%x\n", eax, ebx, ecx, edx);
-        printf("esi=0x%x, edi=0x%x, ebp=0x%x, esp=0x%x\n", esi, edi, ebp, esp);
-        printf("eip=0x%x, cs=0x%x, eflags=0x%x, ss=0x%x ds=0x%x u_esp=0x%x\n", eip, cs, eflags, ss, ds, u_esp);
+        printf("EXCEPTION/INTERRUPT INFO (x86_64):\n");
+        printf("int_no=0x%lx err_code=0x%lx\n", int_no, err_code);
+        printf("RAX=0x%lx RBX=0x%lx RCX=0x%lx RDX=0x%lx\n", rax, rbx, rcx, rdx);
+        printf("RSI=0x%lx RDI=0x%lx RBP=0x%lx\n", rsi, rdi, rbp);
+        printf("R8=0x%lx R9=0x%lx R10=0x%lx R11=0x%lx\n", r8, r9, r10, r11);
+        printf("R12=0x%lx R13=0x%lx R14=0x%lx R15=0x%lx\n", r12, r13, r14, r15);
+        printf("RIP=0x%lx CS=0x%lx RFLAGS=0x%lx RSP=0x%lx SS=0x%lx\n",
+               rip, cs, rflags, rsp, ss);
     }
 };
 

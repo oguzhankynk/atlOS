@@ -92,7 +92,9 @@ namespace GDT
          // G=1       : 4 KB granularity
          0xFFFF, 0x0000, 0x00, 0xF2, 0xA0, 0x00
 
-        }};
+        }
+
+    };
 
     extern "C"
     {

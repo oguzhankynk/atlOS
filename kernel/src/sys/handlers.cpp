@@ -38,7 +38,7 @@ namespace Handlers
      */
     static void DEFAULT_HANDLER_FUNCTION(void *param)
     {
-        printf("DEFAULT_HANDLER_FUNCTION: %d \n", (uint32_t)param);
+        printf("DEFAULT_HANDLER_FUNCTION: %x \n", (uintptr_t)param);
     }
 
     /**
@@ -49,7 +49,7 @@ namespace Handlers
     {
         for (auto i = 0; i < IDT::IDT_TABLE_LEN; i++)
         {
-            AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, (void *)i);
+            AddInterruptHandler(i, (interrupt_handle_function)DEFAULT_HANDLER_FUNCTION, reinterpret_cast<void *>(i));
         }
     }
 

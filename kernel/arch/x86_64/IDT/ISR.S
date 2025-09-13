@@ -1,78 +1,135 @@
 .section .text
-.extern int_handler /**< Declares an external function, exception_handler, */
+.extern int_handler    /* C/C++ exception handler symbol */
 
-.macro INT_DEFINATION NO HANDLER
-    .global INT_\NO /**< Define the exception handler for exception number NO as a global symbol. */
+/* 
+ * INT_DEFINITION NO HANDLER
+ *  - NO: interrupt/vector number
+ *  - HANDLER: label/name of C handler to call (expects pointer in RDI)
+ *
+ * This macro:
+ *  - pushes error code (if exception does not supply one) and the vector number
+ *  - saves general registers (rax..r15)
+ *  - sets DS/ES/FS/GS to kernel data selector (0x10) for flat model
+ *  - aligns stack so that `call` obeys SystemV ABI: RSP % 16 == 8 before CALL
+ *  - calls the handler with RDI = pointer to the stack frame
+ *  - restores stack and registers, then iretq
+ *
+ * Note: r12 is used as temporary to hold pad value. r12 was saved on stack earlier,
+ * so it is safe to clobber here and rely on the later `popq` to restore original r12.
+ */
+.macro INT_DEFINITION NO HANDLER
+    .global INT_\NO
     .align 4
+INT_\NO:
 
-    INT_\NO:
+    /* If the exception does NOT push an error code, push a dummy 0 */
+    .if !(\NO == 8 || (\NO >= 10 && \NO <= 14) || \NO == 17 || \NO == 21)
+        pushq $0
+    .endif
 
-        .if !(\NO == 8 || (\NO >= 10 && \NO <= 14) || \NO == 17 || \NO == 21)
-            pushl $0
-            /**< If the exception don't push error code, push 0  */
-        .endif
+    /* Push exception/vector number */
+    pushq $\NO
 
-        pushl $\NO /**< Push the exception number NO onto the stack. */
+    /* Save general-purpose registers (caller-saved + callee-saved) */
+    pushq %rax
+    pushq %rbx
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %rbp
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
 
-        pusha /**< Push the values of all general-purpose registers onto the stack (eax, ebx, ecx, edx, ebp, esp, esi, edi). */
+    /* Load kernel data selector into segment registers (flat model) */
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
 
-        xor %eax, %eax         /**<push ds*/
-        mov %ds, %ax 
-        push %eax
+    /* ---- Stack alignment before calling C handler ----
+       Compute pad = ((RSP & 0xF) - 8) & 0xF
+       Then do: sub pad, %rsp  so that RSP % 16 == 8 before CALL
+       Save pad in r12 (which was pushed above), so we can restore after call.
+    */
+    mov %rsp, %rax
+    and $0xF, %rax            /* rax = rsp & 0xF */
+    sub $8, %rax              /* rax = (rsp & 0xF) - 8 */
+    and $0xF, %rax            /* rax = ((rsp & 0xF) - 8) & 0xF  -> pad */
+    mov %rax, %r12            /* r12 = pad (r12 previously pushed, so safe) */
+    sub %r12, %rsp            /* adjust RSP by pad */
 
-        mov $0x10 , %ax         /**<kernel data segment*/
-        mov %ax, %ds
-        mov %ax, %es
-        mov %ax, %fs
-        mov %ax, %gs
+    /* Pass pointer to current stack-frame (RSP) in RDI (first arg) */
+    mov %rsp, %rdi
 
-        push %esp  /**< Call by pointer */
+    /* Call the C handler */
+    call \HANDLER
 
-        call \HANDLER /**< Call the exception handler specified by HANDLER. */
+    /* restore stack adjustment: add pad back */
+    add %r12, %rsp
 
-        pop %eax  /**< Pop the esp  */
+    /* Restore segment registers (optional for flat model; harmless) */
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
 
-        pop %eax            /**<pop old segment*/
-        mov %ax, %ds 
-        mov %ax, %es 
-        mov %ax, %fs 
-        mov %ax, %gs 
+    /* Restore general-purpose registers in reverse order of push */
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbp
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rbx
+    popq %rax
 
-        popa /**< Pop the general-purpose registers from the stack (eax, ebx, ecx, edx, ebp, esp, esi, edi). */
+    /* Pop exception number and error code (if any) */
+    popq %rax    /* exception number */
+    popq %rax    /* error code */
 
-        pop %eax  /**< Pop the exception number  */
-        pop %eax  /**< Pop the error no  */
-
-        sti /**< Set the interrupt flag to re-enable interrupts. */
-        iret /**< Return from interrupt, restoring the state of the interrupted program. */
+    sti
+    iretq
 .endm
 
 
+/* Generate handlers (same coverage as your original) */
 .altmacro
     .set i, 0
-    .rept 9      
-        INT_DEFINATION %i int_handler      
+    .rept 9
+        INT_DEFINITION %i int_handler
         .set i, i + 1
     .endr
 
-.altmacro
     .set i, 10
-    .rept 5      
-        INT_DEFINATION %i int_handler      
+    .rept 5
+        INT_DEFINITION %i int_handler
         .set i, i + 1
-.endr
+    .endr
 
-.altmacro
     .set i, 16
-    .rept 6     
-        INT_DEFINATION %i int_handler      
+    .rept 6
+        INT_DEFINITION %i int_handler
         .set i, i + 1
-.endr
+    .endr
 
-.altmacro
     .set i, 32
-    .rept 224      
-        INT_DEFINATION %i int_handler      
+    .rept 224
+        INT_DEFINITION %i int_handler
         .set i, i + 1
-.endr
- 
+    .endr

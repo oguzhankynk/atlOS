@@ -51,7 +51,12 @@ file(GLOB_RECURSE KERNEL_FILES
     src/Memory/Memory.cpp
     src/banner/banner.cpp
     src/cxx/init.cpp
+    src/sys/handlers.cpp
+    src/sys/IOPort.cpp
+    src/hardware/pic.cpp
     ${ARCHDIR}/GDT/gdt.cpp
+    ${ARCHDIR}/IDT/idt.cpp
+    ${ARCHDIR}/IDT/ISR.S
 )
 
 # Print the list of found objects

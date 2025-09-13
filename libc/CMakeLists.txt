@@ -16,6 +16,7 @@ project(atlOS_libk)
 SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include \
 -std=c++17  -Wall -O0 -g -Wextra  -Wno-unused-variable -Wno-unused-function \
  -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic \
+-fno-unwind-tables -fno-asynchronous-unwind-tables \
  -mcmodel=large -mno-red-zone ")
 
 # Recursively find all .cpp source files in stdio, stdlib, and string directories

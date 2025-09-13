@@ -35,6 +35,8 @@
 
 #include <cxx/init.hpp>
 
+#include <arch/x86_64/IDT/idt.hpp>
+
 struct myStruct
 {
     void print()
@@ -84,6 +86,12 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     }
 
     Memory::Init(mbInfo);
+
+    IDT::Init();
+    
+    __asm__ volatile(
+        "int $0" // CPU interrupt 0
+    );
 
     while (1)
         ;

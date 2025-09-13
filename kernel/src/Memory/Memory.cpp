@@ -33,17 +33,14 @@ namespace Memory
         printf("_data: %p - %p, size: 0x%X\n", &_data_start, &_data_end, &_data_end - &_data_start);
         printf("_bss: %p - %p, size: 0x%X\n", &_bss_start, &_bss_end, &_bss_end - &_bss_start);
 
-        printf("__init_array: %p - %p, size: 0x%X\n", &__init_array_start, &__init_array_end, &__init_array_end - &__init_array_start);
-        printf("__fini_array: %p - %p, size: 0x%X\n", &__fini_array_start, &__fini_array_end, &__fini_array_end - &__fini_array_start);
-
         printf("__ctors: %p - %p, size: 0x%zx\n",
                (void *)__ctors_start,
                (void *)__ctors_end,
-               (size_t)(__ctors_end - __ctors_start));
+               (uintptr_t)__ctors_end - (uintptr_t)__ctors_start);
         printf("__dtors: %p - %p, size: 0x%zx\n",
                (void *)__dtors_start,
                (void *)__dtors_end,
-               (size_t)(__ctors_end - __dtors_start));
+               (uintptr_t)__dtors_end - (uintptr_t)__dtors_start);
 
         printf("\n=== Kernel Start/End ===\n");
         printf("kernel_virtual_start: %llu, kernel_virtual_end: %llu, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);

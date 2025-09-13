@@ -5,22 +5,25 @@ ENTRY(_start)
 
 SECTIONS
 {
+    /* Kernel physical start */
     . = KERNEL_PHYSICAL_START;
 
-    /* Boot bölümleri */
+    /* Boot sections */
     .boottext :
     {
         _boottext_start = .;
         *(.bootmultiboot)
         *(.boottext)
         _boottext_end = .;
-    }
+        . = ALIGN(0x1000);
+    }  
 
     .bootrodata :
     {
         _bootrodata_start = .;
         *(.bootrodata)
         _bootrodata_end = .;
+        . = ALIGN(0x1000);
     }
 
     .bootdata :
@@ -28,6 +31,7 @@ SECTIONS
         _bootdata_start = .;
         *(.bootdata)
         _bootdata_end = .;
+        . = ALIGN(0x1000);
     }
 
     .bootbss :
@@ -36,92 +40,82 @@ SECTIONS
         *(COMMON)
         *(.bootbss)
         _bootbss_end = .;
+        . = ALIGN(0x1000);
     }
 
-    . = ALIGN(0x1000);
-    _boot_physical_end = .;
+    _boot_physical_end = .; /* Boot segment end */
 
-    . += KERNEL_VIRTUAL_LOAD_OFFSET;
+    /* Virtual mapping start */
+    . = . + KERNEL_VIRTUAL_LOAD_OFFSET;
     kernel_virtual_start = .;
     kernel_physical_start = . - KERNEL_VIRTUAL_LOAD_OFFSET;
 
-    /* Kernel text segmenti */
+    /* Kernel text */
     .text : AT(_boot_physical_end)
     {
         _text_start = .;
         *(.multiboot)
         *(.text)
+        *(.text.*)
+        *(.init)     
+        *(.fini)     
+        *(.eh_frame)
         _text_end = .;
+        . = ALIGN(0x200000);
     }
-
-    . = ALIGN(0x1000);
 
     /* Read-only data */
-    .rodata : AT((LOADADDR(.text) + SIZEOF(.text) + 0xFFF) & ~0xFFF)
+    .rodata : AT((LOADADDR(.text) + SIZEOF(.text) + (0x200000-1)) & ~(0x200000-1))
     {
+         __ctors_start = .;
+        *(.ctors)
+        *(.ctors.*)
+        *(.init_array)
+        *(.init_array.*)
+         __ctors_end = .;
+
+         __dtors_start = .;
+        *(.dtors)
+        *(.dtors.*)
+        *(.fini_array)
+        *(.fini_array.*)
+         __dtors_end = .;
+
         _rodata_start = .;
         *(.rodata)
+        *(.rodata.*)
         _rodata_end = .;
+        . = ALIGN(0x200000);
     }
 
-    . = ALIGN(0x1000);
-
-    /* Data segmenti */
-    .data : AT((LOADADDR(.rodata) + SIZEOF(.rodata) + 0xFFF) & ~0xFFF)
+    /* Data segment */
+    .data : AT((LOADADDR(.rodata) + SIZEOF(.rodata) + (0x200000-1)) & ~(0x200000-1))
     {
         _data_start = .;
         *(.data)
+        *(.data.*)
         _data_end = .;
+        . = ALIGN(0x200000);
     }
 
-    . = ALIGN(0x1000);
-
-    
-    .init_array : AT((LOADADDR(.data) + SIZEOF(.data) + 0xFFF) & ~0xFFF)
-    {
-        __init_array_start = .;
-        KEEP(*(.init_array))
-        KEEP(*(.init_array.*))
-        __init_array_end = .;
-    }
-
-    
-    .fini_array : AT((LOADADDR(.init_array) + SIZEOF(.init_array) + 0xFFF) & ~0xFFF)
-    {
-        __fini_array_start = .;
-        KEEP(*(.fini_array))
-        KEEP(*(.fini_array.*))
-        __fini_array_end = .;
-    } 
-
-    .ctors : AT((LOADADDR(.fini_array) + SIZEOF(.fini_array) + 0xFFF) & ~0xFFF)
-    {
-        __ctors_start = .;
-        KEEP(*(.ctors))
-        KEEP(*(.ctors.*))
-        __ctors_end = .;
-    }
-
-    .dtors : AT((LOADADDR(.ctors) + SIZEOF(.ctors) + 0xFFF) & ~0xFFF)
-    {
-        __dtors_start = .;
-        KEEP(*(.dtors))
-        KEEP(*(.dtors.*))
-        __dtors_end = .;
-    }
-
-    . = ALIGN(0x1000);
-
-    /* BSS segmenti */
-    .bss : AT((LOADADDR(.dtors) + SIZEOF(.dtors) + 0xFFF) & ~0xFFF)
+    /* BSS */
+    .bss : AT((LOADADDR(.data) + SIZEOF(.data) + (0x200000-1)) & ~(0x200000-1))
     {
         _bss_start = .;
         *(COMMON)
         *(.bss)
         _bss_end = .;
+        . = ALIGN(0x200000);
     }
 
-    . = ALIGN(0x1000);
     kernel_virtual_end = .;
-    kernel_physical_end = (LOADADDR(.bss) + SIZEOF(.bss) + 0xFFF) & ~0xFFF;
+    kernel_physical_end = (LOADADDR(.bss) + SIZEOF(.bss) + (0x200000-1)) & ~(0x200000-1);
+
+    /* --- Discard  sections --- */
+    /DISCARD/ : {
+        *(.comment)
+        *(.symtab)
+        *(.strtab)
+        *(.shstrtab)
+    }
 }
