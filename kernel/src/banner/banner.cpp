@@ -22,7 +22,7 @@
 
 static const char *banner = "\
 |============================================|\n\
-|          Welcome to atlOS                 |\n\
+|          Welcome to atlOS                  |\n\
 |   Developed by: Oguzhan KAYNAK             |\n\
 |                                            |\n\
 | Your reliable and efficient operating      |\n\

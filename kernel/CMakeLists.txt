@@ -44,6 +44,9 @@ file(GLOB_RECURSE KERNEL_FILES
 #   src/**/*.cpp
     src/kernel/kernel.cpp
     src/tty/tty.cpp
+    src/Memory/Memory.cpp
+    src/banner/banner.cpp
+    src/cxx/init.cpp
 )
 
 # Print the list of found objects

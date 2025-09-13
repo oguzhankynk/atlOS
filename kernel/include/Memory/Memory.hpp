@@ -14,7 +14,7 @@ namespace Memory
      * @param memHigh
      * @param physicalAllocStart
      */
-    void Init(const multiboot_info_t *bootInfo);
+    void Init(uintptr_t mbInfoAddr);
 
     void *VirtToPhysAddr(void *virtualaddr);
 

@@ -7,7 +7,7 @@
 #include <Memory/PhysicalMemory.hpp>
 #include <Memory/VirtualMemory.hpp>
 
-#include <kernel/sys/multiboot.h>
+#include <kernel/sys/multiboot2.h>
 #include <kernel/sys/handlers.hpp>
 
 namespace Memory
@@ -19,62 +19,104 @@ namespace Memory
      */
     extern "C" VirtualMemory::PageDirectoryEntry page_directory[PAGE_DIR_SIZE];
 
+    static void print_segment_addresses()
+    {
+        printf("=== Boot Segments ===\n");
+        printf("_boottext: %p - %p, size: 0x%X\n", &_boottext_start, &_boottext_end, &_boottext_end - &_boottext_start);
+        printf("_bootrodata: %p - %p, size: 0x%X\n", &_bootrodata_start, &_bootrodata_end, &_bootrodata_end - &_bootrodata_start);
+        printf("_bootdata: %p - %p, size: 0x%X\n", &_bootdata_start, &_bootdata_end, &_bootdata_end - &_bootdata_start);
+        printf("_bootbss: %p - %p, size: 0x%X\n", &_bootbss_start, &_bootbss_end, &_bootbss_end - &_bootbss_start);
+
+        printf("\n=== Kernel Segments (VMA) ===\n");
+        printf("_text: %p - %p, size: 0x%X\n", &_text_start, &_text_end, &_text_end - &_text_start);
+        printf("_rodata: %p - %p, size: 0x%X\n", &_rodata_start, &_rodata_end, &_rodata_end - &_rodata_start);
+        printf("_data: %p - %p, size: 0x%X\n", &_data_start, &_data_end, &_data_end - &_data_start);
+        printf("_bss: %p - %p, size: 0x%X\n", &_bss_start, &_bss_end, &_bss_end - &_bss_start);
+
+        printf("__init_array: %p - %p, size: 0x%X\n", &__init_array_start, &__init_array_end, &__init_array_end - &__init_array_start);
+        printf("__fini_array: %p - %p, size: 0x%X\n", &__fini_array_start, &__fini_array_end, &__fini_array_end - &__fini_array_start);
+
+        printf("__ctors: %p - %p, size: 0x%zx\n",
+               (void *)__ctors_start,
+               (void *)__ctors_end,
+               (size_t)(__ctors_end - __ctors_start));
+        printf("__dtors: %p - %p, size: 0x%zx\n",
+               (void *)__dtors_start,
+               (void *)__dtors_end,
+               (size_t)(__ctors_end - __dtors_start));
+
+        printf("\n=== Kernel Start/End ===\n");
+        printf("kernel_virtual_start: %llu, kernel_virtual_end: %llu, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);
+
+        printf("\n=== Kernel Physical ===\n");
+        printf("kernel_physical_start: %p, kernel_physical_end: %p, size: 0x%X\n", (uint64_t)&kernel_physical_start, (uint64_t)&kernel_physical_end, (uint64_t)&kernel_physical_end - (uint64_t)&kernel_physical_start);
+    }
+
     /**
      * @brief
      *
      * @param memHigh
      * @param physicalAllocStart
      */
-    void Init(const multiboot_info_t *bootInfo)
+    void Init(uintptr_t mbInfoAddr)
     {
-        printf("Kernel virt: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&kernel_virtual_start, (uint32_t)&kernel_virtual_end);
-        printf("Kernel  phy: \t start: 0x%x \tend: 0x%x \n", (uint32_t)&kernel_physical_start, (uint32_t)&kernel_physical_end);
+        print_segment_addresses();
 
-        PhysicalMemory::Init();
-        VirtualMemory::Init();
+        // PhysicalMemory::Init();
+        // VirtualMemory::Init();
 
-        auto totalMemorySizeKB = bootInfo->mem_lower + bootInfo->mem_upper;
-        printf("Total memory size: 0x%x KB\n", totalMemorySizeKB);
+        multiboot_tag *tag;
+        uint8_t *addr = (uint8_t *)(uintptr_t)mbInfoAddr;
 
-        for (int i = 0; i < bootInfo->mmap_length; i += sizeof(multiboot_mmap_entry))
+        uint32_t totalSize = *(uint32_t *)addr;
+        addr += 8; // totalSize + reserved
+
+        for (tag = (multiboot_tag *)addr;
+             tag->type != MULTIBOOT_TAG_TYPE_END;
+             tag = (multiboot_tag *)((uint8_t *)tag + ((tag->size + 7) & ~7)))
         {
-            auto *mmmt = (multiboot_mmap_entry *)(bootInfo->mmap_addr + i);
-
-            uint32_t base_addr = ((uint64_t)mmmt->addr_high << 32) | mmmt->addr_low;
-            uint32_t length = ((uint64_t)mmmt->len_high << 32) | mmmt->len_low;
-
-            auto getType = [](multiboot_uint32_t type) -> const char *
+            if (tag->type == MULTIBOOT_TAG_TYPE_MMAP)
             {
-                switch (type)
+                multiboot_tag_mmap *mmap = (multiboot_tag_mmap *)tag;
+
+                for (multiboot_mmap_entry *entry = mmap->entries;
+                     (uint8_t *)entry < (uint8_t *)mmap + mmap->size;
+                     entry = (multiboot_mmap_entry *)((uint8_t *)entry + mmap->entry_size))
                 {
-                case MULTIBOOT_MEMORY_AVAILABLE:
-                    return "AVAILABLE";
-                case MULTIBOOT_MEMORY_RESERVED:
-                    return "RESERVED";
-                case MULTIBOOT_MEMORY_ACPI_RECLAIMABLE:
-                    return "ACPI_RECLAIMABLE";
-                case MULTIBOOT_MEMORY_NVS:
-                    return "NVS";
-                case MULTIBOOT_MEMORY_BADRAM:
-                    return "BADRAM";
-                default:
-                    return "UNKNOWN"; // Bilinmeyen değerler için
-                }
-            };
+                    const char *typeStr;
+                    switch (entry->type)
+                    {
+                    case MULTIBOOT_MEMORY_AVAILABLE:
+                        typeStr = "AVAILABLE";
+                        break;
+                    case MULTIBOOT_MEMORY_RESERVED:
+                        typeStr = "RESERVED";
+                        break;
+                    case MULTIBOOT_MEMORY_ACPI_RECLAIMABLE:
+                        typeStr = "ACPI_RECLAIMABLE";
+                        break;
+                    case MULTIBOOT_MEMORY_NVS:
+                        typeStr = "NVS";
+                        break;
+                    case MULTIBOOT_MEMORY_BADRAM:
+                        typeStr = "BADRAM";
+                        break;
+                    default:
+                        typeStr = "UNKNOWN";
+                        break;
+                    }
 
-            if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE)
-            {
-                printf("Addr: 0x%x | Length: 0x%x | size: 0x%x | Type: %s \n",
-                       base_addr,
-                       length,
-                       mmmt->size,
-                       getType(mmmt->type));
-                PhysicalMemory::AddMemoryRegion((void *)base_addr, length);
+                    printf("Addr: 0x%016llx | Length: 0x%016llx | Type: %s\n",
+                           (unsigned long long)entry->addr,
+                           (unsigned long long)entry->len,
+                           typeStr);
+
+                    if (entry->type == MULTIBOOT_MEMORY_AVAILABLE)
+                    {
+                    }
+                }
             }
         }
-
-        PhysicalMemory::RemoveMemoryRegion(0, 1024 * 1024);
-        PhysicalMemory::RemoveMemoryRegion(&kernel_physical_start, (uint32_t)&kernel_physical_end - (uint32_t)&kernel_physical_start);
     }
 
     /**
@@ -85,94 +127,15 @@ namespace Memory
      */
     void *VirtToPhysAddr(void *virtualaddr)
     {
-        uint32_t pdindex = (unsigned long)virtualaddr >> 22;
-        uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
-        uint32_t offset = (uint32_t)virtualaddr & 0xFFF;
-
-        if (!page_directory[pdindex].present)
-        {
-            return 0;
-        }
-
-        VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
-
-        if (!page_table[ptindex].present)
-        {
-            return 0;
-        }
-
-        uint32_t page_addr = page_table[ptindex].frame << 12;
-
-        return (void *)(page_addr + offset);
+        return nullptr;
     }
 
     void map(void *physicaladdr, void *virtualaddr)
     {
-        if ((uint32_t)virtualaddr % PAGE_SIZE != 0)
-            return;
-
-        uint32_t pdindex = (unsigned long)virtualaddr >> 22;
-        uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
-
-        VirtualMemory::PageDirectoryEntry &pd_entry = page_directory[pdindex];
-
-        if (!pd_entry.present)
-        {
-            VirtualMemory::PageTableEntry *new_pt = (VirtualMemory::PageTableEntry *)PhysicalMemory::AllocateBlock(1);
-
-            if (new_pt == nullptr)
-                return;
-
-            memset(new_pt, 0, PAGE_SIZE);
-
-            pd_entry = (uint32_t)new_pt | 3; // present , rw
-        }
-
-        VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
-
-        if (!page_table[ptindex].present)
-        {
-            page_table[ptindex] = (uint32_t)physicaladdr | 3;
-        }
-        else
-        {
-            printf("page is already mapped \n");
-        }
     }
 
     void unmap(void *virtualaddr)
     {
-        if ((uint32_t)virtualaddr % PAGE_SIZE != 0)
-            return;
-
-        uint32_t pdindex = (unsigned long)virtualaddr >> 22 & 0x3FF;
-        uint32_t ptindex = (unsigned long)virtualaddr >> 12 & 0x3FF;
-
-        VirtualMemory::PageDirectoryEntry &pd_entry = page_directory[pdindex];
-
-        if (pd_entry.present)
-        {
-            VirtualMemory::PageTableEntry *page_table = (VirtualMemory::PageTableEntry *)VirtualMemory::getPageTableVirtAddr(pdindex);
-            if (page_table[ptindex].present)
-            {
-                page_table[ptindex] = 0;
-                asm volatile("invlpg (%0)" : : "a"(virtualaddr));
-            }
-
-            int unpresent_pte_counter{};
-            for (; unpresent_pte_counter < PAGE_TABLE_SIZE; unpresent_pte_counter++)
-            {
-                if (page_table[unpresent_pte_counter].present)
-                    break;
-            }
-
-            if (unpresent_pte_counter == PAGE_TABLE_SIZE)
-            {
-                PhysicalMemory::FreeBlocks((void *)(page_directory[pdindex].table_addr << 12), 1);
-                page_directory[pdindex].rw = 1;
-                page_directory[pdindex].present = 0;
-            }
-        }
     }
 
 } // namespace Memory

@@ -29,6 +29,8 @@ header_end:
 .comm low_page_directory_table, PAGE_DIRECTORY_SIZE, PAGE_DIRECTORY_ALIGNMENT
 .comm high_page_directory_table, PAGE_DIRECTORY_SIZE, PAGE_DIRECTORY_ALIGNMENT
 .comm tmp_stack, KERNEL_BOOT_STACK_SIZE, KERNEL_BOOT_STACK_ALIGNMENT
+.comm mbMagic, 8, 8
+.comm mbInfo, 8, 8
 
 .section .bootdata, "aw"
 .align GDT_TABLE_ALIGNMENT
@@ -48,6 +50,11 @@ gdt_ptr:
 .global _start
 .type _start, @function
 _start:
+
+        //save multiboot info 
+        movl %eax, mbMagic
+        movl %ebx, mbInfo
+
         movl $tmp_stack + KERNEL_BOOT_STACK_SIZE, %esp
 
         movl $low_pdpt, %eax
@@ -116,6 +123,9 @@ _start64:
         movw %ax, %fs
         movw %ax, %gs
         movw %ax, %ss
+
+        movq mbInfo(%rip), %rdi   
+        movl mbMagic(%rip), %esi  
 
         
         call kernelMain
