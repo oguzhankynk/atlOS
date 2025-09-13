@@ -5,7 +5,7 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 0x0000000000400000;
+    . = KERNEL_PHYSICAL_START;
 
     /* Boot bölümleri */
     .boottext :
@@ -41,9 +41,9 @@ SECTIONS
     . = ALIGN(0x1000);
     _boot_physical_end = .;
 
-    . += 0xFFFFFFFF80000000;
+    . += KERNEL_VIRTUAL_LOAD_OFFSET;
     kernel_virtual_start = .;
-    kernel_physical_start = . - 0xFFFFFFFF80000000;
+    kernel_physical_start = . - KERNEL_VIRTUAL_LOAD_OFFSET;
 
     /* Kernel text segmenti */
     .text : AT(_boot_physical_end)

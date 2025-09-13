@@ -20,6 +20,11 @@
 #ifndef A046BEC9_DED9_4255_85EE_5065946448E0
 #define A046BEC9_DED9_4255_85EE_5065946448E0
 
+#define MSR_EFER (0xC0000080)
+#define MSR_EFER_LME (1 << 8)
+
+#ifndef __ASSEMBLER__
+
 #include <stdint.h>
 #include <stdio.h>
 
@@ -203,4 +208,5 @@ void InitializeCPUInfo(CPU_Info *cpu_info);
 /// @param cpu_info Pointer to the CPU_Info structure containing CPU information to be printed.
 void printCPUInfo(const CPU_Info *cpu_info);
 
+#endif // __ASSEMBLER__
 #endif /* A046BEC9_DED9_4255_85EE_5065946448E0 */

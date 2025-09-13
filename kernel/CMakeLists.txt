@@ -33,6 +33,9 @@ SET (CMAKE_C_FLAGS "${ATLOS_KERNEL_COMPILER_FLAGS}")
 
 SET (CMAKE_ASM_FLAGS "${ATLOS_KERNEL_COMPILER_FLAGS} ")
 
+
+
+
 # Define the ARCHDIR as kernel/arch/x86_64
 set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64)
 
@@ -61,10 +64,19 @@ include_directories(
     ${SYSROOT}/usr/include/cpp
 )
 
+set(KERNEL_PHYSICAL_START 0x0000000000400000)
+set(KERNEL_VIRTUAL_LOAD_OFFSET 0xFFFFFFFF80000000)
+
+add_compile_definitions(
+    KERNEL_PHYSICAL_START=${KERNEL_PHYSICAL_START}
+    KERNEL_VIRTUAL_LOAD_OFFSET=${KERNEL_VIRTUAL_LOAD_OFFSET}
+)
+
+
 set( CRTS_FILES crts )
 
 add_library( ${CRTS_FILES} OBJECT
-    ${ARCHDIR}/boot/boot.S  # contains symbols analogical to crt0.s
+    ${ARCHDIR}/boot/boot.S 
     ${ARCHDIR}/crt/crti.S
     ${ARCHDIR}/crt/crtn.S
 )
@@ -74,9 +86,16 @@ add_executable(atlOS.kernel
     ${KERNEL_FILES}
 )
 
+
 target_link_options(atlOS.kernel PRIVATE
     -T${ARCHDIR}/linker.ld -nostdlib -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 
 )
+
+target_link_options(atlOS.kernel PRIVATE
+    "-Wl,--defsym,KERNEL_PHYSICAL_START=${KERNEL_PHYSICAL_START}"
+    "-Wl,--defsym,KERNEL_VIRTUAL_LOAD_OFFSET=${KERNEL_VIRTUAL_LOAD_OFFSET}"
+)
+
 
 # Link order and list for the executable
 target_link_libraries(atlOS.kernel PRIVATE

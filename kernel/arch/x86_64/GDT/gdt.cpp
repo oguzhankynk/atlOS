@@ -100,7 +100,7 @@ namespace GDT
          * @brief Global Descriptor Table Register (GDTR) structure. boot.S will load this.
          *
          */
-        __attribute__((section(".bootdata"))) GDTR gdt_ptr = {
+        __attribute__((section(".bootdata"), used)) GDTR gdt_ptr = {
             sizeof(gdt_table) - 1,
             reinterpret_cast<uint64_t>(&gdt_table)};
     }

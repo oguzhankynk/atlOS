@@ -1,11 +1,6 @@
 #ifndef _ARCH_X86_64_MMU_H_
 #define _ARCH_X86_64_MMU_H_
 
-#define BOOT_PHYSICAL_VIRTUAL_OFFSET                                           \
-  (KERNEL_VIRTUAL_START - KERNEL_PHYSICAL_START)
-
-#define KERNEL_VIRTUAL_START_PAGE_DIRECTORY_ENTRY                              \
-  (KERNEL_VIRTUAL_START / LEVEL_TWO_PAGE_SIZE)
 
 #define PML4_SIZE 0x1000
 #define PML4_ALIGNMENT 0x1000

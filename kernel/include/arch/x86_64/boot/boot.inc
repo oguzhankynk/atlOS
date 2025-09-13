@@ -1,5 +1,5 @@
 /**
- * @file boot.h
+ * @file boot.inc
  * @author Oguzhan KAYNAK
  * @brief
  *
@@ -13,24 +13,21 @@
  *
  */
 
-#include <arch/x86_64/mmu.inc>
-#include <arch/x86_64/msr.inc>
-#include <arch/x86_64/multiboot2.inc>
+#include <arch/x86_64/boot/multiboot2.inc>
+#include <arch/x86_64/MMU/mmu.inc>
+#include <arch/x86_64/cpu/cpu.hpp>
+
+#ifndef KERNEL_PHYSICAL_START
+#error "KERNEL_PHYSICAL_START is not defined! Please define it in CMake or before including this file."
+#endif
+
+#ifndef KERNEL_VIRTUAL_LOAD_OFFSET
+#error "KERNEL_VIRTUAL_LOAD_OFFSET is not defined! Please define it in CMake or before including this file."
+#endif
 
 #define KERNEL_BOOT_STACK_SIZE 0x4000
 #define KERNEL_BOOT_STACK_ALIGNMENT 0x1000
 
-#define KERNEL_PHYSICAL_START 0x0000000000400000
-#define KERNEL_VIRTUAL_LOAD_OFFSET 0xFFFFFFFF80000000
 #define KERNEL_VIRTUAL_START (KERNEL_PHYSICAL_START + KERNEL_VIRTUAL_LOAD_OFFSET)
 
-#define KERNEL_GDT_ENTRY 1
 
-#define CONTROL_REGISTER0_PROTECTED_MODE_ENABLED (1 << 0)
-#define CONTROL_REGISTER0_EXTENSION_TYPE (1 << 4)
-#define CONTROL_REGISTER0_PAGE (1 << 31)
-#define KERNEL_CR0 (CONTROL_REGISTER0_PAGE | CONTROL_REGISTER0_PROTECTED_MODE_ENABLED | CONTROL_REGISTER0_EXTENSION_TYPE)
-
-#define CONTROL_REGISTER4_PAGE_SIZE_EXTENSION (1 << 4)
-#define CONTROL_REGISTER4_PHYSICAL_ADDRESS_EXTENSION (1 << 5)
-#define KERNEL_CR4 (CONTROL_REGISTER4_PHYSICAL_ADDRESS_EXTENSION)

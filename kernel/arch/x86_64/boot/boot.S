@@ -1,17 +1,14 @@
-#Source: https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
 
-#include <arch/x86_64/boot.h>
+#include <arch/x86_64/boot/boot.inc>
 
-
-.SET HEADER_LENGTH, header_end - header_start
-.SET CHECKSUM, -(MULTIBOOT2_HEADER_MAGIC + MULTIBOOT_ARCHITECTURE_I386 + HEADER_LENGTH)
 
 .section .bootmultiboot, "a"
 header_start:
+#Source: https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
     .long MULTIBOOT2_HEADER_MAGIC
     .long MULTIBOOT_ARCHITECTURE_I386
-    .long HEADER_LENGTH
-    .long CHECKSUM
+    .long header_end - header_start
+    .long -(MULTIBOOT2_HEADER_MAGIC + MULTIBOOT_ARCHITECTURE_I386 + header_end - header_start)
 
     // multiboot tags 
 
@@ -79,16 +76,21 @@ page_directory_table_loop:
         movl $pml4, %eax
         movl %eax, %cr3
 
-        movl $KERNEL_CR4, %eax
-        movl %eax, %cr4
+        movl %cr4, %eax         // eax = CR4
+        or $0x10, %eax          // PSE: Page Size Extension (bit 4)
+        or $0x20, %eax          // PAE: Physical Address Extension (bit 5)
+        movl %eax, %cr4         // Write back to CR4
 
         movl $MSR_EFER, %ecx
         rdmsr
         or $MSR_EFER_LME, %eax
         wrmsr
 
-        movl $KERNEL_CR0, %eax
-        movl %eax, %cr0
+        movl %cr0, %eax             // Read current CR0 register value
+        or $0x1, %eax               // PE (Protected Mode Enable) = 1
+        or $0x10, %eax              // ET (Extension Type) = 1 (FPU present)
+        or $0x80000000, %eax        // PG (Paging) = 1 to enable paging
+        movl %eax, %cr0             // Write modified value back to CR0
 
         .extern gdt_ptr
         lgdt gdt_ptr

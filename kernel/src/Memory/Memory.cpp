@@ -7,7 +7,7 @@
 #include <Memory/PhysicalMemory.hpp>
 #include <Memory/VirtualMemory.hpp>
 
-#include <kernel/sys/multiboot2.h>
+#include <arch/x86_64/boot/multiboot2.inc>
 #include <kernel/sys/handlers.hpp>
 
 namespace Memory
