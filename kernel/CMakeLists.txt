@@ -22,6 +22,7 @@ SET(ATLOS_KERNEL_COMPILER_FLAGS
  -Wno-format -Wno-format-security -Wno-unused-parameter \
  -Wno-sign-compare -Wno-implicit-fallthrough \
  -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic \
+ -fno-unwind-tables -fno-asynchronous-unwind-tables \
  -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
  -D__is_kernel -D__ATLOS__ -D__x86_64__ \
 ")
@@ -47,6 +48,7 @@ file(GLOB_RECURSE KERNEL_FILES
     src/Memory/Memory.cpp
     src/banner/banner.cpp
     src/cxx/init.cpp
+    ${ARCHDIR}/GDT/gdt.cpp
 )
 
 # Print the list of found objects
@@ -104,7 +106,6 @@ execute_process(
     )
 
 
-#set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> --sysroot=${SYSROOT} -isystem=/usr/include -o <TARGET> <LINK_FLAGS> <CMAKE_CXX_LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES>")
 set( CMAKE_CXX_LINK_EXECUTABLE 
 "<CMAKE_CXX_COMPILER> --sysroot=${SYSROOT} -isystem=/usr/include \
  <LINK_FLAGS> -z max-page-size=0x1000\

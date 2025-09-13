@@ -32,20 +32,6 @@ header_end:
 .comm mbMagic, 8, 8
 .comm mbInfo, 8, 8
 
-.section .bootdata, "aw"
-.align GDT_TABLE_ALIGNMENT
-gdt_table:
-        .8byte GDT_FIRST_ENTRY
-        .8byte GDT_KERNEL_ENTRY
-
-gdt_table_end:
-        .skip (GDT_TABLE_SIZE - (gdt_table_end - gdt_table))
-
-gdt_ptr:
-         .short GDT_TABLE_SIZE - 1
-         .long gdt_table
-
-
 .section .boottext, "ax"
 .global _start
 .type _start, @function
@@ -104,9 +90,10 @@ page_directory_table_loop:
         movl $KERNEL_CR0, %eax
         movl %eax, %cr0
 
+        .extern gdt_ptr
         lgdt gdt_ptr
 
-        ljmp $(KERNEL_GDT_ENTRY * GDT_ENTRY_SIZE), $_start64
+        ljmp $0x08, $_start64 // Far jump to 64-bit kernel code segment (CS=0x08), which is the 1st entry in the GDT, and RIP=_start64
 
         cli
         hlt

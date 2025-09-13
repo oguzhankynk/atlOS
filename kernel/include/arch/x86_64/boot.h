@@ -13,7 +13,6 @@
  *
  */
 
-#include <arch/x86_64/gdt.inc>
 #include <arch/x86_64/mmu.inc>
 #include <arch/x86_64/msr.inc>
 #include <arch/x86_64/multiboot2.inc>
