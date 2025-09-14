@@ -198,19 +198,7 @@ struct X86_64ExceptionInfo
     uint64_t rflags;
     uint64_t rsp;
     uint64_t ss;
-
-    void print() const
-    {
-        printf("EXCEPTION/INTERRUPT INFO (x86_64):\n");
-        printf("int_no=0x%lx err_code=0x%lx\n", int_no, err_code);
-        printf("RAX=0x%lx RBX=0x%lx RCX=0x%lx RDX=0x%lx\n", rax, rbx, rcx, rdx);
-        printf("RSI=0x%lx RDI=0x%lx RBP=0x%lx\n", rsi, rdi, rbp);
-        printf("R8=0x%lx R9=0x%lx R10=0x%lx R11=0x%lx\n", r8, r9, r10, r11);
-        printf("R12=0x%lx R13=0x%lx R14=0x%lx R15=0x%lx\n", r12, r13, r14, r15);
-        printf("RIP=0x%lx CS=0x%lx RFLAGS=0x%lx RSP=0x%lx SS=0x%lx\n",
-               rip, cs, rflags, rsp, ss);
-    }
-};
+} __attribute__((packed));
 
 /// @brief Initializes the CPU information structure.
 /// @param cpu_info Pointer to the CPU_Info structure to be initialized.

@@ -22,22 +22,22 @@
     .align 4
 INT_\NO:
 
-    /* If the exception does NOT push an error code, push a dummy 0 */
+    /* Eğer exception error code pushlamıyorsa dummy 0 */
     .if !(\NO == 8 || (\NO >= 10 && \NO <= 14) || \NO == 17 || \NO == 21)
-        pushq $0
+        pushq $0          /* err_code */
     .endif
 
     /* Push exception/vector number */
-    pushq $\NO
+    pushq $\NO            /* int_no */
 
-    /* Save general-purpose registers (caller-saved + callee-saved) */
+    /* Push general-purpose registers (RAX..R15) */
     pushq %rax
     pushq %rbx
     pushq %rcx
     pushq %rdx
+    pushq %rbp
     pushq %rsi
     pushq %rdi
-    pushq %rbp
     pushq %r8
     pushq %r9
     pushq %r10
@@ -47,42 +47,16 @@ INT_\NO:
     pushq %r14
     pushq %r15
 
-    /* Load kernel data selector into segment registers (flat model) */
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-
-    /* ---- Stack alignment before calling C handler ----
-       Compute pad = ((RSP & 0xF) - 8) & 0xF
-       Then do: sub pad, %rsp  so that RSP % 16 == 8 before CALL
-       Save pad in r12 (which was pushed above), so we can restore after call.
-    */
-    mov %rsp, %rax
-    and $0xF, %rax            /* rax = rsp & 0xF */
-    sub $8, %rax              /* rax = (rsp & 0xF) - 8 */
-    and $0xF, %rax            /* rax = ((rsp & 0xF) - 8) & 0xF  -> pad */
-    mov %rax, %r12            /* r12 = pad (r12 previously pushed, so safe) */
-    sub %r12, %rsp            /* adjust RSP by pad */
-
-    /* Pass pointer to current stack-frame (RSP) in RDI (first arg) */
+    /* Pass pointer to current stack frame (RSP) in RDI */
     mov %rsp, %rdi
 
-    /* Call the C handler */
+    /* Call C handler */
     call \HANDLER
 
-    /* restore stack adjustment: add pad back */
+    /* Restore stack */
     add %r12, %rsp
 
-    /* Restore segment registers (optional for flat model; harmless) */
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-
-    /* Restore general-purpose registers in reverse order of push */
+    /* Restore general-purpose registers */
     popq %r15
     popq %r14
     popq %r13
@@ -91,17 +65,17 @@ INT_\NO:
     popq %r10
     popq %r9
     popq %r8
-    popq %rbp
     popq %rdi
     popq %rsi
+    popq %rbp
     popq %rdx
     popq %rcx
     popq %rbx
     popq %rax
 
-    /* Pop exception number and error code (if any) */
-    popq %rax    /* exception number */
-    popq %rax    /* error code */
+    /* Pop int_no ve err_code */
+    popq %rax      /* int_no */
+    popq %rax      /* err_code */
 
     sti
     iretq

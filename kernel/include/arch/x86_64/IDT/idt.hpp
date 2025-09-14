@@ -135,14 +135,14 @@ namespace IDT
         enum TypeAttr : uint8_t
         {
             GATE_TASK = 0x5,
-            GATE_16BIT_INT = 0x6,
-            GATE_16BIT_TRAP = 0x7,
-            GATE_32BIT_INT = 0xE,
-            GATE_32BIT_TRAP = 0xF,
+            GATE_INT = 0xE,  // 64-bit interrupt gate
+            GATE_TRAP = 0xF, // 64-bit trap gate
+
             RING0 = 0x00,
             RING1 = 0x20,
             RING2 = 0x40,
             RING3 = 0x60,
+
             PRESENT = 0x80,
         };
 

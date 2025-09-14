@@ -352,10 +352,22 @@ namespace IDT
     {
         Handlers::Init();
 
-        for (auto i = 0; i < IDT::IDT_TABLE_LEN; i++)
+        int i = 0;
+
+        for (; i < 32; i++)
         {
-            setEntry(i, (void *)(InterruptTable[i]), static_cast<uint16_t>(SegmentSelect::KERNELCODE), IDTEntry::TypeAttr::PRESENT | IDTEntry::TypeAttr::GATE_32BIT_INT);
+            setEntry(i, (void *)InterruptTable[i],
+                     (uint16_t)SegmentSelect::KERNELCODE,
+                     IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GATE_TRAP);
         }
+
+        for (; i < IDT::IDT_TABLE_LEN; i++)
+        {
+            setEntry(i, (void *)InterruptTable[i],
+                     (uint16_t)SegmentSelect::KERNELCODE,
+                     IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GATE_INT);
+        }
+
         // Set the IDTR structure
         idtr.limit = sizeof(idt) - 1;
         idtr.base = reinterpret_cast<uintptr_t>(&idt);
@@ -380,10 +392,10 @@ namespace IDT
         // Configure the IDT entry
         idt[index].isrLow = (uintptr_t)handler & 0xFFFF;
         idt[index].kernelCs = selector;
-        idt[index].ist = 0;
+        idt[index].ist = 0 & 0x7;
         idt[index].attributes = type_attr;
         idt[index].isrMid = ((uintptr_t)handler >> 16) & 0xFFFF;
-        idt[index].isrHigh = ((uintptr_t)handler >> 32) & 0xFFFF;
+        idt[index].isrHigh = ((uintptr_t)handler >> 32) & 0xFFFFFFFF;
         idt[index].reserved = 0;
     }
 
@@ -495,9 +507,25 @@ namespace IDT
             return;
         }
 
-        printf("Exception: %s\n", int_str);
+        printf("==== EXCEPTION/INTERRUPT INFO ====\n");
+        printf("INT_NO  = 0x%lx %s\n", regs.int_no, int_str);
+        printf("ERR_CODE= 0x%lx\n", regs.err_code);
 
-        regs.print();
+        printf("\n--- General Purpose Registers ---\n");
+        printf("RAX=0x%016lx RBX=0x%016lx RCX=0x%016lx RDX=0x%016lx\n",
+               regs.rax, regs.rbx, regs.rcx, regs.rdx);
+        printf("RSI=0x%016lx RDI=0x%016lx RBP=0x%016lx\n",
+               regs.rsi, regs.rdi, regs.rbp);
+        printf("R8 =0x%016lx R9 =0x%016lx R10=0x%016lx R11=0x%016lx\n",
+               regs.r8, regs.r9, regs.r10, regs.r11);
+        printf("R12=0x%016lx R13=0x%016lx R14=0x%016lx R15=0x%016lx\n",
+               regs.r12, regs.r13, regs.r14, regs.r15);
+
+        printf("\n--- CPU State ---\n");
+        printf("RIP=0x%016lx CS=0x%04lx RFLAGS=0x%016lx\n",
+               regs.rip, regs.cs, regs.rflags);
+        printf("RSP=0x%016lx SS=0x%04lx\n", regs.rsp, regs.ss);
+        printf("=================================\n");
 
         while (1)
             ;
