@@ -13,12 +13,6 @@
 namespace Memory
 {
 
-    /**
-     * @brief Page directory defined at boot.S
-     *
-     */
-    extern "C" VirtualMemory::PageDirectoryEntry page_directory[PAGE_DIR_SIZE];
-
     static void print_segment_addresses()
     {
         printf("=== Boot Segments ===\n");
@@ -43,7 +37,7 @@ namespace Memory
                (uintptr_t)__dtors_end - (uintptr_t)__dtors_start);
 
         printf("\n=== Kernel Start/End ===\n");
-        printf("kernel_virtual_start: %llu, kernel_virtual_end: %llu, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);
+        printf("kernel_virtual_start: %p, kernel_virtual_end: %p, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);
 
         printf("\n=== Kernel Physical ===\n");
         printf("kernel_physical_start: %p, kernel_physical_end: %p, size: 0x%X\n", (uint64_t)&kernel_physical_start, (uint64_t)&kernel_physical_end, (uint64_t)&kernel_physical_end - (uint64_t)&kernel_physical_start);
@@ -59,8 +53,8 @@ namespace Memory
     {
         print_segment_addresses();
 
-        // PhysicalMemory::Init();
-        // VirtualMemory::Init();
+        PhysicalMemory::Init();
+        VirtualMemory::init();
 
         multiboot_tag *tag;
         uint8_t *addr = (uint8_t *)(uintptr_t)mbInfoAddr;
@@ -110,6 +104,13 @@ namespace Memory
 
                     if (entry->type == MULTIBOOT_MEMORY_AVAILABLE)
                     {
+                        // 2MB align
+                        uint64_t base = (entry->addr + (2 * 1024 * 1024 - 1)) & ~(2 * 1024 * 1024 - 1);
+                        uint64_t end = (entry->addr + entry->len) & ~(2 * 1024 * 1024 - 1);
+                        if (end > base)
+                        {
+                            PhysicalMemory::AddMemoryRegion((void *)base, end - base);
+                        }
                     }
                 }
             }

@@ -27,11 +27,11 @@ namespace Memory
     {
 
         void Init();
-        void AddMemoryRegion(const void *base_address, uint32_t size);
-        void RemoveMemoryRegion(const void *base_address, uint32_t size);
-        void *AllocateBlock(uint32_t num_blocks);
-        void FreeBlocks(const void *addr, uint32_t num_blocks);
-        uint32_t GetMaxBlockSize();
+        void AddMemoryRegion(const void *base_address, uint64_t size);
+        void RemoveMemoryRegion(const void *base_address, uint64_t size);
+        void *AllocateBlock(uint64_t num_blocks);
+        void FreeBlocks(const void *addr, uint64_t num_blocks);
+        uint64_t GetMaxBlockSize();
 
     }; // namespace PhysicalMemory
 }; // namespace Memory

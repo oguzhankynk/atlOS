@@ -24,18 +24,23 @@
 
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 
 #include <kernel/tty.h>
 #include <kernel/banner.h>
 
 #include <Memory/Memory.hpp>
 #include <Memory/MemoryConstants.hpp>
+#include <Memory/PhysicalMemory.hpp>
+#include <Memory/VirtualMemory.hpp>
 
 #include <arch/x86_64/boot/multiboot2.inc>
 
 #include <cxx/init.hpp>
 
 #include <arch/x86_64/IDT/idt.hpp>
+
+#include <Memory/KHeap.h>
 
 struct myStruct
 {
@@ -60,6 +65,51 @@ struct myStruct3
 myStruct glob{"global1"};
 myStruct glob2{"global2"};
 
+void TestMemoryManager()
+{
+    printf("=== Memory Manager Test Start ===\n");
+
+    // 1) Allocate 4 pages (2MB each)
+    void *pages = Memory::VirtualMemory::allocatePage(4);
+    printf("Allocated 4 pages at virtual address: %p\n", pages);
+
+    // 2) Write some pattern to each 2MB page
+    uint64_t *p = (uint64_t *)pages;
+    for (size_t i = 0; i < 4 * 2 * 1024 * 1024 / sizeof(uint64_t); i += 1024 * 1024) // sparse writes
+    {
+        p[i] = 0xDEADBEEFDEADBEEF;
+    }
+    printf("Wrote pattern to pages\n");
+
+    // 3) Verify the pattern
+    for (size_t i = 0; i < 4 * 2 * 1024 * 1024 / sizeof(uint64_t); i += 1024 * 1024)
+    {
+        if (p[i] != 0xDEADBEEFDEADBEEF)
+        {
+            printf("Memory verification failed at index %zu\n", i);
+        }
+    }
+    printf("Memory verification passed\n");
+
+    // 4) Free pages
+    Memory::VirtualMemory::freePage(pages, 4);
+    printf("Freed 4 pages\n");
+
+    // 5) malloc/free test
+    void *ptr1 = kmalloc(1024);
+    void *ptr2 = kmalloc(4096);
+    printf("malloc ptr1: %p, ptr2: %p\n", ptr1, ptr2);
+
+    memset(ptr1, 0xAA, 1024);
+    memset(ptr2, 0xBB, 4096);
+
+    kfree(ptr1);
+    kfree(ptr2);
+    printf("Freed malloc blocks\n");
+
+    printf("=== Memory Manager Test End ===\n");
+}
+
 /**
  * @brief entry point of atlOS
  *
@@ -72,6 +122,8 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     atlOSBanner();
 
     cxx::callConstructors();
+
+    IDT::Init();
 
     myStruct local1{"local1"};
 
@@ -87,9 +139,9 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     Memory::Init(mbInfo);
 
-    IDT::Init();
+    TestMemoryManager();
 
-        while (1)
+    while (1)
         ;
     return;
 }

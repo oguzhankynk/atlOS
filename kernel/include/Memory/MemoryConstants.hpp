@@ -9,7 +9,7 @@ namespace Memory
      * @brief Size of a single memory page.
      *
      */
-    constexpr uint32_t PAGE_SIZE = 4096;
+    constexpr uint32_t PAGE_SIZE = 2 * 1024 * 1024;
 
     /**
      * @brief Number of entries per page directory.

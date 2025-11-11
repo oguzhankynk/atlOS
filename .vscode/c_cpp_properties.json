@@ -4,7 +4,7 @@
             "name": "x86_64-elf",
             "includePath": [
                 "${workspaceFolder}/kernel/include/*",
-                "${workspaceFolder}/libc/include/*"
+                "${workspaceFolder}/libc/include/"
             ],
             "defines": [],
             "compilerPath": "/home/oguzhan/opt/cross/bin/x86_64-elf-gcc",

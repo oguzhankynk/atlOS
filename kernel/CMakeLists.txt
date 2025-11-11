@@ -47,13 +47,15 @@ file(GLOB_RECURSE KERNEL_FILES
 #   src/**/*.c 
 #   src/**/*.cpp
     src/kernel/kernel.cpp
+    src/kernel/panic.cpp
     src/tty/tty.cpp
-    src/Memory/Memory.cpp
     src/banner/banner.cpp
     src/cxx/init.cpp
     src/sys/handlers.cpp
     src/sys/IOPort.cpp
     src/hardware/pic.cpp
+    src/Memory/*.cpp
+    src/Memory/*.c
     ${ARCHDIR}/GDT/gdt.cpp
     ${ARCHDIR}/IDT/idt.cpp
     ${ARCHDIR}/IDT/ISR.S

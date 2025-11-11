@@ -34,23 +34,25 @@ namespace Memory
         static constexpr LogFlag INF_LOG = LogFlag::NoLog;
         static constexpr LogFlag ERR_LOG = LogFlag::NoLog;
 
+        static constexpr uint64_t PAGE_SIZE_2MB = 2ULL * 1024ULL * 1024ULL;
+
         /**
          * @brief Maximum physical memoryy size (byte)
          *
          */
-        static constexpr auto MAX_MEMORY_SIZE = 4ULL * 1024ULL * 1024ULL * 1024ULL; /// Max memory = 4GB
+        static constexpr uint64_t MAX_MEMORY_SIZE = 256ULL * 1024ULL * 1024ULL * 1024ULL;
 
         /**
          * @brief Maximum count of physical pages
          *
          */
-        static constexpr auto MAX_PAGE_COUNT = MAX_MEMORY_SIZE / PAGE_SIZE;
+        static constexpr uint64_t MAX_BLOCKS = MAX_MEMORY_SIZE / PAGE_SIZE_2MB;
 
         /**
          * @brief Physical memory bitmap size (byte)
          *
          */
-        static constexpr auto BITMAP_SIZE = MAX_PAGE_COUNT / 8;
+        static constexpr uint64_t BITMAP_SIZE = (MAX_BLOCKS + 7) / 8;
 
         /**
          * @brief Bitmap for manege physical memory
@@ -58,33 +60,33 @@ namespace Memory
          */
         static uint8_t bitmap[BITMAP_SIZE];
 
-        static uint32_t blockSize{};
-        static uint32_t maxBlocks{};
-        static uint32_t usedBlocks{};
+        static uint64_t blockSize{};
+        static uint64_t maxBlocks{};
+        static uint64_t usedBlocks{};
 
-        static inline void SetBlock(uint32_t bit)
+        static inline void SetBlock(uint64_t bit)
         {
             bitmap[bit / 8] |= (1 << (bit % 8));
         }
 
-        static inline void UnsetBlock(uint32_t bit)
+        static inline void UnsetBlock(uint64_t bit)
         {
             bitmap[bit / 8] &= ~(1 << (bit % 8));
         }
 
-        static int32_t FirstFreeBlock(uint32_t num_blocks)
+        static int64_t FirstFreeBlock(uint64_t num_blocks)
         {
             LOG_MSG(INF_LOG, "PMM: FirstFreeBlock: number of requested blocks:%u free block:%u \n", num_blocks, maxBlocks - usedBlocks);
 
             if (num_blocks == 0)
                 return -1; // Can't return no memory, error
 
-            uint32_t consecutive_free = 0; // Counter for consecutive 0 bits
-            uint32_t start_index = 0;      // Index of the start of the free block series
+            uint64_t consecutive_free = 0; // Counter for consecutive 0 bits
+            uint64_t start_index = 0;      // Index of the start of the free block series
 
-            for (uint32_t bit_index = 0; bit_index < maxBlocks; bit_index++)
+            for (uint64_t bit_index = 0; bit_index < maxBlocks; bit_index++)
             {
-                uint32_t byte_index = bit_index / 8;
+                uint64_t byte_index = bit_index / 8;
                 uint8_t bit_offset = bit_index % 8;
 
                 // Check if the current bit is 0
@@ -127,10 +129,10 @@ namespace Memory
             LOG_MSG(INF_LOG, "PMM: Init: blockSize:%u maxBlocks:%u usedBlocks:%u \n", blockSize, maxBlocks, usedBlocks);
         }
 
-        void AddMemoryRegion(const void *base_address, uint32_t size)
+        void AddMemoryRegion(const void *base_address, uint64_t size)
         {
-            uint32_t block_indx = (uint32_t)base_address / blockSize; // Convert memory address to blocks
-            uint32_t num_blocks = size / blockSize;                   // Convert size to blocks
+            uint64_t block_indx = (uint64_t)base_address / blockSize; // Convert memory address to blocks
+            uint64_t num_blocks = size / blockSize;                   // Convert size to blocks
 
             LOG_MSG(INF_LOG, "PMM: MemoryRegion add: start_indx: %u num_blocks:%u ", block_indx, num_blocks);
 
@@ -144,10 +146,10 @@ namespace Memory
             LOG_MSG(INF_LOG, " usedBlocks:%u \n", usedBlocks);
         }
 
-        void RemoveMemoryRegion(const void *base_address, uint32_t size)
+        void RemoveMemoryRegion(const void *base_address, uint64_t size)
         {
-            int32_t block_indx = (uint32_t)base_address / blockSize;      // Convert memory address to blocks
-            int32_t num_blocks = ROUND_UP_TO_PAGE_SIZE(size) / blockSize; // Convert size to blocks
+            int64_t block_indx = (uint64_t)base_address / blockSize; // Convert memory address to blocks
+            int64_t num_blocks = (size + blockSize - 1) / blockSize; // Convert size to blocks
 
             LOG_MSG(INF_LOG, "PMM: MemoryRegion remove: start_indx: %u num_blocks:%u ", block_indx, num_blocks);
 
@@ -161,48 +163,48 @@ namespace Memory
             LOG_MSG(INF_LOG, " usedBlocks:%u \n", usedBlocks);
         }
 
-        void *AllocateBlock(uint32_t num_blocks)
+        void *AllocateBlock(uint64_t num_blocks)
         {
             LOG_MSG(INF_LOG, "PMM: AllocateBlock: num_blocks:%u \n", num_blocks);
 
             // If # of free blocks left is not enough, return
             if ((maxBlocks - usedBlocks) <= num_blocks)
-                return 0;
+                return nullptr;
 
-            int32_t starting_block = FirstFreeBlock(num_blocks);
+            uint64_t starting_block = FirstFreeBlock(num_blocks);
             LOG_MSG(DBG_LOG, "PMM: FirstFreeBlock starting_block : %d \n", starting_block);
 
             if (starting_block == -1)
             {
-                return 0; // Couldn't find that many blocks in a row to allocate
+                return nullptr; // Couldn't find that many blocks in a row to allocate
             }
 
             // Found free blocks, set them as used
-            for (uint32_t i = 0; i < num_blocks; i++)
+            for (uint64_t i = 0; i < num_blocks; i++)
                 SetBlock(starting_block + i);
 
             usedBlocks += num_blocks; // Blocks are now used/reserved, increase count
 
             // Convert blocks to bytes to get start of actual RAM that is now allocated
-            uint32_t address = starting_block * blockSize;
+            uint64_t address = starting_block * blockSize;
 
             LOG_MSG(DBG_LOG, "PMM: AllocateBlock: usedBlocks: %u  address:%u \n", usedBlocks, address);
-            return (uint32_t *)address; // Physical memory location of allocated blocks
+            return reinterpret_cast<void *>(address); // Physical memory location of allocated blocks
         }
 
-        void FreeBlocks(const void *addr, uint32_t num_blocks)
+        void FreeBlocks(const void *addr, uint64_t num_blocks)
         {
-            int32_t starting_block = (uint32_t)addr / blockSize; // Convert address to blocks
+            int64_t starting_block = (uint64_t)addr / blockSize; // Convert address to blocks
 
-            // printf("PMM: FreeBlocks: starting block indx:%u adr:%u number of blocks:%u \n", starting_block, (uint32_t)addr,  num_blocks);
+            // printf("PMM: FreeBlocks: starting block indx:%u adr:%u number of blocks:%u \n", starting_block, (uint64_t )addr,  num_blocks);
 
-            for (uint32_t i = 0; i < num_blocks; i++)
+            for (uint64_t i = 0; i < num_blocks; i++)
                 UnsetBlock(starting_block + i); // Unset bits/blocks in memory map, to free
 
             usedBlocks -= num_blocks; // Decrease used block count
         }
 
-        uint32_t GetMaxBlockSize()
+        uint64_t GetMaxBlockSize()
         {
             return maxBlocks / 8;
         }

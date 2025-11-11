@@ -9,62 +9,35 @@ namespace Memory
 {
     namespace VirtualMemory
     {
+
         /**
          * @brief Page Directory Entry (PDE)
          *
-         * A single entry in a page directory. It contains the physical address of a page table
-         * and various control bits.
+         * For more details, see:  Intel® 64 and IA-32 Architectures Software Developer Manuals, volume 3A
+         * Table 4-17. Format of an IA-32e Page-Directory Entry that Maps a 2-MByte Page
          */
-        struct PageDirectoryEntry
+        struct PageDirectoryEntry64
         {
-            uint32_t present : 1;     /**< Page table present in memory */
-            uint32_t rw : 1;          /**< Read/write permission */
-            uint32_t user : 1;        /**< User/supervisor permission */
-            uint32_t pwt : 1;         /**< Page-level write-through */
-            uint32_t pcd : 1;         /**< Page-level cache disable */
-            uint32_t accessed : 1;    /**< Page table accessed */
-            uint32_t reserved : 1;    /**< Reserved bit */
-            uint32_t page_size : 1;   /**< Page size (0 = 4 KB, 1 = 4 MB) */
-            uint32_t ignored : 4;     /**< Ignored bits */
-            uint32_t table_addr : 20; /**< Physical address of the page table (shifted right 12 bits) */
-
-            PageDirectoryEntry() = default;
-            PageDirectoryEntry(uint32_t value);
+            uint64_t present : 1;     /**< Page table present in memory */
+            uint64_t rw : 1;          /**< Read/write permission */
+            uint64_t user : 1;        /**< User/supervisor permission */
+            uint64_t pwt : 1;         /**< Page-level write-through */
+            uint64_t pcd : 1;         /**< Page-level cache disable */
+            uint64_t accessed : 1;    /**< Page table accessed */
+            uint64_t dirty : 1;       /**< Dirty; indicates whether software has written to the 2-MByte page referenced by this entry */
+            uint64_t page_size : 1;   /**<  Page size; must be 1 */
+            uint64_t global : 1;      /**< Global; if CR4.PGE = 1, determines whether the translation is global (see Section 4.10); ignored otherwise */
+            uint64_t ignored : 3;     /**< Ignored bits */
+            uint64_t frame_addr : 40; /**< 2MB aligned >> 21 */
+            uint64_t reserved : 11;
+            uint64_t nx : 1;
         };
 
-        /**
-         * @brief Page Table Entry (PTE)
-         *
-         * A single entry in a page table. It contains the physical address of the page
-         * and various control bits.
-         */
-        struct PageTableEntry
-        {
-            uint32_t present : 1;  /**< Page present in memory */
-            uint32_t rw : 1;       /**< Read/write permission */
-            uint32_t user : 1;     /**< User/supervisor permission */
-            uint32_t pwt : 1;      /**< Page-level write-through */
-            uint32_t pcd : 1;      /**< Page-level cache disable */
-            uint32_t accessed : 1; /**< Page accessed */
-            uint32_t dirty : 1;    /**< Page written to */
-            uint32_t pat : 1;      /**< Page attribute table */
-            uint32_t global : 1;   /**< Global page */
-            uint32_t ignored : 3;  /**< Ignored bits */
-            uint32_t frame : 20;   /**< Physical frame address (shifted right 12 bits) */
-
-            PageTableEntry() = default;
-            PageTableEntry(uint32_t value);
-            void *getFrameAddress() const;
-        };
-
-        using PageDirectory = PageDirectoryEntry[PAGE_DIR_SIZE];
-        using PageTable = PageTableEntry[PAGE_TABLE_SIZE];
-
-        void Init();
-        void *getPageTableVirtAddr(uint32_t pdindex);
-        uint32_t MapPages(uint32_t page_index, uint32_t num_pages);
-        void *AllocatePage(uint32_t num_pages);
-        int FreePage(const void *addr, uint32_t num_pages);
+        void init();
+        void *getPageTableVirtAddr(uint64_t pdindex);
+        uint64_t mapPages(uint64_t page_index, uint64_t num_pages);
+        void *allocatePage(uint64_t num_pages);
+        int freePage(const void *addr, uint64_t num_pages);
 
     }; // namespace VirtualMemory
 }; // namespace Memory
