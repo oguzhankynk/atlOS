@@ -1,3 +1,7 @@
 ﻿libc/build
 kernel/build
 VirtualDisk/disk.img
+sysroot/usr/lib/libk.a
+sysroot/boot/atlOS.kernel
+isodir/atlOS.iso
+isodir/boot/atlOS.kernel
