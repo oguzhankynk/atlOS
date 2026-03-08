@@ -29,6 +29,8 @@
 extern "C"
 {
 #endif
+    typedef void (*stdout_handler_t)(const char *, size_t);
+    void set_write_handler(stdout_handler_t new_handler);
 
     /**
      *  @brief Prints formatted output to stdout.

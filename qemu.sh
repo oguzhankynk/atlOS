@@ -15,6 +15,6 @@ qemu-system-x86_64 \
     -serial stdio \
     -m 1024M \
     -no-shutdown \
-    -serial  telnet:localhost:4321,server,nowait
+    -serial  stdio
 
 #-serial  telnet:localhost:4321,server,nowait  # (Optional) Enable serial port over telnet for debugging
