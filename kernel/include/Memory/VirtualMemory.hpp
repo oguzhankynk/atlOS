@@ -27,11 +27,14 @@ namespace Memory
             uint64_t dirty : 1;       /**< Dirty; indicates whether software has written to the 2-MByte page referenced by this entry */
             uint64_t page_size : 1;   /**<  Page size; must be 1 */
             uint64_t global : 1;      /**< Global; if CR4.PGE = 1, determines whether the translation is global (see Section 4.10); ignored otherwise */
-            uint64_t ignored : 3;     /**< Ignored bits */
-            uint64_t frame_addr : 40; /**< 2MB aligned >> 21 */
-            uint64_t reserved : 11;
-            uint64_t nx : 1;
+            uint64_t ignored0 : 3;    /**< Ignored bits */
+            uint64_t reserved0 : 9;   /**< Reserved bits */
+            uint64_t frame_addr : 31; /**< 2MB aligned >> 21 */
+            uint64_t reserved1 : 11;  /**< Reserved bits */
+            uint64_t nx : 1;          /**< No-execute */
         };
+
+        
 
         void init();
         void *getPageTableVirtAddr(uint64_t pdindex);

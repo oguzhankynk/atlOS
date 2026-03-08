@@ -391,7 +391,7 @@ namespace FileSystem
                 auto readSize = 512 - sectorOffset;
                 readSize = Utils::MIN((size_t)readSize, bytesToRead - bytesRead);
 
-                memcpy(buffer + bytesRead, readBuffer + sectorOffset, readSize);
+                memcpy((char*)buffer + bytesRead, readBuffer + sectorOffset, readSize);
 
                 // Increment read_bytes and offset accordingly
                 bytesRead += readSize;

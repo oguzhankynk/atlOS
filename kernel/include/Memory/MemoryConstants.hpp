@@ -9,7 +9,7 @@ namespace Memory
      * @brief Size of a single memory page.
      *
      */
-    constexpr uint32_t PAGE_SIZE = 2 * 1024 * 1024;
+    constexpr uint32_t PAGE_SIZE_2MB = 2 * 1024 * 1024;
 
     /**
      * @brief Number of entries per page directory.
@@ -88,9 +88,9 @@ namespace Memory
 
     static size_t ROUND_UP_TO_PAGE_SIZE(size_t size)
     {
-        // If size is already a multiple of PAGE_SIZE, return it as is
+        // If size is already a multiple of PAGE_SIZE_2MB, return it as is
         // Otherwise, round up to the next multiple of 4096
-        return (size % PAGE_SIZE == 0) ? size : ((size / PAGE_SIZE) + 1) * PAGE_SIZE;
+        return (size % PAGE_SIZE_2MB == 0) ? size : ((size / PAGE_SIZE_2MB) + 1) * PAGE_SIZE_2MB;
     }
 };
 

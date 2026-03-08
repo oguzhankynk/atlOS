@@ -50,12 +50,15 @@ file(GLOB_RECURSE KERNEL_FILES
     src/kernel/panic.cpp
     src/tty/tty.cpp
     src/banner/banner.cpp
-    src/cxx/init.cpp
+    src/cxx/*.cpp
     src/sys/handlers.cpp
     src/sys/IOPort.cpp
     src/hardware/pic.cpp
     src/Memory/*.cpp
     src/Memory/*.c
+    src/Device/*.cpp
+    src/Interfaces/*.cpp
+    src/FileSystem/*.cpp
     ${ARCHDIR}/GDT/gdt.cpp
     ${ARCHDIR}/IDT/idt.cpp
     ${ARCHDIR}/IDT/ISR.S

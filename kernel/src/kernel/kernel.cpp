@@ -33,60 +33,44 @@
 #include <Memory/MemoryConstants.hpp>
 #include <Memory/PhysicalMemory.hpp>
 #include <Memory/VirtualMemory.hpp>
-
-#include <arch/x86_64/boot/multiboot2.inc>
-
-#include <cxx/init.hpp>
-
-#include <arch/x86_64/IDT/idt.hpp>
-
 #include <Memory/KHeap.h>
 
-struct myStruct
-{
-    void print()
-    {
-        printf("MyStruct::print() called\n");
-    }
-    myStruct(const char *str)
-    {
-        printf("MyStruct constructor called:%s\n", str);
-    }
-};
-struct myStruct2
-{
-    int x;
-};
-struct myStruct3
-{
-    int x{4};
-};
+#include <Device/DeviceManager.hpp>
+#include <Interfaces/serial.hpp>
 
-myStruct glob{"global1"};
-myStruct glob2{"global2"};
+#include <arch/x86_64/boot/multiboot2.inc>
+#include <arch/x86_64/IDT/idt.hpp>
+
+#include <cxx/init.hpp>
 
 void TestMemoryManager()
 {
     printf("=== Memory Manager Test Start ===\n");
 
     // 1) Allocate 4 pages (2MB each)
-    void *pages = Memory::VirtualMemory::allocatePage(4);
-    printf("Allocated 4 pages at virtual address: %p\n", pages);
+    constexpr size_t NUM_PAGES = 4;
+    void *pages = Memory::VirtualMemory::allocatePage(NUM_PAGES);
+    printf("Allocated %zu pages at virtual address: %p\n", NUM_PAGES, pages);
 
     // 2) Write some pattern to each 2MB page
-    uint64_t *p = (uint64_t *)pages;
-    for (size_t i = 0; i < 4 * 2 * 1024 * 1024 / sizeof(uint64_t); i += 1024 * 1024) // sparse writes
+    uint64_t *base = reinterpret_cast<uint64_t *>(pages);
+    constexpr uint64_t PATTERN = 0xDEADBEEFDEADBEEF;
+    for (size_t page = 0; page < NUM_PAGES; ++page)
     {
-        p[i] = 0xDEADBEEFDEADBEEF;
+        size_t index = (page * Memory::PAGE_SIZE_2MB) / sizeof(uint64_t);
+        base[index] = PATTERN;
     }
     printf("Wrote pattern to pages\n");
 
     // 3) Verify the pattern
-    for (size_t i = 0; i < 4 * 2 * 1024 * 1024 / sizeof(uint64_t); i += 1024 * 1024)
+    for (size_t page = 0; page < NUM_PAGES; ++page)
     {
-        if (p[i] != 0xDEADBEEFDEADBEEF)
+        size_t index = (page * Memory::PAGE_SIZE_2MB) / sizeof(uint64_t);
+        if (base[index] != PATTERN)
         {
-            printf("Memory verification failed at index %zu\n", i);
+            printf("Memory verification failed at page %zu (addr=%p)\n",
+                   page, &base[index]);
+            return;
         }
     }
     printf("Memory verification passed\n");
@@ -119,13 +103,19 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     terminal_initialize();
 
+    set_write_handler(terminal_write);
+
+    int stat_serial_init = SerialPort::Init();
+
+    printf("stat_serial_init: %d \n", stat_serial_init);
+
+    set_write_handler(SerialPort::write_serial);
+
     atlOSBanner();
 
     cxx::callConstructors();
 
     IDT::Init();
-
-    myStruct local1{"local1"};
 
     if (mbMagic != MULTIBOOT2_BOOTLOADER_MAGIC)
     {
@@ -139,6 +129,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     Memory::Init(mbInfo);
 
+    DeviceManager::Init();
     TestMemoryManager();
 
     while (1)

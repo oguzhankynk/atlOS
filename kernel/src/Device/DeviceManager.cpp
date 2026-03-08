@@ -150,14 +150,11 @@ namespace DeviceManager
 
     void Init()
     {
-        PIC::Init();
+        // PIC::Init(); not used anymore in favor of APIC
 
         // Keyboard::Init();
 
-        int stat_serial_init = SerialPort::Init();
 
-        printf("stat_serial_init: %d \n", stat_serial_init);
-
-        detectATADevices();
+        //detectATADevices();
     }
 } // namespace DeviceManager

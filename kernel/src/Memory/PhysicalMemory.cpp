@@ -30,11 +30,9 @@ namespace Memory
     namespace PhysicalMemory
     {
         /// Enable / Disable logs
-        static constexpr LogFlag DBG_LOG = LogFlag::NoLog;
-        static constexpr LogFlag INF_LOG = LogFlag::NoLog;
-        static constexpr LogFlag ERR_LOG = LogFlag::NoLog;
-
-        static constexpr uint64_t PAGE_SIZE_2MB = 2ULL * 1024ULL * 1024ULL;
+        static constexpr LogFlag DBG_LOG = LogFlag::Log;
+        static constexpr LogFlag INF_LOG = LogFlag::Log;
+        static constexpr LogFlag ERR_LOG = LogFlag::Log;
 
         /**
          * @brief Maximum physical memoryy size (byte)
@@ -122,7 +120,7 @@ namespace Memory
             // set all memory in use
             memset(bitmap, 0xFF, sizeof(bitmap));
 
-            blockSize = PAGE_SIZE;
+            blockSize = PAGE_SIZE_2MB;
             maxBlocks = MAX_MEMORY_SIZE / blockSize;
             usedBlocks = maxBlocks;
 
@@ -131,6 +129,12 @@ namespace Memory
 
         void AddMemoryRegion(const void *base_address, uint64_t size)
         {
+            if ((uint64_t)base_address % blockSize != 0)
+            {
+                LOG_MSG(ERR_LOG, "PMM: base_address not aligned");
+                return;
+            }
+
             uint64_t block_indx = (uint64_t)base_address / blockSize; // Convert memory address to blocks
             uint64_t num_blocks = size / blockSize;                   // Convert size to blocks
 

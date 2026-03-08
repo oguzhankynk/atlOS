@@ -9,6 +9,7 @@
 
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <kernel/sys/handlers.hpp>
+#include <arch/x86_64/MMU/mmu.inc>
 
 namespace Memory
 {
@@ -38,6 +39,11 @@ namespace Memory
 
         printf("\n=== Kernel Start/End ===\n");
         printf("kernel_virtual_start: %p, kernel_virtual_end: %p, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);
+
+        auto virt_indx_start = PML4_ADDR_TO_ENTRY_INDEX((uint64_t)&kernel_virtual_start);
+        auto virt_indx_end = PML4_ADDR_TO_ENTRY_INDEX((uint64_t)&kernel_virtual_end);
+        printf("Kernel virtual start PML4 index: %llu\n", virt_indx_start);
+        printf("Kernel virtual end PML4 index: %llu\n", virt_indx_end);
 
         printf("\n=== Kernel Physical ===\n");
         printf("kernel_physical_start: %p, kernel_physical_end: %p, size: 0x%X\n", (uint64_t)&kernel_physical_start, (uint64_t)&kernel_physical_end, (uint64_t)&kernel_physical_end - (uint64_t)&kernel_physical_start);
