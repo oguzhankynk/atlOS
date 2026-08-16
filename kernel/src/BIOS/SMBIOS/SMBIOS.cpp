@@ -69,7 +69,7 @@ SMBIOS::SMBIOS()
 
    // printEntryPoint();
 
-   void *pBIOSInformationEnd = m_BIOSInformation.Scan((void *)m_SMBIOSEntryPoint.structureTableAddress);
+   void *pBIOSInformationEnd = m_BIOSInformation.Scan((void*)(uintptr_t)m_SMBIOSEntryPoint.structureTableAddress);
 
    void *pSystemInformationEnd = m_SystemInformation.Scan(pBIOSInformationEnd);
 

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <Memory/VirtualMemory.hpp>
 #include <Memory/KHeap.h>
 #include <Schduler/schduler.hpp>
 
@@ -30,42 +31,43 @@ namespace Threading
     class ThreadImpl
     {
     public:
-        ThreadImpl(EntryPoint entry);              // Constructor to initialize the thread
-        TCB m_tcb{};                               // Thread Control Block (TCB) to store thread context
-        EntryPoint m_entry{};                      // Entry point function for the thread
-        char m_name[16]{};                         // Thread name (for debugging purposes)
-        static constexpr size_t STACK_SIZE = 4096; // Stack size for the thread
-        uint8_t stack[STACK_SIZE];                 // Stack for the thread
-        static void threadStartPoint(void *obj);   // Static function to start the thread
+        ThreadImpl(EntryPoint entry);                               // Constructor to initialize the thread
+        TCB m_tcb{};                                                // Thread Control Block (TCB) to store thread context
+        EntryPoint m_entry{};                                       // Entry point function for the thread
+        char m_name[16]{};                                          // Thread name (for debugging purposes)
+        static constexpr size_t STACK_SIZE = Memory::PAGE_SIZE_2MB; // Stack size for the thread
+        uint8_t m_stack[STACK_SIZE];                                // Stack for the thread
+        static void threadStartPoint(void *obj);                    // Static function to start the thread
     };
 
     ThreadImpl::ThreadImpl(EntryPoint entry)
-        : m_tcb{Registers{}, ThreadState::READY},
-          m_entry{entry}
+        : m_entry{entry}
     {
         snprintf(m_name, 16, "t%d", s_TaskIdCounter++);
 
-        // Set up the stack
-        memset(stack, 0x00, STACK_SIZE);
+          // Set up the stack
+        memset(m_stack, 0x00, STACK_SIZE);
 
         // Set up the TCB (Thread Control Block)
-        m_tcb.regs.eax = 0;
-        m_tcb.regs.ebx = 0;
-        m_tcb.regs.ecx = 0;
-        m_tcb.regs.edx = 0;
-        m_tcb.regs.esi = 0;
-        m_tcb.regs.edi = 0;
+        m_tcb.state = ThreadState::READY;
+        m_tcb.regs.rax = 0;
+        m_tcb.regs.rbx = 0;
+        m_tcb.regs.rcx = 0;
+        m_tcb.regs.rdx = 0;
 
-        // get the EFLAGS and CR3 registers
-        asm volatile("pushfl; movl (%%esp), %%eax; movl %%eax, %0; popfl;" : "=m"(m_tcb.regs.eflags)::"%eax");
-        asm volatile("movl %%cr3, %%eax; movl %%eax, %0;" : "=m"(m_tcb.regs.cr3)::"%eax");
+        // In x86_64 System V ABI, the first argument goes to RDI
+        m_tcb.regs.rdi = reinterpret_cast<uint64_t>(this);
 
-        // Set up the instruction pointer
-        m_tcb.regs.eip = reinterpret_cast<uintptr_t>(threadStartPoint);
+        // Get RFLAGS and CR3 (64-bit versions)
+        asm volatile("pushfq; popq %0" : "=r"(m_tcb.regs.rflags));
+        asm volatile("movq %%cr3, %0" : "=r"(m_tcb.regs.cr3));
+
+        // Instruction Pointer points to our static wrapper
+        m_tcb.regs.rip = reinterpret_cast<uint64_t>(threadStartPoint);
 
         // Pointer to the stack
         //  The stack grows downwards, so we need to set the stack pointer to the top of the stack
-        uint8_t *sp = stack + STACK_SIZE;
+        uint8_t *sp = m_stack + STACK_SIZE;
 
         auto push = [](uint8_t *&sp, auto value)
         {
@@ -74,14 +76,12 @@ namespace Threading
             *reinterpret_cast<Type *>(sp) = value;
         };
 
-        // Push the first argument to the stack (the object itself)
-        push(sp, reinterpret_cast<uintptr_t>(this));
-
         // Push the return address (the next instruction after the call to threadStartPoint)
         // Return address is never used
         push(sp, reinterpret_cast<uintptr_t>(nullptr));
 
-        m_tcb.regs.esp = reinterpret_cast<uint32_t>(sp);
+        m_tcb.regs.rsp = reinterpret_cast<uint64_t>(sp);
+        m_tcb.regs.rbp = m_tcb.regs.rsp;
     }
 
     void ThreadImpl::threadStartPoint(void *obj)
@@ -101,7 +101,10 @@ namespace Threading
 
         thread->m_tcb.state = ThreadState::TERMINATED;
 
-        Schedular::yield();
+        while (true)
+        {
+            Schedular::yield();
+        }
     }
 
     Thread::Thread(EntryPoint entry, bool addToScheduler)

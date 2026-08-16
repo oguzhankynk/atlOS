@@ -116,20 +116,31 @@ namespace Schedular
 
         void controlThreads()
         {
+            Node *prev = m_tail;
             Node *current = m_head;
+            uint32_t count = m_threadCount;
 
-            printf("controlThreads: Thread count: %d\n", m_threadCount);
-
-            for (uint32_t i = 0; i < m_threadCount; ++i)
+            for (uint32_t i = 0; i < count; ++i)
             {
-                if (current->thread->getTCB().state == Threading::ThreadState::TERMINATED)
-                {
-                    printf("Thread %s will be terminated.\n", current->thread->getName());
-                    removeThread(*current->thread);
-                    delete current->thread; // Free the thread object
-                }
+                if (current->thread->getTCB().state == Threading::ThreadState::TERMINATED &&
+                    current != m_head)
+                { // Never delete the idle thread!
 
-                current = current->next;
+                    Node *toDelete = current;
+                    prev->next = current->next;
+                    if (current == m_tail)
+                        m_tail = prev;
+
+                    current = current->next;
+                    delete toDelete->thread;
+                    delete toDelete; // Delete the node itself!
+                    m_threadCount--;
+                }
+                else
+                {
+                    prev = current;
+                    current = current->next;
+                }
             }
         }
 
@@ -140,6 +151,7 @@ namespace Schedular
     };
 
     static ThreadList *threadList = nullptr;
+    static Threading::Registers bootContext;
 
     static void sleep(uint32_t ms)
     {
@@ -157,7 +169,7 @@ namespace Schedular
 
     static void idleThreadFunction()
     {
-        PIT::init(100000000000, picHandler); // 1ms
+        PIT::init(1000000, picHandler); // 1ms
 
         while (1)
         {
@@ -182,6 +194,7 @@ namespace Schedular
 
     void yield()
     {
+        asm volatile("cli"); // Disable interrupts during context switch
         ThreadList::Node *last = nullptr;
         auto nextThread = threadList->switchToNextThread(last);
 
@@ -197,8 +210,7 @@ namespace Schedular
         auto newThread = new Threading::Thread(helloWorldThreadFunction, false);
         addTask(*newThread);
 
-        Threading::Registers temp;
-        switchTask(&temp, &idleThread->thread->getTCB().regs);
+        switchTask(&bootContext, &idleThread->thread->getTCB().regs);
     }
 
     void addTask(Threading::Thread &thread)

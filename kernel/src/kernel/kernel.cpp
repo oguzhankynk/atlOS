@@ -43,6 +43,8 @@
 
 #include <cxx/init.hpp>
 
+#include <Schduler/schduler.hpp>
+
 void TestMemoryManager()
 {
     printf("=== Memory Manager Test Start ===\n");
@@ -101,22 +103,30 @@ void TestMemoryManager()
 extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 {
 
+    // Initialize vga terminal
     terminal_initialize();
 
+    // Set the write handler to vga terminal_write for early debugging output
     set_write_handler(terminal_write);
 
+    // Initialize serial port
     int stat_serial_init = SerialPort::Init();
 
     printf("stat_serial_init: %d \n", stat_serial_init);
 
+    // Set the write handler to SerialPort::write_serial for later debugging output
     set_write_handler(SerialPort::write_serial);
 
+    // Print the banner
     atlOSBanner();
 
+    // Call global constructors
     cxx::callConstructors();
 
+    // Initialize IDT
     IDT::Init();
 
+    // Validate multiboot information
     if (mbMagic != MULTIBOOT2_BOOTLOADER_MAGIC)
     {
         printf("Invalid magic number: 0x%x\n", mbMagic);
@@ -127,12 +137,18 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
         printf("Valid magic number: 0x%x\n", mbMagic);
     }
 
+    // Initialize memory management (pmm and vmm)
     Memory::Init(mbInfo);
 
     DeviceManager::Init();
     TestMemoryManager();
 
+    Schedular::Init();
+
+    printf("end of kernel \n");
+
     while (1)
-        ;
-    return;
+    {
+        asm volatile("hlt");
+    }
 }

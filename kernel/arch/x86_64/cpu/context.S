@@ -1,83 +1,102 @@
-.equ Registers.eax, 0
-.equ Registers.ebx, 4
-.equ Registers.ecx, 8
-.equ Registers.edx, 12
-.equ Registers.esi, 16
-.equ Registers.edi, 20
-.equ Registers.esp, 24
-.equ Registers.ebp, 28
-.equ Registers.eip, 32
-.equ Registers.eflags, 36
-.equ Registers.cr3, 40
+.equ Regs.r15, 0
+.equ Regs.r14, 8
+.equ Regs.r13, 16
+.equ Regs.r12, 24
+.equ Regs.r11, 32
+.equ Regs.r10, 40
+.equ Regs.r9,  48
+.equ Regs.r8,  56
+.equ Regs.rbp, 64
+.equ Regs.rdi, 72
+.equ Regs.rsi, 80
+.equ Regs.rdx, 88
+.equ Regs.rcx, 96
+.equ Regs.rbx, 104
+.equ Regs.rax, 112
+.equ Regs.rip, 120
+.equ Regs.cs,  128
+.equ Regs.rflags, 136
+.equ Regs.rsp, 144
+.equ Regs.ss,  152
+.equ Regs.cr3, 160
 
 .section .text
 .global switchTask
 switchTask:
     #void switchTask(Registers *from, Registers *to);
 
-    pusha #push EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI :  8 reg = 8×4 = +32 byte
-    pushf #push EFLAGS #: +4 byte
-    mov %cr3, %eax #Push CR3
-    push %eax #:  +4 byte
+    # 1. SAVE CURRENT CONTEXT TO 'from' (RDI)
+    # ---------------------------------------
+    movq %r15, Regs.r15(%rdi)
+    movq %r14, Regs.r14(%rdi)
+    movq %r13, Regs.r13(%rdi)
+    movq %r12, Regs.r12(%rdi)
+    movq %r11, Regs.r11(%rdi)
+    movq %r10, Regs.r10(%rdi)
+    movq %r9,  Regs.r9(%rdi)
+    movq %r8,  Regs.r8(%rdi)
+    movq %rbp, Regs.rbp(%rdi)
+    movq %rdi, Regs.rdi(%rdi) 
+    movq %rsi, Regs.rsi(%rdi)
+    movq %rdx, Regs.rdx(%rdi)
+    movq %rcx, Regs.rcx(%rdi)
+    movq %rbx, Regs.rbx(%rdi)
+    movq %rax, Regs.rax(%rdi)
 
-    #   stack view:
-    #   ESP →             [ CR3 value ]                 ← push %eax
-    #   ESP+4 →           [ EFLAGS ]                    ← pushf
-    #   ESP+8 →           [ EDI ]
-    #   ESP+12 →          [ ESI ]
-    #   ESP+16 →          [ EBP ]
-    #   ESP+20 →          [ ESP (prev value) ]
-    #   ESP+24 →          [ EBX ]
-    #   ESP+28 →          [ EDX ]
-    #   ESP+32 →          [ ECX ]
-    #   ESP+36 →          [ EAX ]
-    #   ESP+40 →          [ return address ]            ← call switchTask
-    #   ESP+44 →          [ froRegisters *from ]                
-    #   ESP+48 →          [ Registers *to ]              
+    # Save RIP (Return address is currently at the top of the stack)
+    movq (%rsp), %rax
+    movq %rax, Regs.rip(%rdi)
 
-    mov 44(%esp), %eax #The first argument, where to save
-    mov %ebx, 4(%eax)
-    mov %ecx, 8(%eax)
-    mov %edx, 12(%eax)
-    mov %esi, 16(%eax)
-    mov %edi, 20(%eax)
-    mov 36(%esp), %ebx #EAX
-    mov 40(%esp), %ecx #IP
-    mov 20(%esp), %edx #ESP
-    add $4, %edx #Remove the return value ;)
-    mov 16(%esp), %esi #EBP
-    mov 4(%esp), %edi #EFLAGS
-    mov %ebx, (%eax)
-    mov %edx, 24(%eax)
-    mov %esi, 28(%eax)
-    mov %ecx, 32(%eax)
-    mov %edi, 36(%eax)
-    pop %ebx #CR3
-    mov %ebx, 40(%eax)
-    push %ebx #Goodbye again ;)
+    # Save RSP (Add 8 because we want the RSP before the 'call' instruction pushed RIP)
+    leaq 8(%rsp), %rax
+    movq %rax, Regs.rsp(%rdi)
 
-    mov 48(%esp), %eax #Now it is the new object
-    mov 4(%eax), %ebx #EBX
-    mov 8(%eax), %ecx #ECX
-    mov 12(%eax), %edx #EDX
-    mov 16(%eax), %esi #ESI
-    mov 20(%eax), %edi #EDI
-    mov 28(%eax), %ebp #EBP
+    # Save RFLAGS
+    pushfq
+    popq %rax
+    movq %rax, Regs.rflags(%rdi)
 
-    push %eax
-    mov 36(%eax), %eax #EFLAGS
-    push %eax
-    popf
-    pop %eax
-    mov 24(%eax), %esp #ESP
-    push %eax
+    # Save CR3
+    movq %cr3, %rax
+    movq %rax, Regs.cr3(%rdi)
 
-    mov 40(%eax), %eax #CR3
-    mov %eax, %cr3
-    pop %eax
-    
-    push %eax
-    mov 32(%eax), %eax #EIP
-    xchg (%esp), %eax #We do not have any more registers to use as tmp storage
-    mov (%eax), %eax #EAX
-    ret #This ends all!
+    # 2. LOAD NEW CONTEXT FROM 'to' (RSI)
+    # ---------------------------------------
+    # Switch Address Space (CR3)
+    movq Regs.cr3(%rsi), %rax
+    movq %rax, %cr3
+
+    # Load General Purpose Registers
+    movq Regs.r15(%rsi), %r15
+    movq Regs.r14(%rsi), %r14
+    movq Regs.r13(%rsi), %r13
+    movq Regs.r12(%rsi), %r12
+    movq Regs.r11(%rsi), %r11
+    movq Regs.r10(%rsi), %r10
+    movq Regs.r9(%rsi),  %r9
+    movq Regs.r8(%rsi),  %r8
+    movq Regs.rbp(%rsi), %rbp
+    movq Regs.rdx(%rsi), %rdx
+    movq Regs.rcx(%rsi), %rcx
+    movq Regs.rbx(%rsi), %rbx
+    # RDI and RSI will be loaded last
+
+    # Load RFLAGS
+    movq Regs.rflags(%rsi), %rax
+    pushq %rax
+    popfq
+
+    # Switch Stack Pointer
+    movq Regs.rsp(%rsi), %rsp
+
+    # Prepare for the jump: Push the new RIP onto the new stack
+    movq Regs.rip(%rsi), %rax
+    pushq %rax
+
+    # Finally load the last registers
+    movq Regs.rdi(%rsi), %rdi # This is our 'this' pointer for threadStartPoint!
+    movq Regs.rax(%rsi), %rax
+    movq Regs.rsi(%rsi), %rsi
+
+    # This 'ret' will pop the RIP we just pushed and jump to it
+    ret

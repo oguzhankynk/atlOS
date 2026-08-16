@@ -46,22 +46,25 @@ file(GLOB_RECURSE KERNEL_FILES
 #   ${ARCHDIR}/cpu/context.S
 #   src/**/*.c 
 #   src/**/*.cpp
-    src/kernel/kernel.cpp
-    src/kernel/panic.cpp
-    src/tty/tty.cpp
-    src/banner/banner.cpp
+    src/banner/*.cpp
+    src/BIOS/*.cpp
     src/cxx/*.cpp
-    src/sys/handlers.cpp
-    src/sys/IOPort.cpp
-    src/hardware/pic.cpp
-    src/Memory/*.cpp
-    src/Memory/*.c
     src/Device/*.cpp
-    src/Interfaces/*.cpp
+    src/Drivers/*.cpp
     src/FileSystem/*.cpp
+    src/hardware/*.cpp 
+    src/Interfaces/*.cpp
+    src/kernel/*.cpp
+    src/Memory/*.cpp
+    src/Schduler/*.cpp
+    src/sync/*.cpp
+    src/sys/*.cpp
+    src/tty/*.cpp
+    src/Thread/*.cpp
     ${ARCHDIR}/GDT/gdt.cpp
     ${ARCHDIR}/IDT/idt.cpp
     ${ARCHDIR}/IDT/ISR.S
+    ${ARCHDIR}/cpu/context.S
 )
 
 # Print the list of found objects

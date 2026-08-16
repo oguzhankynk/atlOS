@@ -33,7 +33,16 @@ namespace Threading
 
     struct Registers
     {
-        uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp, eip, eflags, cr3;
+        uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+        uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
+
+        uint64_t rip; // Instruction Pointer
+        uint64_t cs;  // Code Segment
+        uint64_t rflags;
+        uint64_t rsp; // Stack Pointer
+        uint64_t ss;  // Stack Segment
+
+        uint64_t cr3;
     } __attribute__((packed));
 
     struct TCB
