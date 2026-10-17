@@ -44,6 +44,10 @@
 #include <cxx/init.hpp>
 
 #include <Schduler/schduler.hpp>
+#include <Thread/thread.hpp>
+
+extern void threadTaskA();
+extern void threadTaskB();
 
 void TestMemoryManager()
 {
@@ -145,10 +149,13 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     Schedular::Init();
 
-    printf("end of kernel \n");
+    printf("Creating threads...\n");
+    Threading::Thread t1(threadTaskA);
+    Threading::Thread t2(threadTaskB);
 
+    printf("Threads running...\n");
     while (1)
     {
-        asm volatile("hlt");
+        Schedular::yield();
     }
 }

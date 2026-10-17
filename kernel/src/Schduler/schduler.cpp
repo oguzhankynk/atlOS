@@ -1,221 +1,37 @@
-/**
- * @file schduler.cpp
- * @author Oguzhan KAYNAK ()
- * @brief
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+#include <Schduler/schduler.hpp>
+#include <Thread/thread.hpp>
+#include <stdio.h>
 
-#include "Schduler/schduler.hpp"
-
-#include "stdio.h"
-
-#include "Thread/thread.hpp"
-#include "kernel/sys/IOPort.hpp"
-#include "kernel/assert.h"
-#include <kernel/Logger.hpp>
-#include <Memory/KHeap.h>
-#include <hardware/pit.hpp>
-
-extern "C" void switchTask(Threading::Registers *old_regs, Threading::Registers *new_regs); // The function which actually switches
-
-// extern "C" void switchTask(void* old_regs, void* new_regs); // The function which actually switches
+extern "C" void switchTask(Threading::Registers *from, Threading::Registers *to);
 
 namespace Schedular
 {
-    static void idleThreadFunction();
+    static Threading::Thread* readyQueue[16];
+    static uint32_t threadCount = 0;
+    static uint32_t currentThreadIndex = 0;
 
-    class ThreadList
-    {
-    public:
-        struct Node
-        {
-            Threading::Thread *thread{};
-            Node *next{};
-        };
+    void Init() {
+        threadCount = 0;
+        currentThreadIndex = 0;
+    }
 
-    private:
-        Node *m_head{};
-        Node *m_tail{};
-        Node *m_current{};
-        uint32_t m_threadCount{};
-
-    public:
-        ThreadList()
-        {
-            auto idleThread = new Node();
-            idleThread->thread = new Threading::Thread(idleThreadFunction, false);
-
-            m_head = idleThread;
-            m_tail = idleThread;
-            m_current = idleThread;
-            m_tail->next = m_head;
-            m_threadCount = 1;
-        }
-
-        void addThread(Threading::Thread &thread)
-        {
-            auto newNode = new Node();
-            newNode->thread = &thread;
-            m_tail->next = newNode;
-            m_tail = newNode;
-            m_tail->next = m_head;
-            m_threadCount++;
-        }
-
-        void removeThread(Threading::Thread &thread)
-        {
-            Node *current = m_head;
-            Node *prev = m_tail;
-            m_threadCount--;
-            while (current != m_tail)
-            {
-                if (current->thread == &thread)
-                {
-                    prev->next = current->next;
-
-                    return;
-                }
-                prev = current;
-                current = current->next;
-            }
-        }
-
-        Node *switchToNextThread(Node *&current)
-        {
-            current = m_current;
-            while (true)
-            {
-                m_current = m_current->next;
-                if (m_current->thread->getTCB().state == Threading::ThreadState::TERMINATED)
-                {
-                    continue; // Skip terminated threads
-                }
-                else
-                {
-                    break; // Found a thread that is not terminated
-                }
-            }
-            return m_current;
-        }
-
-        uint32_t getThreadCount() const
-        {
-            return m_threadCount;
-        }
-
-        void controlThreads()
-        {
-            Node *prev = m_tail;
-            Node *current = m_head;
-            uint32_t count = m_threadCount;
-
-            for (uint32_t i = 0; i < count; ++i)
-            {
-                if (current->thread->getTCB().state == Threading::ThreadState::TERMINATED &&
-                    current != m_head)
-                { // Never delete the idle thread!
-
-                    Node *toDelete = current;
-                    prev->next = current->next;
-                    if (current == m_tail)
-                        m_tail = prev;
-
-                    current = current->next;
-                    delete toDelete->thread;
-                    delete toDelete; // Delete the node itself!
-                    m_threadCount--;
-                }
-                else
-                {
-                    prev = current;
-                    current = current->next;
-                }
-            }
-        }
-
-        Node *getCurrentThread()
-        {
-            return m_current;
-        }
-    };
-
-    static ThreadList *threadList = nullptr;
-    static Threading::Registers bootContext;
-
-    static void sleep(uint32_t ms)
-    {
-        for (uint32_t i = 0; i < ms * 1000; ++i)
-        {
-            asm volatile("nop");
+    void addTask(Threading::Thread &thread) {
+        if (threadCount < 16) {
+            readyQueue[threadCount++] = &thread;
         }
     }
 
-    static void picHandler(void *args)
-    {
-        // printf("PIC Handler called!\n");
-        yield();
-    }
+    void yield() {
+        if (threadCount <= 1) return;
 
-    static void idleThreadFunction()
-    {
-        PIT::init(1000000, picHandler); // 1ms
+        uint32_t prevIndex = currentThreadIndex;
+        currentThreadIndex = (currentThreadIndex + 1) % threadCount;
 
-        while (1)
-        {
-            printf("idleThreadFunction!\n"); // Not implemented here...
-            threadList->controlThreads();
-            // yield();
-            sleep(10000000);
+        Threading::Thread* from = readyQueue[prevIndex];
+        Threading::Thread* to = readyQueue[currentThreadIndex];
+
+        if (from != to) {
+            switchTask(&from->getTCB().regs, &to->getTCB().regs);
         }
     }
-
-    void helloWorldThreadFunction()
-    {
-        int i = 0;
-        while (true)
-        {
-            printf("Hello from helloWorldThreadFunction %d!\n", i);
-            printf("Hello again from helloWorldThreadFunction %d!\n", i);
-            i++;
-            sleep(10000000);
-        }
-    }
-
-    void yield()
-    {
-        asm volatile("cli"); // Disable interrupts during context switch
-        ThreadList::Node *last = nullptr;
-        auto nextThread = threadList->switchToNextThread(last);
-
-        switchTask(&last->thread->getTCB().regs, &nextThread->thread->getTCB().regs);
-    }
-
-    void Init()
-    {
-        threadList = new ThreadList();
-
-        auto idleThread = threadList->getCurrentThread();
-
-        auto newThread = new Threading::Thread(helloWorldThreadFunction, false);
-        addTask(*newThread);
-
-        switchTask(&bootContext, &idleThread->thread->getTCB().regs);
-    }
-
-    void addTask(Threading::Thread &thread)
-    {
-        threadList->addThread(thread);
-    }
-
-} // namespace Schedular
+}
