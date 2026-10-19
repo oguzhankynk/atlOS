@@ -1,6 +1,6 @@
 #!/bin/sh
 qemu-system-x86_64 \
-    -cdrom isodir/atlOS.iso \
+    -cdrom atlOS.iso \
     -m 512M \
     -nographic \
     -monitor none \

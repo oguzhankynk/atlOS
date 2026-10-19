@@ -51,7 +51,7 @@
             "label": "Run QEMU Debug",
             "type": "shell",
             "isBackground": true,
-            "command": "qemu-system-x86_64 -cdrom isodir/atlOS.iso -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s"
+            "command": "qemu-system-x86_64 -cdrom atlOS.iso -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s"
         },
         {
             "label": "Debug AtlOS",

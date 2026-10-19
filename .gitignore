@@ -2,5 +2,5 @@
 kernel/build
 sysroot/
 VirtualDisk/disk.img
-isodir/atlOS.iso
-isodir/boot/atlOS.kernel
+isodir/
+atlOS.iso

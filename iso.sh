@@ -21,4 +21,4 @@ menuentry "atlOS" {
 	multiboot2 /boot/atlOS.kernel
 }
 EOF
-"$GRUB_MKRESCUE" -o isodir/atlOS.iso isodir
+"$GRUB_MKRESCUE" -o atlOS.iso isodir
