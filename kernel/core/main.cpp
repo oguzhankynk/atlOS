@@ -46,12 +46,22 @@
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
 
+#include <arch/x86_64/idt/handlers.hpp>
+#include <arch/x86_64/io/ioport.hpp>
+#include <cxx/uninitialized.hpp>
 #include <drivers/pic.hpp>
+#include <drivers/pit.hpp>
 
 #include <tests/selftest.hpp>
 
 extern void threadTaskA();
 extern void threadTaskB();
+
+// Objects owned by kernelMain, the composition root. They are constructed
+// explicitly below, in dependency order, and handed to their users by
+// reference; nothing else reaches them through a global.
+static Cxx::Uninitialized<Drivers::PIC> s_pic;
+static Cxx::Uninitialized<Drivers::PIT> s_pit;
 
 /**
  * @brief entry point of atlOS
@@ -96,10 +106,16 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     DeviceManager::init();
 
-    // The scheduler tick comes from the PIT through the 8259 PIC (there is no
-    // APIC driver yet). Init also enables interrupts.
-    PIC::init();
-    Scheduler::init();
+    // Interrupt controller: the 8259 PIC (there is no APIC driver yet). The ISR
+    // dispatcher is the one place that needs it without being handed it.
+    Drivers::PIC& pic = s_pic.construct();
+    Handlers::setInterruptController(&pic);
+
+    // Scheduler tick: the PIT, delivered through the PIC
+    Drivers::PIT& pit = s_pit.construct(pic);
+
+    IOPort::enableInterrupts();
+    Scheduler::init(pit);
 
 #ifdef ATLOS_SELFTEST
     int failed = SelfTest::run();

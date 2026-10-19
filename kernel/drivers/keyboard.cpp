@@ -1,6 +1,6 @@
 #include <arch/x86_64/io/ioport.hpp>
+#include <drivers/interrupt_controller.hpp>
 #include <drivers/keyboard.hpp>
-#include <drivers/pic.hpp>
 #include <stdio.h>
 #include <string.h>
 
@@ -169,16 +169,14 @@ static void readKey();
 
 static KeyboardBuffer s_keyBuffer;
 
-void init()
+void init(Drivers::InterruptController& controller)
 {
-    bool irqRegisterStat = PIC::addIrqHandler(PIC::IRQ::Keyboard, keyboardIrq, (void*)nullptr);
-
-    if (irqRegisterStat == false) {
-        printf("Keyboard: addIrqHandler error \n");
+    if (!controller.attach(Drivers::Irq::Keyboard, keyboardIrq, nullptr)) {
+        printf("Keyboard: can not attach the keyboard IRQ\n");
         return;
     }
 
-    PIC::irqEnable(PIC::IRQ::Keyboard); // Enable Keyboard interrupt
+    controller.unmask(Drivers::Irq::Keyboard);
 }
 
 int8_t getKey()

@@ -19,9 +19,15 @@
    5. `Memory::init`: PMM, recursive mapping, free memory from the multiboot
       memory map, reserves the kernel image (see [memory.md](memory.md))
    6. `DeviceManager::init` (currently empty)
-   7. `PIC::init` (8259 remapped to vectors 0x20/0x28, enables interrupts)
-   8. `Scheduler::init` (boot flow becomes task 0, PIT at 1 ms)
-   9. self tests (`ATLOS_SELFTEST` builds) or the demo threads A/B
+   7. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
+      lines masked) and binds it to the ISR dispatcher
+   8. constructs the `Drivers::PIT` on top of the PIC and enables interrupts
+   9. `Scheduler::init(pit)` (boot flow becomes task 0, 1 ms tick)
+   10. self tests (`ATLOS_SELFTEST` builds) or the demo threads A/B
+
+   `kernelMain` is the composition root: driver objects live in
+   `Cxx::Uninitialized<T>` storage, are constructed there explicitly in
+   dependency order and passed to their users by reference.
 
 The linker script (`kernel/arch/x86_64/linker.ld`) places the boot sections
 at their physical address and everything else at
@@ -45,18 +51,24 @@ CPU → IDT vector → INT_<n> stub (arch/x86_64/idt/isr.S)
         → intHandler(frame)            (arch/x86_64/idt/idt.cpp)
             exceptions 0..31: print the register dump and halt
             other vectors:   Handlers::interruptHandler(vector)
-                               → EOI to the PIC for IRQs 32..47
+                               → InterruptController::endOfInterrupt(vector)
                                → registered handler(arg)
         ← pop registers, drop vector/err_code, iretq
 ```
 
-Handlers are registered with `PIC::addIrqHandler(irq, fn, arg)` or
-`Handlers::addInterruptHandler(vector, fn, arg)`. IRQ handlers run on the
-stack of whatever thread was interrupted; they must not call into the
-scheduler or the heap.
+Drivers do not talk to the PIC directly. They get a
+`Drivers::InterruptController&` (`drivers/interrupt_controller.hpp`) and call
+`attach(irq, fn, arg)` and `unmask(irq)`; the PIC is one implementation, an
+APIC driver would be another. A periodic timer is a `Drivers::TickSource`
+(`drivers/tick_source.hpp`), implemented by the PIT. The only place that
+reaches the controller without being handed it is the ISR dispatcher, bound
+once with `Handlers::setInterruptController`.
 
-Enabled IRQs: 0 (PIT, scheduler tick) and 1 (keyboard; no driver is
-initialized yet, so key presses only reach the default handler).
+IRQ handlers run on the stack of whatever thread was interrupted; they must
+not call into the scheduler or the heap.
+
+All lines start masked; a line is enabled by the driver that uses it. Today
+only IRQ 0 (PIT, scheduler tick) is enabled.
 
 ## Conventions
 

@@ -14,6 +14,9 @@
 
 #include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/io/ioport.hpp>
+#include <cxx/uninitialized.hpp>
+#include <drivers/interrupt_controller.hpp>
+#include <drivers/pit.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
 #include <mm/memory.hpp>
@@ -321,6 +324,101 @@ static void testInterrupts()
 }
 
 // ------------------------------------------------------------
+// Uninitialized<T>
+// ------------------------------------------------------------
+
+struct Counted {
+    explicit Counted(int value)
+        : value(value)
+    {
+        s_constructions++;
+    }
+    int value;
+    static int s_constructions;
+};
+int Counted::s_constructions = 0;
+
+static void testUninitialized()
+{
+    group("Uninitialized");
+
+    static Cxx::Uninitialized<Counted> s_storage;
+    CHECK(!s_storage.isConstructed());
+    CHECK(Counted::s_constructions == 0);
+
+    Counted& object = s_storage.construct(42);
+    CHECK(s_storage.isConstructed());
+    CHECK(Counted::s_constructions == 1);
+    CHECK(object.value == 42);
+    CHECK(&s_storage.get() == &object);
+    CHECK(s_storage->value == 42);
+}
+
+// ------------------------------------------------------------
+// Drivers through their interfaces
+// ------------------------------------------------------------
+
+// Records what a driver asks of its interrupt controller
+class FakeInterruptController final : public Drivers::InterruptController {
+public:
+    bool attach(Drivers::Irq irq, InterruptHandlerFunction handler, void* arg) override
+    {
+        attachCount++;
+        attachedIrq = irq;
+        attachedHandler = handler;
+        attachedArg = arg;
+        return true;
+    }
+    void mask(Drivers::Irq) override { }
+    void unmask(Drivers::Irq irq) override
+    {
+        unmaskCount++;
+        unmaskedIrq = irq;
+    }
+    void endOfInterrupt(uint32_t) override { }
+
+    int attachCount = 0;
+    int unmaskCount = 0;
+    Drivers::Irq attachedIrq {};
+    Drivers::Irq unmaskedIrq {};
+    InterruptHandlerFunction attachedHandler {};
+    void* attachedArg {};
+};
+
+static void fakeTick(void*) { }
+
+static void testPitWithFakeController()
+{
+    group("PIT (fake interrupt controller)");
+
+    FakeInterruptController controller;
+    Drivers::PIT pit(controller);
+
+    // Out of range periods are refused before anything is touched
+    CHECK(!pit.start(100000000, fakeTick, nullptr)); // 100 ms
+    CHECK(!pit.start(100, fakeTick, nullptr)); // 100 ns
+    CHECK(controller.attachCount == 0);
+
+    // A valid period attaches and unmasks the timer IRQ. This reprograms the
+    // real channel 0 with the scheduler's own 1 ms, so the tick is unchanged;
+    // the real IRQ0 handler stays the scheduler's because the fake does not
+    // touch the IDT handlers.
+    int marker;
+    CHECK(pit.start(1000000, fakeTick, &marker));
+    CHECK(controller.attachCount == 1);
+    CHECK(controller.attachedIrq == Drivers::Irq::Timer);
+    CHECK(controller.attachedHandler == fakeTick);
+    CHECK(controller.attachedArg == &marker);
+    CHECK(controller.unmaskCount == 1);
+    CHECK(controller.unmaskedIrq == Drivers::Irq::Timer);
+
+    // The scheduler tick keeps running
+    uint64_t t0 = Scheduler::ticks();
+    Scheduler::sleep(5);
+    CHECK(Scheduler::ticks() > t0);
+}
+
+// ------------------------------------------------------------
 // CPU
 // ------------------------------------------------------------
 
@@ -523,6 +621,8 @@ int run()
     testVmm();
     testHeap();
     testInterrupts();
+    testUninitialized();
+    testPitWithFakeController();
     testCpu();
     testThreadStack();
     testRoundRobin();

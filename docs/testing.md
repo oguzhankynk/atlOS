@@ -18,7 +18,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 71 passed, 0 failed
+[SELFTEST] done: 89 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -36,6 +36,8 @@ serial log is written to `build-selftest/selftest.log`.
 | VMM | allocate/write/free, range reuse, `virtToPhysAddr`, `map`/`unmap` alias in a new page directory, no leak |
 | Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
+| Uninitialized | `Cxx::Uninitialized<T>` constructs once, on demand, with the given arguments |
+| PIT (fake controller) | the PIT driver against a fake `InterruptController`: period checks, attaches and unmasks IRQ 0 |
 | CPU | CPUID: max leaf, vendor string, SSE2/FXSR present, cache list bounded |
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
 | Scheduler | round robin and exit, `sleep`, `block`/`unblock`, removing a queued thread |

@@ -62,8 +62,11 @@ The kernel is clean: new warnings should be fixed, not suppressed. Code inside
 
 ## Design
 
-Agreed direction (being introduced subsystem by subsystem; most code still
-uses namespaces with file scope state):
+Agreed direction, introduced subsystem by subsystem. Done: the interrupt
+controller and timer (`Drivers::PIC`, `Drivers::PIT` behind
+`InterruptController` / `TickSource`, built by `kernelMain` in
+`Cxx::Uninitialized` storage). Still to do: PMM, VMM, heap, scheduler and
+threads, console/logger, which use namespaces with file scope state today.
 
 - **No singletons.** Each subsystem is a class that owns its state
   (`PhysicalMemoryManager`, `AddressSpace`, `Heap`, `Scheduler`, drivers);

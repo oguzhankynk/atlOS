@@ -19,17 +19,27 @@
 
 #pragma once
 
+#include <drivers/interrupt_controller.hpp>
+#include <drivers/tick_source.hpp>
 #include <stdint.h>
 
-namespace PIT {
+namespace Drivers {
 
 /**
- * @brief Initializes the PIT8253/8254 with the desired settings.
- *
- * @param periodNs The desired period in nanoseconds.
- * @param handler A function pointer to the interrupt handler that will be called when the timer triggers.
- * @param args Optional arguments to be passed to the handler function.
+ * @brief Channel 0 of the 8253/8254 PIT as a periodic tick, delivered on Irq::Timer.
  */
-void init(uint32_t periodNs, void (*handler)(void*), void* args = nullptr);
+class PIT final : public TickSource {
+public:
+    explicit PIT(InterruptController& controller);
 
-}
+    /**
+     * @brief Program channel 0 and attach handler to the timer IRQ.
+     * Periods outside about 838 ns .. 54.9 ms do not fit the 16-bit divisor.
+     */
+    bool start(uint32_t periodNs, TickHandler handler, void* arg) override;
+
+private:
+    InterruptController& m_controller;
+};
+
+} // namespace Drivers

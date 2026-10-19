@@ -27,8 +27,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <drivers/pic.hpp>
-
 #include <drivers/disk/ata.hpp>
 #include <drivers/keyboard.hpp>
 #include <drivers/serial.hpp>
@@ -138,7 +136,6 @@ static void detectATADevices()
 
 void init()
 {
-    // PIC::init(); not used anymore in favor of APIC
 
     // Keyboard::init();
 

@@ -1,5 +1,5 @@
 #include <core/panic.hpp>
-#include <drivers/pit.hpp>
+#include <drivers/tick_source.hpp>
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
 #include <stdio.h>
@@ -95,14 +95,15 @@ static void schedule()
     }
 }
 
-void init()
+void init(Drivers::TickSource& ticks)
 {
     s_bootTcb.state = ThreadState::Running;
     s_readyQueue[0] = &s_bootTcb;
     s_threadCount = 1;
     s_currentThreadIndex = 0;
 
-    PIT::init(tickPeriodNs, onTick);
+    if (!ticks.start(tickPeriodNs, onTick, nullptr))
+        kernelPanic("Scheduler: the tick source does not support a 1 ms period");
 }
 
 void addTask(Threading::Thread& thread)

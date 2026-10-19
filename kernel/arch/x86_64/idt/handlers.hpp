@@ -27,6 +27,10 @@
  */
 typedef void (*InterruptHandlerFunction)(void*);
 
+namespace Drivers {
+class InterruptController;
+}
+
 namespace Handlers {
 
 /**
@@ -45,6 +49,14 @@ void init();
  * @return false otherwise
  */
 bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function, void* arg);
+
+/**
+ * @brief Set the controller that acknowledges IRQs (sends EOI).
+ *
+ * This is the boundary between the assembly ISR stubs, which can not be given
+ * an object, and the interrupt controller: kernelMain binds it once.
+ */
+void setInterruptController(Drivers::InterruptController* controller);
 
 /**
  * @brief Call the Interrupt Handler function

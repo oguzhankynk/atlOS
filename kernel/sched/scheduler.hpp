@@ -23,6 +23,10 @@
 
 #include <stdint.h>
 
+namespace Drivers {
+class TickSource;
+}
+
 namespace Threading {
 class Thread;
 struct TCB;
@@ -30,10 +34,9 @@ struct TCB;
 
 namespace Scheduler {
 /**
- * @brief Register the boot flow as the first task and start the 1 ms tick.
- * Needs the PIC to be initialized.
+ * @brief Register the boot flow as the first task and start the 1 ms tick on ticks.
  */
-void init();
+void init(Drivers::TickSource& ticks);
 
 void addTask(Threading::Thread& thread);
 

@@ -23,12 +23,15 @@
 #include <stdio.h>
 
 #include <arch/x86_64/idt/idt.hpp>
-#include <drivers/pic.hpp>
+#include <drivers/interrupt_controller.hpp>
 
 namespace Handlers {
 
 static InterruptHandlerFunction s_funcs[IDT::idtTableLen];
 static void* s_args[IDT::idtTableLen];
+
+// Bound by kernelMain, see setInterruptController
+static Drivers::InterruptController* s_interruptController {};
 
 /**
  * @brief Default handler function
@@ -71,6 +74,11 @@ bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function
     return true;
 }
 
+void setInterruptController(Drivers::InterruptController* controller)
+{
+    s_interruptController = controller;
+}
+
 /**
  * @brief Call the Interrupt Handler function
  *
@@ -81,10 +89,10 @@ void interruptHandler(uint32_t exceptionNo)
     if (exceptionNo >= IDT::idtTableLen)
         return;
 
-    // Send EOI if exception_no is in the range of IRQs (32-47)
-    if (exceptionNo >= 32 && exceptionNo < 48) {
-        PIC::sendEoi(static_cast<PIC::IRQ>(exceptionNo - 32));
-    }
+    // Acknowledge IRQs before the handler runs; the controller ignores other vectors
+    if (exceptionNo >= 32 && s_interruptController)
+        s_interruptController->endOfInterrupt(exceptionNo);
+
     auto fn = s_funcs[exceptionNo];
     auto arg = s_args[exceptionNo];
     fn(arg);
