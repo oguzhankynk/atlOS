@@ -48,18 +48,18 @@ static Device* s_deviceList[numberOfMaxDevice] {};
 
 struct PartitionEntry {
     uint8_t status {}; // Partition status
-    uint8_t chs_first[3] {}; // CHS address of first absolute sector
+    uint8_t chsFirst[3] {}; // CHS address of first absolute sector
     uint8_t type {}; // Partition type
-    uint8_t chs_last[3] {}; // CHS address of last absolute sector
-    uint32_t lba_first_sector {}; // LBA of first absolute sector
-    uint32_t num_sectors {}; // Number of sectors in partition
+    uint8_t chsLast[3] {}; // CHS address of last absolute sector
+    uint32_t lbaFirstSector {}; // LBA of first absolute sector
+    uint32_t numSectors {}; // Number of sectors in partition
 
     void print() const noexcept
     {
         printf("  Status: 0x%02X ", status);
         printf("  Type: 0x%02X ", type);
-        printf("  First LBA sector: %u ", lba_first_sector);
-        printf("  Number of sectors: %u\n", num_sectors);
+        printf("  First LBA sector: %u ", lbaFirstSector);
+        printf("  Number of sectors: %u\n", numSectors);
     }
 
 } __attribute__((packed));
@@ -70,8 +70,8 @@ struct PartitionEntry {
  */
 struct MBR {
     uint8_t code[446] {}; /// Code Area
-    PartitionEntry partition_table[4] {}; /// Partition tables
-    uint16_t magic_number {}; /// MBR signature :  0xAA55.
+    PartitionEntry partitionTable[4] {}; /// Partition tables
+    uint16_t magicNumber {}; /// MBR signature :  0xAA55.
 } __attribute__((packed));
 
 static void detectATADevices()
@@ -94,7 +94,7 @@ static void detectATADevices()
             auto validPartition = 0;
 
             printf("MBR info: \n");
-            for (const auto& part : mbr.partition_table) {
+            for (const auto& part : mbr.partitionTable) {
                 if (part.type != 0x00) {
                     part.print();
 
@@ -106,13 +106,13 @@ static void detectATADevices()
 
                     uint8_t partitionSectorData[512] {};
 
-                    newPartition->readSector(part.lba_first_sector, partitionSectorData);
+                    newPartition->readSector(part.lbaFirstSector, partitionSectorData);
 
                     if (partitionSectorData[0] == 0xEB || partitionSectorData[0] == 0xE9) {
                         // FAT 16 detected
 
                         auto* fat16 = new FileSystem::FAT16::FAT16FileSystem(*newPartition,
-                            part.lba_first_sector);
+                            part.lbaFirstSector);
                         auto ret = FileSystem::VFS::addFileSystem(*fat16);
 
                         break;
@@ -123,7 +123,7 @@ static void detectATADevices()
                 }
             }
 
-            for (const auto& part : mbr.partition_table) {
+            for (const auto& part : mbr.partitionTable) {
             }
         } else {
             // TODO

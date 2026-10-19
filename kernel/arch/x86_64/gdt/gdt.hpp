@@ -30,12 +30,12 @@ namespace GDT {
 
 /// @brief Represents a GDT entry.
 struct GDTEntry {
-    uint16_t limit_low; /**< Limit 0:15 */
-    uint16_t base_low; /**< Base 0:15 */
-    uint8_t base_middle; /**< Base 16:23 */
+    uint16_t limitLow; /**< Limit 0:15 */
+    uint16_t baseLow; /**< Base 0:15 */
+    uint8_t baseMiddle; /**< Base 16:23 */
     uint8_t access; /**< empty (2 bit). */
-    uint8_t limit_high_and_flags; /**< Limit 16:19 and Flags */
-    uint8_t base_high; /**< Base 24:31 */
+    uint8_t limitHighAndFlags; /**< Limit 16:19 and Flags */
+    uint8_t baseHigh; /**< Base 24:31 */
 } __attribute__((packed));
 
 /// @brief Represents the Global Descriptor Table Register (GDTR).

@@ -407,7 +407,7 @@ extern "C" void intHandler(const InterruptFrame& regs)
 {
     const char* intStr;
 
-    switch (static_cast<ExternalInterrupts>(regs.int_no)) {
+    switch (static_cast<ExternalInterrupts>(regs.intNo)) {
     case ExternalInterrupts::DivideError:
         intStr = "DivideError";
         break;
@@ -502,13 +502,13 @@ extern "C" void intHandler(const InterruptFrame& regs)
 
     default:
         intStr = "OtherException";
-        Handlers::interruptHandler(regs.int_no);
+        Handlers::interruptHandler(regs.intNo);
         return;
     }
 
     printf("==== EXCEPTION/INTERRUPT INFO ====\n");
-    printf("INT_NO  = 0x%lx %s\n", regs.int_no, intStr);
-    printf("ERR_CODE= 0x%lx\n", regs.err_code);
+    printf("INT_NO  = 0x%lx %s\n", regs.intNo, intStr);
+    printf("ERR_CODE= 0x%lx\n", regs.errCode);
 
     printf("\n--- General Purpose Registers ---\n");
     printf("RAX=0x%016lx RBX=0x%016lx RCX=0x%016lx RDX=0x%016lx\n",

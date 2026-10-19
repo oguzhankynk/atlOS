@@ -155,8 +155,8 @@ enum KEYCODE {
 struct KeyboardBuffer {
     static constexpr uint16_t bufferSize = 256;
     int8_t buffer[bufferSize] {};
-    uint16_t w_index {};
-    uint16_t r_index {};
+    uint16_t wIndex {};
+    uint16_t rIndex {};
 
     bool isFull();
     void append(int8_t key);
@@ -288,7 +288,7 @@ static uint8_t toAscii(uint8_t key)
 
 bool KeyboardBuffer::isFull()
 {
-    return w_index == (r_index + bufferSize - 1) % bufferSize;
+    return wIndex == (rIndex + bufferSize - 1) % bufferSize;
 }
 
 void KeyboardBuffer::append(int8_t key)
@@ -297,8 +297,8 @@ void KeyboardBuffer::append(int8_t key)
         return;
 
     if (!isFull()) {
-        buffer[w_index] = key;
-        w_index = (w_index + 1) % bufferSize;
+        buffer[wIndex] = key;
+        wIndex = (wIndex + 1) % bufferSize;
     }
 }
 
@@ -306,9 +306,9 @@ int8_t KeyboardBuffer::getKey()
 {
     int8_t c = 0;
 
-    if (w_index != r_index) {
-        c = buffer[r_index];
-        r_index = (r_index + 1) % bufferSize;
+    if (wIndex != rIndex) {
+        c = buffer[rIndex];
+        rIndex = (rIndex + 1) % bufferSize;
     }
 
     return c;

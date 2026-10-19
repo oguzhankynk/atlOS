@@ -37,8 +37,8 @@ namespace FAT16 {
     void BPB::print() const noexcept
     {
         printf("JMP Instruction: 0x%02X 0x%02X 0x%02X\n",
-            JMPInstruction[0], JMPInstruction[1], JMPInstruction[2]);
-        printf("OEM Identifier: %.8s\n", OEMIdentifier);
+            jmpInstruction[0], jmpInstruction[1], jmpInstruction[2]);
+        printf("OEM Identifier: %.8s\n", oemIdentifier);
         printf("Bytes Per Sector: %u\n", bytesPerSector);
         printf("Sectors Per Cluster: %u\n", sectorsPerCluster);
         printf("Reserved Sectors: %u\n", reservedSectors);
@@ -55,7 +55,7 @@ namespace FAT16 {
 
     void BOOTSector::print() const noexcept
     {
-        Bpb.print();
+        bpb.print();
         printf("Drive Number: 0x%02X\n", driveNumber);
         printf("Boot Signature: 0x%02X\n", bootSignature);
         printf("Volume ID: 0x%08X\n", volumeID);
@@ -97,24 +97,24 @@ namespace FAT16 {
             return false;
         }
 
-        m_bytesPerSector = m_sector.Bpb.bytesPerSector;
-        m_clusterSize = m_sector.Bpb.sectorsPerCluster * m_sector.Bpb.bytesPerSector;
-        m_numDirEntries = m_sector.Bpb.numDirEntries;
-        m_totalSectors = (m_sector.Bpb.totalSectors == 0) ? m_sector.Bpb.longSectors : m_sector.Bpb.totalSectors;
+        m_bytesPerSector = m_sector.bpb.bytesPerSector;
+        m_clusterSize = m_sector.bpb.sectorsPerCluster * m_sector.bpb.bytesPerSector;
+        m_numDirEntries = m_sector.bpb.numDirEntries;
+        m_totalSectors = (m_sector.bpb.totalSectors == 0) ? m_sector.bpb.longSectors : m_sector.bpb.totalSectors;
 
-        m_fatSize = m_sector.Bpb.sectorsPerFat;
+        m_fatSize = m_sector.bpb.sectorsPerFat;
         m_rootDirSectors = ((m_numDirEntries * 32) + (m_bytesPerSector - 1)) / m_bytesPerSector;
         m_rootDirectorySize = m_rootDirSectors * m_bytesPerSector;
 
-        m_dataSectors = m_totalSectors - (m_sector.Bpb.reservedSectors + (m_sector.Bpb.numberOfFats * m_fatSize) + m_rootDirSectors);
-        m_totalClusters = m_dataSectors / m_sector.Bpb.sectorsPerCluster;
+        m_dataSectors = m_totalSectors - (m_sector.bpb.reservedSectors + (m_sector.bpb.numberOfFats * m_fatSize) + m_rootDirSectors);
+        m_totalClusters = m_dataSectors / m_sector.bpb.sectorsPerCluster;
 
-        m_firstFatSector = m_StartingSector + m_sector.Bpb.reservedSectors;
-        m_firstRootDirSector = m_firstFatSector + (m_sector.Bpb.numberOfFats * m_fatSize);
-        m_firstDataSector = m_firstFatSector + (m_sector.Bpb.numberOfFats * m_fatSize) + m_rootDirSectors;
+        m_firstFatSector = m_StartingSector + m_sector.bpb.reservedSectors;
+        m_firstRootDirSector = m_firstFatSector + (m_sector.bpb.numberOfFats * m_fatSize);
+        m_firstDataSector = m_firstFatSector + (m_sector.bpb.numberOfFats * m_fatSize) + m_rootDirSectors;
 
         logMsg(dbgLog, "total_sectors    :%05u  fat_size           :%05u \n", m_totalSectors, m_fatSize);
-        logMsg(dbgLog, "numberOfFats     :%05u  clusterSize        :%05u \n", m_sector.Bpb.numberOfFats, m_clusterSize);
+        logMsg(dbgLog, "numberOfFats     :%05u  clusterSize        :%05u \n", m_sector.bpb.numberOfFats, m_clusterSize);
         logMsg(dbgLog, "root_dir_sectors :%05u  first_data_sector  :%05u \n", m_rootDirSectors, m_firstDataSector);
         logMsg(dbgLog, "first_fat_sector :%05u  data_sectors       :%05u \n", m_firstFatSector, m_dataSectors);
         logMsg(dbgLog, "total_clusters   :%05u  root_directory_size:%05u \n", m_totalClusters, m_rootDirectorySize);
@@ -203,7 +203,7 @@ namespace FAT16 {
                 fd->dirEntry = &dirEntry;
                 fd->fileIndex = fileIndex;
                 fd->startCluster = dirEntry.firstCluster; // Starting cluster
-                fd->startSector = (fd->startCluster - 2) * m_sector.Bpb.sectorsPerCluster + m_firstDataSector;
+                fd->startSector = (fd->startCluster - 2) * m_sector.bpb.sectorsPerCluster + m_firstDataSector;
                 fd->currentCluster = fd->startCluster;
                 fd->position = 0; // Start at the beginning of the file
                 fd->size = dirEntry.fileSize; // Size of the file
@@ -218,12 +218,12 @@ namespace FAT16 {
                     currentCluster = findNextCluster(currentCluster);
                 }
 
-                uint32_t lastClusterStartSector = (previousCluster - 2) * m_sector.Bpb.sectorsPerCluster + m_firstDataSector;
+                uint32_t lastClusterStartSector = (previousCluster - 2) * m_sector.bpb.sectorsPerCluster + m_firstDataSector;
 
-                uint32_t totalSectors = (fd->size + m_sector.Bpb.bytesPerSector - 1) / m_sector.Bpb.bytesPerSector;
+                uint32_t totalSectors = (fd->size + m_sector.bpb.bytesPerSector - 1) / m_sector.bpb.bytesPerSector;
 
                 fd->endCluster = previousCluster;
-                fd->endSector = lastClusterStartSector + (totalSectors - 1) % m_sector.Bpb.sectorsPerCluster;
+                fd->endSector = lastClusterStartSector + (totalSectors - 1) % m_sector.bpb.sectorsPerCluster;
 
                 logMsg(dbgLog, "startCluster:%u startSector:%u \nendCluster:%u endSector:%u size:%u \n",
                     fd->startCluster, fd->startSector, fd->endCluster, fd->endSector, fd->size);
@@ -256,7 +256,7 @@ namespace FAT16 {
             fd->dirEntry = &dirEntry;
             fd->fileIndex = fileIndex;
             fd->startCluster = dirEntry.firstCluster;
-            fd->startSector = (fd->startCluster - 2) * m_sector.Bpb.sectorsPerCluster + m_firstDataSector;
+            fd->startSector = (fd->startCluster - 2) * m_sector.bpb.sectorsPerCluster + m_firstDataSector;
             fd->currentCluster = fd->startCluster;
             fd->position = 0; // Start at the beginning of the file
             fd->size = dirEntry.fileSize; // Size of the file
@@ -337,7 +337,7 @@ namespace FAT16 {
             bytesToRead = dirEntry->fileSize - fat16File->position;
         }
 
-        auto clusterOffset = fat16File->position % (m_bytesPerSector * m_sector.Bpb.sectorsPerCluster);
+        auto clusterOffset = fat16File->position % (m_bytesPerSector * m_sector.bpb.sectorsPerCluster);
 
         uint32_t sectorIndexInCluster = clusterOffset / m_bytesPerSector;
 
@@ -374,7 +374,7 @@ namespace FAT16 {
 
             // If we reached the end of the cluster, move to the next cluster
             sectorIndexInCluster++;
-            if (sectorIndexInCluster >= m_sector.Bpb.sectorsPerCluster) {
+            if (sectorIndexInCluster >= m_sector.bpb.sectorsPerCluster) {
                 fat16File->currentCluster = findNextCluster(fat16File->currentCluster);
                 sectorIndexInCluster = 0;
             }
@@ -398,7 +398,7 @@ namespace FAT16 {
         auto bytesToWrite = size;
         const uint8_t* src = static_cast<const uint8_t*>(buffer);
 
-        auto clusterOffset = fat16File->position % (m_bytesPerSector * m_sector.Bpb.sectorsPerCluster);
+        auto clusterOffset = fat16File->position % (m_bytesPerSector * m_sector.bpb.sectorsPerCluster);
 
         uint32_t sectorIndexInCluster = clusterOffset / m_bytesPerSector;
 
@@ -444,7 +444,7 @@ namespace FAT16 {
             }
 
             sectorIndexInCluster++;
-            if (sectorIndexInCluster >= m_sector.Bpb.sectorsPerCluster) {
+            if (sectorIndexInCluster >= m_sector.bpb.sectorsPerCluster) {
                 uint32_t nextCluster = findNextCluster(fat16File->currentCluster);
 
                 if (nextCluster == 0xFFFF) {
@@ -537,7 +537,7 @@ namespace FAT16 {
 
     uint32_t FAT16FileSystem::clusterToSector(uint32_t cluster) const
     {
-        return m_firstDataSector + (cluster - 2) * m_sector.Bpb.sectorsPerCluster;
+        return m_firstDataSector + (cluster - 2) * m_sector.bpb.sectorsPerCluster;
     }
 
     uint16_t FAT16FileSystem::findFreeCluster() const
@@ -565,7 +565,7 @@ namespace FAT16 {
 
         uint32_t fatOffset = cluster % 256;
 
-        for (auto i = 0; i < m_sector.Bpb.numberOfFats; i++) {
+        for (auto i = 0; i < m_sector.bpb.numberOfFats; i++) {
             m_device.readSector(fatSector, (uint8_t*)fatTable);
             fatTable[fatOffset] = nextCluster;
 

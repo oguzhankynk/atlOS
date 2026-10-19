@@ -68,8 +68,8 @@ namespace FAT16 {
      *
      */
     struct BPB {
-        uint8_t JMPInstruction[3] {}; /// JMP SHORT 3C NOP
-        uint8_t OEMIdentifier[8] {}; /// OEM identifier
+        uint8_t jmpInstruction[3] {}; /// JMP SHORT 3C NOP
+        uint8_t oemIdentifier[8] {}; /// OEM identifier
         uint16_t bytesPerSector {}; /// The number of Bytes per sector
         uint8_t sectorsPerCluster {}; /// Number of sectors per cluster.
         uint16_t reservedSectors {}; /// Number of reserved sectors. The boot record sectors are included in this value.
@@ -96,7 +96,7 @@ namespace FAT16 {
      *
      */
     struct BOOTSector {
-        BPB Bpb {}; /// BPB structure
+        BPB bpb {}; /// BPB structure
         uint8_t driveNumber {}; /// Drive number. The value here should be identical to the value returned by BIOS interrupt 0x13, or passed in the DL register;
         uint8_t reserved {}; /// Reserved .
         uint8_t bootSignature {}; /// Signature (must be 0x28 or 0x29).

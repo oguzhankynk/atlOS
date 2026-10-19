@@ -35,6 +35,7 @@ CheckOptions:
   - { key: readability-identifier-naming.ProtectedMemberPrefix, value: m_ }
   - { key: readability-identifier-naming.ClassMemberPrefix, value: s_ }
   # Public members of classes keep m_ (WebKit), plain struct fields have no prefix
+  - { key: readability-identifier-naming.PublicMemberCase, value: camelBack }
   - { key: readability-identifier-naming.PublicMemberIgnoredRegexp, value: '^m_[a-z][a-zA-Z0-9]*$' }
   - { key: readability-identifier-naming.StaticVariablePrefix, value: s_ }
   # Namespace scope variables (clang-tidy does not tell static from extern here)

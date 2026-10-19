@@ -38,7 +38,7 @@ void initializeCpuInfo(CPUInfo* cpuInfo)
     cpuid00hCommand(&cpuInfo->maksimumIndex, cpuInfo->cpu);
 
     if (cpuInfo->maksimumIndex >= 0x01)
-        cpuid01hCommand(&cpuInfo->processorType, &cpuInfo->CPUFeaturesInfo);
+        cpuid01hCommand(&cpuInfo->processorType, &cpuInfo->cpuFeaturesInfo);
 
     // Above the highest supported leaf CPUID returns unrelated data
     if (cpuInfo->maksimumIndex >= 0x04)
@@ -49,7 +49,7 @@ void printCPUInfo(const CPUInfo* cpuInfo)
 {
     printf("CPU: %s\n", cpuInfo->cpu);
     printf("Maksimum Index: %u\n", cpuInfo->maksimumIndex);
-    printCPUFeatures(&cpuInfo->CPUFeaturesInfo);
+    printCPUFeatures(&cpuInfo->cpuFeaturesInfo);
     printf("\n");
     printProcessorType(&cpuInfo->processorType);
     printCacheInfo(&cpuInfo->cacheList);
@@ -59,71 +59,71 @@ void printCPUInfo(const CPUInfo* cpuInfo)
 /// @param features: A pointer to CPU features to print.
 static void printCPUFeatures(const CPUFeatures* features)
 {
-    printf("SSE3: %u\t", features->SSE3);
-    printf("PCLMULQDQ: %u\t", features->PCLMULQDQ);
-    printf("DTES64: %u\t", features->DTES64);
-    printf("MONITOR: %u\t", features->MONITOR);
-    printf("DS_CPL: %u\t", features->DS_CPL);
-    printf("VMX: %u\t", features->VMX);
-    printf("SMX: %u\t", features->SMX);
-    printf("EIST: %u\t", features->EIST);
-    printf("TM2: %u\t", features->TM2);
-    printf("SSSE3: %u\t", features->SSSE3);
-    printf("CNXT_ID: %u\t", features->CNXT_ID);
-    printf("SDBG: %u\t", features->SDBG);
-    printf("FMA: %u\t", features->FMA);
-    printf("CMPXCHG16B: %u\t", features->CMPXCHG16B);
-    printf("xTPR_Update_Control: %u\t", features->xTPR_Update_Control);
-    printf("PDCM: %u\t", features->PDCM);
-    printf("Reserved1: %u\t", features->Reserved1);
-    printf("PCID: %u\t", features->PCID);
-    printf("DCA: %u\t", features->DCA);
-    printf("SSE4_1: %u\t", features->SSE4_1);
-    printf("SSE4_2: %u\t", features->SSE4_2);
+    printf("SSE3: %u\t", features->sse3);
+    printf("PCLMULQDQ: %u\t", features->pclmulqdq);
+    printf("DTES64: %u\t", features->dtes64);
+    printf("MONITOR: %u\t", features->monitor);
+    printf("DS_CPL: %u\t", features->dsCpl);
+    printf("VMX: %u\t", features->vmx);
+    printf("SMX: %u\t", features->smx);
+    printf("EIST: %u\t", features->eist);
+    printf("TM2: %u\t", features->tm2);
+    printf("SSSE3: %u\t", features->ssse3);
+    printf("CNXT_ID: %u\t", features->cnxtId);
+    printf("SDBG: %u\t", features->sdbg);
+    printf("FMA: %u\t", features->fma);
+    printf("CMPXCHG16B: %u\t", features->cmpxchg16b);
+    printf("xTPR_Update_Control: %u\t", features->xTprUpdateControl);
+    printf("PDCM: %u\t", features->pdcm);
+    printf("Reserved1: %u\t", features->reserved1);
+    printf("PCID: %u\t", features->pcid);
+    printf("DCA: %u\t", features->dca);
+    printf("SSE4_1: %u\t", features->sse41);
+    printf("SSE4_2: %u\t", features->sse42);
     printf("x2APIC: %u\t", features->x2APIC);
-    printf("MOVBE: %u\t", features->MOVBE);
-    printf("POPCNT: %u\t", features->POPCNT);
-    printf("TSC_Deadline: %u\t", features->TSC_Deadline);
-    printf("AESNI: %u\t", features->AESNI);
-    printf("XSAVE: %u\t", features->XSAVE);
-    printf("OSXSAVE: %u\t", features->OSXSAVE);
-    printf("AVX: %u\t", features->AVX);
-    printf("F16C: %u\t", features->F16C);
-    printf("RDRAND: %u\t", features->RDRAND);
-    printf("Not_Used: %u\t", features->Not_Used);
-    printf("FPU: %u\t", features->FPU);
-    printf("VME: %u\t", features->VME);
-    printf("DE: %u\t", features->DE);
-    printf("PSE: %u\t", features->PSE);
-    printf("TSC: %u\t", features->TSC);
-    printf("MSR: %u\t", features->MSR);
-    printf("PAE: %u\t", features->PAE);
-    printf("MCE: %u\t", features->MCE);
-    printf("CX8: %u\t", features->CX8);
-    printf("APIC: %u\t", features->APIC);
-    printf("Reserved2: %u\t", features->Reserved2);
-    printf("SEP: %u\t", features->SEP);
-    printf("MTRR: %u\t", features->MTRR);
-    printf("PGE: %u\t", features->PGE);
-    printf("MCA: %u\t", features->MCA);
-    printf("CMOV: %u\t", features->CMOV);
-    printf("PAT: %u\t", features->PAT);
-    printf("PSE_36: %u\t", features->PSE_36);
-    printf("PSN: %u\t", features->PSN);
-    printf("CLFSH: %u\t", features->CLFSH);
-    printf("Reserved3: %u\t", features->Reserved3);
+    printf("MOVBE: %u\t", features->movbe);
+    printf("POPCNT: %u\t", features->popcnt);
+    printf("TSC_Deadline: %u\t", features->tscDeadline);
+    printf("AESNI: %u\t", features->aesni);
+    printf("XSAVE: %u\t", features->xsave);
+    printf("OSXSAVE: %u\t", features->osxsave);
+    printf("AVX: %u\t", features->avx);
+    printf("F16C: %u\t", features->f16c);
+    printf("RDRAND: %u\t", features->rdrand);
+    printf("Not_Used: %u\t", features->notUsed);
+    printf("FPU: %u\t", features->fpu);
+    printf("VME: %u\t", features->vme);
+    printf("DE: %u\t", features->de);
+    printf("PSE: %u\t", features->pse);
+    printf("TSC: %u\t", features->tsc);
+    printf("MSR: %u\t", features->msr);
+    printf("PAE: %u\t", features->pae);
+    printf("MCE: %u\t", features->mce);
+    printf("CX8: %u\t", features->cx8);
+    printf("APIC: %u\t", features->apic);
+    printf("Reserved2: %u\t", features->reserved2);
+    printf("SEP: %u\t", features->sep);
+    printf("MTRR: %u\t", features->mtrr);
+    printf("PGE: %u\t", features->pge);
+    printf("MCA: %u\t", features->mca);
+    printf("CMOV: %u\t", features->cmov);
+    printf("PAT: %u\t", features->pat);
+    printf("PSE_36: %u\t", features->pse36);
+    printf("PSN: %u\t", features->psn);
+    printf("CLFSH: %u\t", features->clfsh);
+    printf("Reserved3: %u\t", features->reserved3);
 
-    printf("DS : %u\t", features->DS);
-    printf("ACPI : %u\t", features->ACPI);
-    printf("MMX : %u\t", features->MMX);
-    printf("FXSR : %u\t", features->FXSR);
-    printf("SSE : %u\t", features->SSE);
-    printf("SSE2 : %u\t", features->SSE2);
-    printf("SS : %u\t", features->SS);
-    printf("HTT : %u\t", features->HTT);
-    printf("TM : %u\t", features->TM);
-    printf("Reserved4 : %u\t", features->Reserved4);
-    printf("PBE : %u\t", features->PBE);
+    printf("DS : %u\t", features->ds);
+    printf("ACPI : %u\t", features->acpi);
+    printf("MMX : %u\t", features->mmx);
+    printf("FXSR : %u\t", features->fxsr);
+    printf("SSE : %u\t", features->sse);
+    printf("SSE2 : %u\t", features->sse2);
+    printf("SS : %u\t", features->ss);
+    printf("HTT : %u\t", features->htt);
+    printf("TM : %u\t", features->tm);
+    printf("Reserved4 : %u\t", features->reserved4);
+    printf("PBE : %u\t", features->pbe);
 }
 
 /// @brief Prints the processor type.
@@ -159,8 +159,8 @@ static void printCacheInfo(const CacheList* pCacheList)
             pCacheInfo->cacheLevel, pCacheInfo->selfInitializing);
 
         printf("fully: %u LogicalCore: %u Cores: %u\n",
-            pCacheInfo->fullyAssociative, pCacheInfo->LogicalCore,
-            pCacheInfo->PhysicalCore);
+            pCacheInfo->fullyAssociative, pCacheInfo->logicalCore,
+            pCacheInfo->physicalCore);
 
         printf("LineSize: %u Partitions: %u associativity: %u\n",
             pCacheInfo->coherencyLineSize, pCacheInfo->physicalLinePartitions,
@@ -207,71 +207,71 @@ static void cpuid01hCommand(ProcessorType* pProcessorType, CPUFeatures* pCpuFeat
     pProcessorType->extendedModel = (eax >> 16) & 0xF;
     pProcessorType->extendedFamily = (eax >> 20) & 0xFF;
 
-    pCpuFeatures->SSE3 = (ecx & (1 << 0)) != 0;
-    pCpuFeatures->PCLMULQDQ = (ecx & (1 << 1)) != 0;
-    pCpuFeatures->DTES64 = (ecx & (1 << 2)) != 0;
-    pCpuFeatures->MONITOR = (ecx & (1 << 3)) != 0;
-    pCpuFeatures->DS_CPL = (ecx & (1 << 4)) != 0;
-    pCpuFeatures->VMX = (ecx & (1 << 5)) != 0;
-    pCpuFeatures->SMX = (ecx & (1 << 6)) != 0;
-    pCpuFeatures->EIST = (ecx & (1 << 7)) != 0;
-    pCpuFeatures->TM2 = (ecx & (1 << 8)) != 0;
-    pCpuFeatures->SSSE3 = (ecx & (1 << 9)) != 0;
-    pCpuFeatures->CNXT_ID = (ecx & (1 << 10)) != 0;
-    pCpuFeatures->SDBG = (ecx & (1 << 11)) != 0;
-    pCpuFeatures->FMA = (ecx & (1 << 12)) != 0;
-    pCpuFeatures->CMPXCHG16B = (ecx & (1 << 13)) != 0;
-    pCpuFeatures->xTPR_Update_Control = (ecx & (1 << 14)) != 0;
-    pCpuFeatures->PDCM = (ecx & (1 << 15)) != 0;
-    pCpuFeatures->Reserved1 = (ecx & (1 << 16)) != 0;
-    pCpuFeatures->PCID = (ecx & (1 << 17)) != 0;
-    pCpuFeatures->DCA = (ecx & (1 << 18)) != 0;
-    pCpuFeatures->SSE4_1 = (ecx & (1 << 19)) != 0;
-    pCpuFeatures->SSE4_2 = (ecx & (1 << 20)) != 0;
+    pCpuFeatures->sse3 = (ecx & (1 << 0)) != 0;
+    pCpuFeatures->pclmulqdq = (ecx & (1 << 1)) != 0;
+    pCpuFeatures->dtes64 = (ecx & (1 << 2)) != 0;
+    pCpuFeatures->monitor = (ecx & (1 << 3)) != 0;
+    pCpuFeatures->dsCpl = (ecx & (1 << 4)) != 0;
+    pCpuFeatures->vmx = (ecx & (1 << 5)) != 0;
+    pCpuFeatures->smx = (ecx & (1 << 6)) != 0;
+    pCpuFeatures->eist = (ecx & (1 << 7)) != 0;
+    pCpuFeatures->tm2 = (ecx & (1 << 8)) != 0;
+    pCpuFeatures->ssse3 = (ecx & (1 << 9)) != 0;
+    pCpuFeatures->cnxtId = (ecx & (1 << 10)) != 0;
+    pCpuFeatures->sdbg = (ecx & (1 << 11)) != 0;
+    pCpuFeatures->fma = (ecx & (1 << 12)) != 0;
+    pCpuFeatures->cmpxchg16b = (ecx & (1 << 13)) != 0;
+    pCpuFeatures->xTprUpdateControl = (ecx & (1 << 14)) != 0;
+    pCpuFeatures->pdcm = (ecx & (1 << 15)) != 0;
+    pCpuFeatures->reserved1 = (ecx & (1 << 16)) != 0;
+    pCpuFeatures->pcid = (ecx & (1 << 17)) != 0;
+    pCpuFeatures->dca = (ecx & (1 << 18)) != 0;
+    pCpuFeatures->sse41 = (ecx & (1 << 19)) != 0;
+    pCpuFeatures->sse42 = (ecx & (1 << 20)) != 0;
     pCpuFeatures->x2APIC = (ecx & (1 << 21)) != 0;
-    pCpuFeatures->MOVBE = (ecx & (1 << 22)) != 0;
-    pCpuFeatures->POPCNT = (ecx & (1 << 23)) != 0;
-    pCpuFeatures->TSC_Deadline = (ecx & (1 << 24)) != 0;
-    pCpuFeatures->AESNI = (ecx & (1 << 25)) != 0;
-    pCpuFeatures->XSAVE = (ecx & (1 << 26)) != 0;
-    pCpuFeatures->OSXSAVE = (ecx & (1 << 27)) != 0;
-    pCpuFeatures->AVX = (ecx & (1 << 28)) != 0;
-    pCpuFeatures->F16C = (ecx & (1 << 29)) != 0;
-    pCpuFeatures->RDRAND = (ecx & (1 << 30)) != 0;
-    pCpuFeatures->Not_Used = (ecx & (1 << 31)) != 0;
+    pCpuFeatures->movbe = (ecx & (1 << 22)) != 0;
+    pCpuFeatures->popcnt = (ecx & (1 << 23)) != 0;
+    pCpuFeatures->tscDeadline = (ecx & (1 << 24)) != 0;
+    pCpuFeatures->aesni = (ecx & (1 << 25)) != 0;
+    pCpuFeatures->xsave = (ecx & (1 << 26)) != 0;
+    pCpuFeatures->osxsave = (ecx & (1 << 27)) != 0;
+    pCpuFeatures->avx = (ecx & (1 << 28)) != 0;
+    pCpuFeatures->f16c = (ecx & (1 << 29)) != 0;
+    pCpuFeatures->rdrand = (ecx & (1 << 30)) != 0;
+    pCpuFeatures->notUsed = (ecx & (1 << 31)) != 0;
 
-    pCpuFeatures->FPU = (edx & (1 << 0)) != 0;
-    pCpuFeatures->VME = (edx & (1 << 1)) != 0;
-    pCpuFeatures->DE = (edx & (1 << 2)) != 0;
-    pCpuFeatures->PSE = (edx & (1 << 3)) != 0;
-    pCpuFeatures->TSC = (edx & (1 << 4)) != 0;
-    pCpuFeatures->MSR = (edx & (1 << 5)) != 0;
-    pCpuFeatures->PAE = (edx & (1 << 6)) != 0;
-    pCpuFeatures->MCE = (edx & (1 << 7)) != 0;
-    pCpuFeatures->CX8 = (edx & (1 << 8)) != 0;
-    pCpuFeatures->APIC = (edx & (1 << 9)) != 0;
-    pCpuFeatures->Reserved2 = (edx & (1 << 10)) != 0;
-    pCpuFeatures->SEP = (edx & (1 << 11)) != 0;
-    pCpuFeatures->MTRR = (edx & (1 << 12)) != 0;
-    pCpuFeatures->PGE = (edx & (1 << 13)) != 0;
-    pCpuFeatures->MCA = (edx & (1 << 14)) != 0;
-    pCpuFeatures->CMOV = (edx & (1 << 15)) != 0;
-    pCpuFeatures->PAT = (edx & (1 << 16)) != 0;
-    pCpuFeatures->PSE_36 = (edx & (1 << 17)) != 0;
-    pCpuFeatures->PSN = (edx & (1 << 18)) != 0;
-    pCpuFeatures->CLFSH = (edx & (1 << 19)) != 0;
-    pCpuFeatures->Reserved3 = (edx & (1 << 20)) != 0;
-    pCpuFeatures->DS = (edx & (1 << 21)) != 0;
-    pCpuFeatures->ACPI = (edx & (1 << 22)) != 0;
-    pCpuFeatures->MMX = (edx & (1 << 23)) != 0;
-    pCpuFeatures->FXSR = (edx & (1 << 24)) != 0;
-    pCpuFeatures->SSE = (edx & (1 << 25)) != 0;
-    pCpuFeatures->SSE2 = (edx & (1 << 26)) != 0;
-    pCpuFeatures->SS = (edx & (1 << 27)) != 0;
-    pCpuFeatures->HTT = (edx & (1 << 28)) != 0;
-    pCpuFeatures->TM = (edx & (1 << 29)) != 0;
-    pCpuFeatures->Reserved4 = (edx & (1 << 30)) != 0;
-    pCpuFeatures->PBE = (edx & (1 << 31)) != 0;
+    pCpuFeatures->fpu = (edx & (1 << 0)) != 0;
+    pCpuFeatures->vme = (edx & (1 << 1)) != 0;
+    pCpuFeatures->de = (edx & (1 << 2)) != 0;
+    pCpuFeatures->pse = (edx & (1 << 3)) != 0;
+    pCpuFeatures->tsc = (edx & (1 << 4)) != 0;
+    pCpuFeatures->msr = (edx & (1 << 5)) != 0;
+    pCpuFeatures->pae = (edx & (1 << 6)) != 0;
+    pCpuFeatures->mce = (edx & (1 << 7)) != 0;
+    pCpuFeatures->cx8 = (edx & (1 << 8)) != 0;
+    pCpuFeatures->apic = (edx & (1 << 9)) != 0;
+    pCpuFeatures->reserved2 = (edx & (1 << 10)) != 0;
+    pCpuFeatures->sep = (edx & (1 << 11)) != 0;
+    pCpuFeatures->mtrr = (edx & (1 << 12)) != 0;
+    pCpuFeatures->pge = (edx & (1 << 13)) != 0;
+    pCpuFeatures->mca = (edx & (1 << 14)) != 0;
+    pCpuFeatures->cmov = (edx & (1 << 15)) != 0;
+    pCpuFeatures->pat = (edx & (1 << 16)) != 0;
+    pCpuFeatures->pse36 = (edx & (1 << 17)) != 0;
+    pCpuFeatures->psn = (edx & (1 << 18)) != 0;
+    pCpuFeatures->clfsh = (edx & (1 << 19)) != 0;
+    pCpuFeatures->reserved3 = (edx & (1 << 20)) != 0;
+    pCpuFeatures->ds = (edx & (1 << 21)) != 0;
+    pCpuFeatures->acpi = (edx & (1 << 22)) != 0;
+    pCpuFeatures->mmx = (edx & (1 << 23)) != 0;
+    pCpuFeatures->fxsr = (edx & (1 << 24)) != 0;
+    pCpuFeatures->sse = (edx & (1 << 25)) != 0;
+    pCpuFeatures->sse2 = (edx & (1 << 26)) != 0;
+    pCpuFeatures->ss = (edx & (1 << 27)) != 0;
+    pCpuFeatures->htt = (edx & (1 << 28)) != 0;
+    pCpuFeatures->tm = (edx & (1 << 29)) != 0;
+    pCpuFeatures->reserved4 = (edx & (1 << 30)) != 0;
+    pCpuFeatures->pbe = (edx & (1 << 31)) != 0;
 }
 
 /// @brief Executes the CPUID command with EAX=0x04 and stores the cache list.
@@ -304,8 +304,8 @@ static void cpuid04hCommand(CacheList* pCacheList)
         pCacheInfo->cacheLevel = (eax >> 5) & 0x7;
         pCacheInfo->selfInitializing = (eax >> 8) & 0x1;
         pCacheInfo->fullyAssociative = (eax >> 9) & 0x1;
-        pCacheInfo->LogicalCore = ((eax >> 14) & 0xFFF) + 1;
-        pCacheInfo->PhysicalCore = ((eax >> 26) & 0x3F) + 1;
+        pCacheInfo->logicalCore = ((eax >> 14) & 0xFFF) + 1;
+        pCacheInfo->physicalCore = ((eax >> 26) & 0x3F) + 1;
         pCacheInfo->coherencyLineSize = (ebx & 0xFFF) + 1;
         pCacheInfo->physicalLinePartitions = ((ebx >> 12) & 0x3FF) + 1;
         pCacheInfo->associativity = ((ebx >> 22) & 0x3FF) + 1;

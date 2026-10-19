@@ -334,8 +334,8 @@ static void testCpu()
 
     // Every x86_64 CPU has leaf 1, SSE2 and FXSR
     CHECK(s_info.maksimumIndex >= 1);
-    CHECK(s_info.CPUFeaturesInfo.SSE2 == 1);
-    CHECK(s_info.CPUFeaturesInfo.FXSR == 1);
+    CHECK(s_info.cpuFeaturesInfo.sse2 == 1);
+    CHECK(s_info.cpuFeaturesInfo.fxsr == 1);
 
     // Vendor string such as "GenuineIntel"
     bool printable = strlen(s_info.cpu) == 12;

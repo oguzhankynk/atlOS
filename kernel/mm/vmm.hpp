@@ -21,11 +21,11 @@ namespace VirtualMemory {
         uint64_t pcd : 1; /**< Page-level cache disable */
         uint64_t accessed : 1; /**< Page table accessed */
         uint64_t dirty : 1; /**< Dirty; indicates whether software has written to the 2-MByte page referenced by this entry */
-        uint64_t page_size : 1; /**<  Page size; must be 1 */
+        uint64_t pageSize : 1; /**<  Page size; must be 1 */
         uint64_t global : 1; /**< Global; if CR4.PGE = 1, determines whether the translation is global (see Section 4.10); ignored otherwise */
         uint64_t ignored0 : 3; /**< Ignored bits */
         uint64_t reserved0 : 9; /**< Reserved bits */
-        uint64_t frame_addr : 31; /**< 2MB aligned >> 21 */
+        uint64_t frameAddr : 31; /**< 2MB aligned >> 21 */
         uint64_t reserved1 : 11; /**< Reserved bits */
         uint64_t nx : 1; /**< No-execute */
     };
