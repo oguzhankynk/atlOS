@@ -19,49 +19,45 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef D44D62C2_63FE_47DE_A6E8_802E23E4BABB
-#define D44D62C2_63FE_47DE_A6E8_802E23E4BABB
+#pragma once
 
 #include <stdint.h>
 /**
  * @namespace SerialPort
  * @brief Provides functions for serial port initialization, reading, and writing.
  */
-namespace SerialPort
-{
+namespace SerialPort {
 
-    /**
-     * @brief Initializes the serial port.
-     *
-     * Sets up the serial port for communication. This function must be called before
-     * any other serial port functions.
-     *
-     * @return 0 on success, -1 on failure.
-     */
-    int init();
+/**
+ * @brief Initializes the serial port.
+ *
+ * Sets up the serial port for communication. This function must be called before
+ * any other serial port functions.
+ *
+ * @return 0 on success, -1 on failure.
+ */
+int init();
 
-    /**
-     * @brief Reads a byte from the serial port.
-     *
-     * @return The byte of data read from the serial port.
-     */
-    char readSerial();
+/**
+ * @brief Reads a byte from the serial port.
+ *
+ * @return The byte of data read from the serial port.
+ */
+char readSerial();
 
-    /**
-     * @brief Writes a byte to the serial port.
-     *
-     * @param a The byte of data to send.
-     */
-    void writeSerial(char a);
+/**
+ * @brief Writes a byte to the serial port.
+ *
+ * @param a The byte of data to send.
+ */
+void writeSerial(char a);
 
-    /**
-     * @brief Writes bytes to the serial port.
-     *
-     * @param data The bytes of data to send.
-     * @param size The byte number of data
-     */
-    void writeSerial(const char *data, size_t size);
+/**
+ * @brief Writes bytes to the serial port.
+ *
+ * @param data The bytes of data to send.
+ * @param size The byte number of data
+ */
+void writeSerial(const char* data, size_t size);
 
 } // namespace SerialPort
-
-#endif /* D44D62C2_63FE_47DE_A6E8_802E23E4BABB */

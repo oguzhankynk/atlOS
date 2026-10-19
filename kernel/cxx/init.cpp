@@ -21,34 +21,30 @@
 
 #include <mm/constants.hpp>
 
-namespace Cxx
+namespace Cxx {
+/**
+ * @brief Initialize all global/static C++ constructors.
+ *
+ */
+void callConstructors()
 {
-    /**
-     * @brief Initialize all global/static C++ constructors.
-     *
-     */
-    void callConstructors()
-    {
-        for (auto ctor = Memory::__ctors_start; ctor < Memory::__ctors_end; ++ctor)
-        {
-            if (*ctor == reinterpret_cast<void (*)(void)>(-1) || *ctor == nullptr)
-                continue;
-            (*ctor)();
-        }
-    }
-
-    /**
-     * @brief Call all global/static C++ destructors.
-     *
-     */
-    void callDestructors()
-    {
-        for (auto dtor = Memory::__dtors_start; dtor < Memory::__dtors_end; ++dtor)
-        {
-            if (*dtor == reinterpret_cast<void (*)(void)>(-1) || *dtor == nullptr)
-                continue;
-            (*dtor)();
-        }
+    for (auto ctor = Memory::__ctors_start; ctor < Memory::__ctors_end; ++ctor) {
+        if (*ctor == reinterpret_cast<void (*)(void)>(-1) || *ctor == nullptr)
+            continue;
+        (*ctor)();
     }
 }
 
+/**
+ * @brief Call all global/static C++ destructors.
+ *
+ */
+void callDestructors()
+{
+    for (auto dtor = Memory::__dtors_start; dtor < Memory::__dtors_end; ++dtor) {
+        if (*dtor == reinterpret_cast<void (*)(void)>(-1) || *dtor == nullptr)
+            continue;
+        (*dtor)();
+    }
+}
+}

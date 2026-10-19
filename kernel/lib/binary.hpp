@@ -16,91 +16,86 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef D08BB42A_B2EF_40C2_AD1B_4AB9EEC1FDF6
-#define D08BB42A_B2EF_40C2_AD1B_4AB9EEC1FDF6
+#pragma once
 
 #include <stdint.h>
 
-namespace Utils
-{
+namespace Utils {
+
+/**
+ * @brief Namespace for byte manipulation and bit operations helper functions.
+ */
+namespace Binary {
 
     /**
-     * @brief Namespace for byte manipulation and bit operations helper functions.
+     * @brief Sets the specified bit flag (to 1).
+     *
+     * @param value Reference to the variable containing the flag to be set.
+     * @param flag The position of the flag to be set (bit number).
      */
-    namespace Binary
+    inline void set_flag(uint8_t& value, uint8_t flag)
     {
+        value |= (1 << flag);
+    }
 
-        /**
-         * @brief Sets the specified bit flag (to 1).
-         *
-         * @param value Reference to the variable containing the flag to be set.
-         * @param flag The position of the flag to be set (bit number).
-         */
-        inline void set_flag(uint8_t &value, uint8_t flag)
-        {
-            value |= (1 << flag);
-        }
+    /**
+     * @brief Resets the specified bit flag (to 0).
+     *
+     * @param value Reference to the variable containing the flag to be reset.
+     * @param flag The position of the flag to be reset (bit number).
+     */
+    inline void reset_flag(uint8_t& value, uint8_t flag)
+    {
+        value &= ~(1 << flag);
+    }
 
-        /**
-         * @brief Resets the specified bit flag (to 0).
-         *
-         * @param value Reference to the variable containing the flag to be reset.
-         * @param flag The position of the flag to be reset (bit number).
-         */
-        inline void reset_flag(uint8_t &value, uint8_t flag)
-        {
-            value &= ~(1 << flag);
-        }
+    /**
+     * @brief Toggles the specified bit flag (inverts the bit).
+     *
+     * @param value Reference to the variable containing the flag to be toggled.
+     * @param flag The position of the flag to be toggled (bit number).
+     */
+    inline void toggle_flag(uint8_t& value, uint8_t flag)
+    {
+        value ^= (1 << flag);
+    }
 
-        /**
-         * @brief Toggles the specified bit flag (inverts the bit).
-         *
-         * @param value Reference to the variable containing the flag to be toggled.
-         * @param flag The position of the flag to be toggled (bit number).
-         */
-        inline void toggle_flag(uint8_t &value, uint8_t flag)
-        {
-            value ^= (1 << flag);
-        }
+    /**
+     * @brief Checks the state of the specified bit flag.
+     *
+     * @param value Variable containing the flag.
+     * @param flag The position of the flag to be checked (bit number).
+     * @return The state of the flag (true if set to 1, false otherwise).
+     */
+    inline bool is_flag_set(uint8_t value, uint8_t flag)
+    {
+        return (value & (1 << flag)) != 0;
+    }
 
-        /**
-         * @brief Checks the state of the specified bit flag.
-         *
-         * @param value Variable containing the flag.
-         * @param flag The position of the flag to be checked (bit number).
-         * @return The state of the flag (true if set to 1, false otherwise).
-         */
-        inline bool is_flag_set(uint8_t value, uint8_t flag)
-        {
-            return (value & (1 << flag)) != 0;
-        }
+    /**
+     * @brief Applies a mask to a byte value.
+     *
+     * @param value The byte containing the value to be masked.
+     * @param mask The mask to be applied.
+     * @return The byte after applying the mask.
+     */
+    inline uint8_t apply_mask(uint8_t value, uint8_t mask)
+    {
+        return value & mask;
+    }
 
-        /**
-         * @brief Applies a mask to a byte value.
-         *
-         * @param value The byte containing the value to be masked.
-         * @param mask The mask to be applied.
-         * @return The byte after applying the mask.
-         */
-        inline uint8_t apply_mask(uint8_t value, uint8_t mask)
-        {
-            return value & mask;
-        }
+    /**
+     * @brief Combines two bytes into a 16-bit value.
+     *
+     * @param high The high byte.
+     * @param low The low byte.
+     * @return The 16-bit value formed by combining the two bytes.
+     */
+    inline uint16_t combine_bytes(uint8_t high, uint8_t low)
+    {
+        return (static_cast<uint16_t>(high) << 8) | low;
+    }
 
-        /**
-         * @brief Combines two bytes into a 16-bit value.
-         *
-         * @param high The high byte.
-         * @param low The low byte.
-         * @return The 16-bit value formed by combining the two bytes.
-         */
-        inline uint16_t combine_bytes(uint8_t high, uint8_t low)
-        {
-            return (static_cast<uint16_t>(high) << 8) | low;
-        }
-
-    } // namespace Binary
+} // namespace Binary
 
 } // namespace Utils
-
-#endif /* D08BB42A_B2EF_40C2_AD1B_4AB9EEC1FDF6 */

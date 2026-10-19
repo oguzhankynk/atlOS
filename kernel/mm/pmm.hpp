@@ -16,43 +16,38 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef D83E69E7_DE4E_42CB_A05E_FA455D9BAF9F
-#define D83E69E7_DE4E_42CB_A05E_FA455D9BAF9F
+#pragma once
 
 #include <stdint.h>
 
-namespace Memory
-{
-    namespace PhysicalMemory
-    {
+namespace Memory {
+namespace PhysicalMemory {
 
-        void init();
-        void addMemoryRegion(const void *baseAddress, uint64_t size);
-        void removeMemoryRegion(const void *baseAddress, uint64_t size);
-        void *allocateBlock(uint64_t numBlocks);
-        void freeBlocks(const void *addr, uint64_t numBlocks);
-        uint64_t getMaxBlockSize();
+    void init();
+    void addMemoryRegion(const void* baseAddress, uint64_t size);
+    void removeMemoryRegion(const void* baseAddress, uint64_t size);
+    void* allocateBlock(uint64_t numBlocks);
+    void freeBlocks(const void* addr, uint64_t numBlocks);
+    uint64_t getMaxBlockSize();
 
-        /**
-         * @brief Number of free 2 MB blocks.
-         */
-        uint64_t getFreeBlockCount();
+    /**
+     * @brief Number of free 2 MB blocks.
+     */
+    uint64_t getFreeBlockCount();
 
-        /**
-         * @brief Allocate a single 4 KB physical frame (e.g. for a page table).
-         *
-         * @return Physical address of the frame, or nullptr if out of memory.
-         */
-        void *allocateFrame();
+    /**
+     * @brief Allocate a single 4 KB physical frame (e.g. for a page table).
+     *
+     * @return Physical address of the frame, or nullptr if out of memory.
+     */
+    void* allocateFrame();
 
-        /**
-         * @brief Free a frame returned by allocateFrame.
-         *
-         * @param addr Physical address of the frame.
-         */
-        void freeFrame(const void *addr);
+    /**
+     * @brief Free a frame returned by allocateFrame.
+     *
+     * @param addr Physical address of the frame.
+     */
+    void freeFrame(const void* addr);
 
-    }; // namespace PhysicalMemory
+}; // namespace PhysicalMemory
 }; // namespace Memory
-
-#endif /* D83E69E7_DE4E_42CB_A05E_FA455D9BAF9F */

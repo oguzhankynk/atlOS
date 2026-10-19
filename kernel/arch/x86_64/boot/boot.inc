@@ -13,6 +13,8 @@
  *
  */
 
+#pragma once
+
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/mmu/mmu.inc>
 #include <arch/x86_64/cpu/cpu.hpp>
@@ -29,5 +31,4 @@
 #define KERNEL_BOOT_STACK_ALIGNMENT 0x1000
 
 #define KERNEL_VIRTUAL_START (KERNEL_PHYSICAL_START + KERNEL_VIRTUAL_LOAD_OFFSET)
-
 

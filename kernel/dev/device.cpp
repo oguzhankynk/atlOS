@@ -20,12 +20,12 @@
 
 #include <string.h>
 
-Device::Device(const char *name) noexcept
+Device::Device(const char* name) noexcept
 {
     strncpy(m_name, name, sizeof(m_name));
 }
 
-const char *Device::getName() const
+const char* Device::getName() const
 {
     return m_name;
 }

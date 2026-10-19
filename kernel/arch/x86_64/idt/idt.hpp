@@ -16,8 +16,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef E3243051_550C_401D_85B2_82DEB27080D5
-#define E3243051_550C_401D_85B2_82DEB27080D5
+#pragma once
 
 #include <stdint.h>
 
@@ -99,78 +98,71 @@
  *   --> 6.3.1 External Interrupts
  */
 
-namespace IDT
-{
+namespace IDT {
 
-    enum class ExternalInterrupts : uint32_t
-    {
-        DivideError = 0,
-        DebugException,
-        NMIInterrupt,
-        Breakpoint,
-        Overflow,
-        BOUNDRangeExceeded,
-        InvalidOpcode,
-        DeviceNotAvailable,
-        DoubleFault,
-        CoprocessorSegmentOverrun,
-        Reserved,
-        InvalidTSS,
-        SegmentNotPresent,
-        StackSegmentFault,
-        GeneralProtection,
-        PageFault,
-        IntelReserved,
-        X87FpuFloatingPointError,
-        AlignmentCheck,
-        MachineCheck,
-        SimdFloatingPointException,
-        VirtualizationException,
-        ControlProtectionException
+enum class ExternalInterrupts : uint32_t {
+    DivideError = 0,
+    DebugException,
+    NMIInterrupt,
+    Breakpoint,
+    Overflow,
+    BOUNDRangeExceeded,
+    InvalidOpcode,
+    DeviceNotAvailable,
+    DoubleFault,
+    CoprocessorSegmentOverrun,
+    Reserved,
+    InvalidTSS,
+    SegmentNotPresent,
+    StackSegmentFault,
+    GeneralProtection,
+    PageFault,
+    IntelReserved,
+    X87FpuFloatingPointError,
+    AlignmentCheck,
+    MachineCheck,
+    SimdFloatingPointException,
+    VirtualizationException,
+    ControlProtectionException
+};
+
+/// @brief Structure representing an entry in the Interrupt Descriptor Table (IDT)
+struct IDTEntry {
+    enum TypeAttr : uint8_t {
+        GateTask = 0x5,
+        GateInt = 0xE, // 64-bit interrupt gate
+        GateTrap = 0xF, // 64-bit trap gate
+
+        RING0 = 0x00,
+        RING1 = 0x20,
+        RING2 = 0x40,
+        RING3 = 0x60,
+
+        PRESENT = 0x80,
     };
 
-    /// @brief Structure representing an entry in the Interrupt Descriptor Table (IDT)
-    struct IDTEntry
-    {
-        enum TypeAttr : uint8_t
-        {
-            GateTask = 0x5,
-            GateInt = 0xE,  // 64-bit interrupt gate
-            GateTrap = 0xF, // 64-bit trap gate
+    uint16_t isrLow; ///< The lower 16 bits of the ISR's address
+    uint16_t kernelCs; ///< The GDT segment selector that the CPU will load into CS before calling the ISR
+    uint8_t ist; ///< The IST in the TSS that the CPU will load into RSP; set to zero for now
+    uint8_t attributes; ///< Type and attributes; see the IDT page
+    uint16_t isrMid; ///< The higher 16 bits of the lower 32 bits of the ISR's address
+    uint32_t isrHigh; ///< The higher 32 bits of the ISR's address
+    uint32_t reserved; ///< Set to zero
 
-            RING0 = 0x00,
-            RING1 = 0x20,
-            RING2 = 0x40,
-            RING3 = 0x60,
+} __attribute__((packed));
 
-            PRESENT = 0x80,
-        };
+/// @brief Structure representing the IDT Register (IDTR).
+struct IDTR {
+    uint16_t limit; ///< Size of the IDT (limit) minus 1
+    uint64_t base; ///< Base address of the IDT
+} __attribute__((packed));
 
-        uint16_t isrLow;    ///< The lower 16 bits of the ISR's address
-        uint16_t kernelCs;  ///< The GDT segment selector that the CPU will load into CS before calling the ISR
-        uint8_t ist;        ///< The IST in the TSS that the CPU will load into RSP; set to zero for now
-        uint8_t attributes; ///< Type and attributes; see the IDT page
-        uint16_t isrMid;    ///< The higher 16 bits of the lower 32 bits of the ISR's address
-        uint32_t isrHigh;   ///< The higher 32 bits of the ISR's address
-        uint32_t reserved;  ///< Set to zero
+static constexpr uint32_t idtTableLen = 256;
 
-    } __attribute__((packed));
-
-    /// @brief Structure representing the IDT Register (IDTR).
-    struct IDTR
-    {
-        uint16_t limit; ///< Size of the IDT (limit) minus 1
-        uint64_t base;  ///< Base address of the IDT
-    } __attribute__((packed));
-
-    static constexpr uint32_t idtTableLen = 256;
-
-    /**
-     * @brief Initializes the IDT.
-     *
-     */
-    void init();
+/**
+ * @brief Initializes the IDT.
+ *
+ */
+void init();
 
 }; // namespace IDT
-
-#endif /* E3243051_550C_401D_85B2_82DEB27080D5 */

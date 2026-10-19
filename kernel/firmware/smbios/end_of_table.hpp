@@ -16,23 +16,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef F47859F0_E52E_4F1C_A004_C351DB461B90
-#define F47859F0_E52E_4F1C_A004_C351DB461B90
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Class to represent the End-of-Table structure.
-class EndOfTable : public BIOSStructureCommon
-{
+class EndOfTable : public BIOSStructureCommon {
 public:
     /// @brief Default constructor.
     EndOfTable() = default;
 
     /// @brief Constructor that takes a pointer to the start of the structure.
     /// @param pStart Pointer to the start of the structure.
-    EndOfTable(void *pStart)
+    EndOfTable(void* pStart)
     {
         scan(pStart);
     }
@@ -40,12 +38,12 @@ public:
     /// @brief Scans the End-of-Table structure.
     /// @param pStart Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
@@ -79,20 +77,18 @@ public:
 
 private:
     // Private methods to get the addresses of different fields.
-    void *m_pStart{}; ///< Start address of the structure.
-    void *m_pEnd{};   ///< End address of the structure.
+    void* m_pStart {}; ///< Start address of the structure.
+    void* m_pEnd {}; ///< End address of the structure.
 
     /// @brief Gets the address of the Type field.
     /// @return Pointer to the Type field.
-    uint8_t *getTypeAddr() const { return reinterpret_cast<uint8_t *>(m_pStart) + 0x00; }
+    uint8_t* getTypeAddr() const { return reinterpret_cast<uint8_t*>(m_pStart) + 0x00; }
 
     /// @brief Gets the address of the Length field.
     /// @return Pointer to the Length field.
-    uint8_t *getLengthAddr() const { return reinterpret_cast<uint8_t *>(m_pStart) + 0x01; }
+    uint8_t* getLengthAddr() const { return reinterpret_cast<uint8_t*>(m_pStart) + 0x01; }
 
     /// @brief Gets the address of the Handle field.
     /// @return Pointer to the Handle field.
-    uint16_t *getHandleAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t* getHandleAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x02); }
 };
-
-#endif /* F47859F0_E52E_4F1C_A004_C351DB461B90 */

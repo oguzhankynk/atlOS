@@ -16,8 +16,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef D2A30C7E_444F_4393_BCBF_81177EB71649
-#define D2A30C7E_444F_4393_BCBF_81177EB71649
+#pragma once
 
 #include <stdint.h>
 
@@ -29,10 +28,10 @@
  * @brief Represents an ATA disk driver for reading and writing sectors.
  *
  */
-class ATA : public Disk
-{
+class ATA : public Disk {
 public:
-    ATA(const char *name) noexcept;
+    ATA(const char* name)
+    noexcept;
     virtual ~ATA() noexcept = default;
 
     /**
@@ -41,7 +40,7 @@ public:
      * @param lba The Logical Block Address (LBA) of the sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      */
-    void readSector(uint32_t lba, uint8_t *buffer) const override;
+    void readSector(uint32_t lba, uint8_t* buffer) const override;
 
     /**
      * @brief Reads multiple sectors from the disk into the buffer.
@@ -50,7 +49,7 @@ public:
      * @param buffer Pointer to the buffer where the data will be stored.
      * @param size The size of data to read in bytes.
      */
-    void read(uint32_t lbaStart, uint8_t *buffer, size_t size) const override;
+    void read(uint32_t lbaStart, uint8_t* buffer, size_t size) const override;
 
     /**
      * @brief Writes a single sector to the disk from the buffer.
@@ -58,7 +57,7 @@ public:
      * @param lba The Logical Block Address (LBA) of the sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      */
-    void writeSector(uint32_t lba, const uint8_t *buffer) const override;
+    void writeSector(uint32_t lba, const uint8_t* buffer) const override;
 
     /**
      * @brief Writes multiple sectors to the disk from the buffer.
@@ -67,6 +66,5 @@ public:
      * @param buffer Pointer to the buffer containing the data to write.
      * @param size The size of data to write in bytes.
      */
-    void write(uint32_t lbaStart, const uint8_t *buffer, size_t size) const override;
+    void write(uint32_t lbaStart, const uint8_t* buffer, size_t size) const override;
 };
-#endif /* D2A30C7E_444F_4393_BCBF_81177EB71649 */

@@ -16,8 +16,8 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <drivers/disk/ata.hpp>
 #include <arch/x86_64/io/ioport.hpp>
+#include <drivers/disk/ata.hpp>
 
 #include <string.h>
 
@@ -66,7 +66,7 @@ static inline void delay400ns()
     IOPort::inportb(ataPrimaryIoBase + ataRegStatus);
 }
 
-ATA::ATA(const char *name) noexcept
+ATA::ATA(const char* name) noexcept
     : Disk(name)
 {
 }
@@ -77,7 +77,7 @@ ATA::ATA(const char *name) noexcept
  * @param lba The Logical Block Address (LBA) of the sector to read.
  * @param buffer Pointer to the buffer where the data will be stored.
  */
-void ATA::readSector(uint32_t lba, uint8_t *buffer) const
+void ATA::readSector(uint32_t lba, uint8_t* buffer) const
 {
     ataWaitBsy();
 
@@ -93,9 +93,8 @@ void ATA::readSector(uint32_t lba, uint8_t *buffer) const
     ataWaitBsy();
     ataWaitDrq();
 
-    for (int i = 0; i < 256; i++)
-    {
-        ((uint16_t *)buffer)[i] = IOPort::inportw(ataPrimaryIoBase + ataRegData);
+    for (int i = 0; i < 256; i++) {
+        ((uint16_t*)buffer)[i] = IOPort::inportw(ataPrimaryIoBase + ataRegData);
     }
 
     ataWaitBsy();
@@ -108,20 +107,18 @@ void ATA::readSector(uint32_t lba, uint8_t *buffer) const
  * @param buffer Pointer to the buffer where the data will be stored.
  * @param size The size of data to read in bytes.
  */
-void ATA::read(uint32_t lbaStart, uint8_t *buffer, size_t size) const
+void ATA::read(uint32_t lbaStart, uint8_t* buffer, size_t size) const
 {
     auto step = 0;
 
-    while (size >= 512)
-    {
+    while (size >= 512) {
         readSector(lbaStart + step, buffer + 512 * step);
         step++;
         size -= 512;
     }
 
-    if (size > 0)
-    {
-        uint8_t data[512]{};
+    if (size > 0) {
+        uint8_t data[512] {};
         readSector(lbaStart + step, data);
         memcpy(buffer + 512 * step, data, size);
     }
@@ -133,7 +130,7 @@ void ATA::read(uint32_t lbaStart, uint8_t *buffer, size_t size) const
  * @param lba The Logical Block Address (LBA) of the sector to write.
  * @param buffer Pointer to the buffer containing the data to write.
  */
-void ATA::writeSector(uint32_t lba, const uint8_t *buffer) const
+void ATA::writeSector(uint32_t lba, const uint8_t* buffer) const
 {
     ataWaitBsy();
 
@@ -147,9 +144,8 @@ void ATA::writeSector(uint32_t lba, const uint8_t *buffer) const
     ataWaitBsy();
     ataWaitDrq();
 
-    for (int i = 0; i < 256; i++)
-    {
-        IOPort::outportw(ataPrimaryIoBase + ataRegData, ((uint16_t *)buffer)[i]);
+    for (int i = 0; i < 256; i++) {
+        IOPort::outportw(ataPrimaryIoBase + ataRegData, ((uint16_t*)buffer)[i]);
     }
 
     ataWaitBsy();
@@ -162,20 +158,18 @@ void ATA::writeSector(uint32_t lba, const uint8_t *buffer) const
  * @param buffer Pointer to the buffer containing the data to write.
  * @param size The size of data to write in bytes.
  */
-void ATA::write(uint32_t lbaStart, const uint8_t *buffer, size_t size) const
+void ATA::write(uint32_t lbaStart, const uint8_t* buffer, size_t size) const
 {
     auto step = 0;
 
-    while (size >= 512)
-    {
+    while (size >= 512) {
         writeSector(lbaStart + step, buffer + 512 * step);
         step++;
         size -= 512;
     }
 
-    if (size > 0)
-    {
-        uint8_t data[512]{};
+    if (size > 0) {
+        uint8_t data[512] {};
         memcpy(data, buffer + 512 * step, size);
         writeSector(lbaStart + step, data);
     }

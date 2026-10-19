@@ -16,52 +16,47 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef B25F71A9_50A9_4264_A805_4D533570A97D
-#define B25F71A9_50A9_4264_A805_4D533570A97D
+#pragma once
 
 #include <stdint.h>
 
 class Disk;
 
-namespace FileSystem
-{
-    class IFileSystem;
-    struct File;
+namespace FileSystem {
+class IFileSystem;
+struct File;
 
-    struct File
+struct File {
+    IFileSystem* owner {};
+    size_t position {};
+    size_t size {};
+    bool isOpen {};
+};
+
+class IFileSystem {
+protected:
+    const Disk& m_device;
+    uint32_t m_lbaFirstSector;
+
+public:
+    IFileSystem(const Disk& device, uint32_t lbaFirsSector) noexcept
+        : m_device { device }
+        , m_lbaFirstSector { lbaFirsSector }
     {
-        IFileSystem *owner{};
-        size_t position{};
-        size_t size{};
-        bool isOpen{};
-    };
+    }
+    virtual ~IFileSystem() noexcept = default;
 
-    class IFileSystem
+    virtual bool mount() = 0;
+    virtual File* open(const char* filename) = 0;
+    virtual ssize_t read(File* file, void* buffer, size_t size) = 0;
+    virtual ssize_t write(File* file, const void* buffer, size_t size) = 0;
+    virtual int close(File* file) = 0;
+    virtual int remove(const char* filename) = 0;
+    virtual void printFilelist() = 0;
+    virtual const Disk& getDisk() const
     {
-    protected:
-        const Disk &m_device;
-        uint32_t m_lbaFirstSector;
-
-    public:
-        IFileSystem(const Disk &device, uint32_t lbaFirsSector) noexcept
-            : m_device{device}, m_lbaFirstSector{lbaFirsSector}
-        {
-        }
-        virtual ~IFileSystem() noexcept = default;
-
-        virtual bool mount() = 0;
-        virtual File *open(const char *filename) = 0;
-        virtual ssize_t read(File *file, void *buffer, size_t size) = 0;
-        virtual ssize_t write(File *file, const void *buffer, size_t size) = 0;
-        virtual int close(File *file) = 0;
-        virtual int remove(const char *filename) = 0;
-        virtual void printFilelist() = 0;
-        virtual const Disk &getDisk() const
-        {
-            return m_device;
-        }
-    };
+        return m_device;
+    }
+};
 
 } // namespace FileSystem
-
-#endif /* B25F71A9_50A9_4264_A805_4D533570A97D */

@@ -16,23 +16,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef D16AF0B0_B690_4D96_88CC_FC4DD68EDA5D
-#define D16AF0B0_B690_4D96_88CC_FC4DD68EDA5D
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Physical Memory Array Type 16 structure class.
-class PhysicalMemoryArray : public BIOSStructureCommon
-{
+class PhysicalMemoryArray : public BIOSStructureCommon {
 public:
     /// @brief Default constructor.
     PhysicalMemoryArray() = default;
 
     /// @brief Constructor that initializes by scanning the given address.
     /// @param pStart Start address of the structure.
-    PhysicalMemoryArray(void *pStart)
+    PhysicalMemoryArray(void* pStart)
     {
         scan(pStart);
     }
@@ -40,12 +38,12 @@ public:
     /// @brief Scans the structure starting from the given address.
     /// @param pStart Start address of the structure.
     /// @return End address of the scanned structure.
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
@@ -111,50 +109,48 @@ public:
     }
 
 private:
-    void *m_pStart{}; ///< Start address of the structure.
-    void *m_pEnd{};   ///< End address of the structure.
+    void* m_pStart {}; ///< Start address of the structure.
+    void* m_pEnd {}; ///< End address of the structure.
 
     // Private methods to get the addresses of different fields.
 
     /// @brief Gets the address of the Type field.
     /// @return Pointer to the Type field.
-    uint8_t *getTypeAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x00); }
+    uint8_t* getTypeAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x00); }
 
     /// @brief Gets the address of the Length field.
     /// @return Pointer to the Length field.
-    uint8_t *getLengthAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x01); }
+    uint8_t* getLengthAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x01); }
 
     /// @brief Gets the address of the Handle field.
     /// @return Pointer to the Handle field.
-    uint16_t *getHandleAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t* getHandleAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x02); }
 
     /// @brief Gets the address of the Location field.
     /// @return Pointer to the Location field.
-    uint8_t *getLocationAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x04); }
+    uint8_t* getLocationAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x04); }
 
     /// @brief Gets the address of the Use field.
     /// @return Pointer to the Use field.
-    uint8_t *getUseAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x05); }
+    uint8_t* getUseAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x05); }
 
     /// @brief Gets the address of the Memory Error Correction field.
     /// @return Pointer to the Memory Error Correction field.
-    uint8_t *getMemoryErrorCorrectionAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x06); }
+    uint8_t* getMemoryErrorCorrectionAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x06); }
 
     /// @brief Gets the address of the Maximum Capacity field.
     /// @return Pointer to the Maximum Capacity field.
-    uint32_t *getMaximumCapacityAddr() const { return reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x07); }
+    uint32_t* getMaximumCapacityAddr() const { return reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x07); }
 
     /// @brief Gets the address of the Memory Error Information Handle field.
     /// @return Pointer to the Memory Error Information Handle field.
-    uint16_t *getMemoryErrorInformationHandleAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0B); }
+    uint16_t* getMemoryErrorInformationHandleAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0B); }
 
     /// @brief Gets the address of the Number of Memory Devices field.
     /// @return Pointer to the Number of Memory Devices field.
-    uint16_t *getNumberOfMemoryDevicesAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0D); }
+    uint16_t* getNumberOfMemoryDevicesAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0D); }
 
     /// @brief Gets the address of the Extended Maximum Capacity field.
     /// @return Pointer to the Extended Maximum Capacity field.
-    uint64_t *getExtendedMaximumCapacityAddr() const { return reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0F); }
+    uint64_t* getExtendedMaximumCapacityAddr() const { return reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0F); }
 };
-
-#endif /* D16AF0B0_B690_4D96_88CC_FC4DD68EDA5D */

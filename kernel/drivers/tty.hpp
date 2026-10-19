@@ -18,35 +18,31 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef _KERNEL_TTY_H
-#define _KERNEL_TTY_H
+#pragma once
 
 #include <stddef.h>
 
 #if defined(__cplusplus)
-extern "C"
-{
+extern "C" {
 #endif
 
-    /// @brief Initializes the terminal.
-    /// @param
-    void terminalInitialize(void);
+/// @brief Initializes the terminal.
+/// @param
+void terminalInitialize(void);
 
-    /// @brief Writes a single character to the terminal.
-    /// @param c The character to write.
-    void terminalPutchar(char c);
+/// @brief Writes a single character to the terminal.
+/// @param c The character to write.
+void terminalPutchar(char c);
 
-    /// @brief Writes a buffer of characters to the terminal.
-    /// @param data Pointer to the buffer containing the characters to write.
-    /// @param size Number of characters to write from the buffer.
-    void terminalWrite(const char *data, size_t size);
+/// @brief Writes a buffer of characters to the terminal.
+/// @param data Pointer to the buffer containing the characters to write.
+/// @param size Number of characters to write from the buffer.
+void terminalWrite(const char* data, size_t size);
 
-    /// @brief Writes a null-terminated string to the terminal.
-    /// @param data Pointer to the null-terminated string to write.
-    void terminalWritestring(const char *data);
+/// @brief Writes a null-terminated string to the terminal.
+/// @param data Pointer to the null-terminated string to write.
+void terminalWritestring(const char* data);
 
 #if defined(__cplusplus)
 } /* extern "C" */
-#endif
-
 #endif

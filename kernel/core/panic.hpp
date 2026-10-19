@@ -19,25 +19,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef EA38D7AA_B1BA_426B_9C15_22D380DBB786
-#define EA38D7AA_B1BA_426B_9C15_22D380DBB786
+#pragma once
 
 #if defined(__cplusplus)
-extern "C"
-{
+extern "C" {
 #endif
 
-    /**
-     * @brief Kernel panic function.
-     *
-     * @param str Message to be displayed in case of a kernel panic.
-     * @return void
-     */
-    void kernelPanic(const char *str);
-    void kernelPanicAssert(bool condition);
+/**
+ * @brief Kernel panic function.
+ *
+ * @param str Message to be displayed in case of a kernel panic.
+ * @return void
+ */
+void kernelPanic(const char* str);
+void kernelPanicAssert(bool condition);
 
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif
-
-#endif /* EA38D7AA_B1BA_426B_9C15_22D380DBB786 */

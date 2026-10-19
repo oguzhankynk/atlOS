@@ -15,19 +15,15 @@
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef BDEFD3E4_7189_4188_B85A_DA86472239FF
-#define BDEFD3E4_7189_4188_B85A_DA86472239FF
+#pragma once
 
-class Device
-{
+class Device {
 protected:
     char m_name[32];
 
 public:
-    Device(const char *name) noexcept;
+    Device(const char* name) noexcept;
     ~Device() noexcept = default;
 
-    virtual const char *getName() const;
+    virtual const char* getName() const;
 };
-
-#endif /* BDEFD3E4_7189_4188_B85A_DA86472239FF */

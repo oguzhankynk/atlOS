@@ -16,65 +16,58 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef BE0C6057_D75F_4A2E_807F_8CFDF75C8093
-#define BE0C6057_D75F_4A2E_807F_8CFDF75C8093
+#pragma once
 
 #include <stdint.h>
 
-namespace Threading
-{
-    enum class ThreadState
-    {
-        Running,
-        Ready,
-        Blocked,  // Waits for Scheduler::unblock
-        Sleeping, // Waits until TCB::wakeTick
-        Terminated
-    };
+namespace Threading {
+enum class ThreadState {
+    Running,
+    Ready,
+    Blocked, // Waits for Scheduler::unblock
+    Sleeping, // Waits until TCB::wakeTick
+    Terminated
+};
 
-    struct Registers
-    {
-        uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-        uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
+struct Registers {
+    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+    uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
 
-        uint64_t rip; // Instruction Pointer
-        uint64_t cs;  // Code Segment
-        uint64_t rflags;
-        uint64_t rsp; // Stack Pointer
-        uint64_t ss;  // Stack Segment
+    uint64_t rip; // Instruction Pointer
+    uint64_t cs; // Code Segment
+    uint64_t rflags;
+    uint64_t rsp; // Stack Pointer
+    uint64_t ss; // Stack Segment
 
-        uint64_t cr3;
-    } __attribute__((packed));
+    uint64_t cr3;
+} __attribute__((packed));
 
-    struct TCB
-    {
-        Registers regs; // Must stay first, switchTask takes &regs
-        ThreadState state;
-        uint64_t wakeTick; // Scheduler::ticks() value to leave Sleeping at
-    };
+struct TCB {
+    Registers regs; // Must stay first, switchTask takes &regs
+    ThreadState state;
+    uint64_t wakeTick; // Scheduler::ticks() value to leave Sleeping at
+};
 
-    class ThreadImpl;
+class ThreadImpl;
 
-    using EntryPoint = void (*)(void);
+using EntryPoint = void (*)(void);
 
-    class Thread
-    {
-    public:
-        Thread(EntryPoint entry, bool addToScheduler = true);
+class Thread {
+public:
+    Thread(EntryPoint entry, bool addToScheduler = true);
 
-        Thread(const Thread &) = delete;
+    Thread(const Thread&) = delete;
 
-        ~Thread();
+    ~Thread();
 
-        Thread &operator=(const Thread &) = delete;
+    Thread& operator=(const Thread&) = delete;
 
-        TCB &getTCB();
+    TCB& getTCB();
 
-        const char *getName() const;
+    const char* getName() const;
 
-    private:
-        ThreadImpl *m_impl{};
-    };
+private:
+    ThreadImpl* m_impl {};
+};
 
 } // namespace Thread
-#endif /* BE0C6057_D75F_4A2E_807F_8CFDF75C8093 */

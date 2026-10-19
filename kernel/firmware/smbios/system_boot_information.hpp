@@ -16,23 +16,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef E600C230_FFAE_4392_A5C8_6582F0F6DA30
-#define E600C230_FFAE_4392_A5C8_6582F0F6DA30
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Class to represent the System Boot Information table (Type 32).
-class SystemBootInformation : public BIOSStructureCommon
-{
+class SystemBootInformation : public BIOSStructureCommon {
 public:
     /// @brief Default constructor.
     SystemBootInformation() = default;
 
     /// @brief Constructor that takes a pointer to the start of the structure.
     /// @param pStart Pointer to the start of the structure.
-    SystemBootInformation(void *pStart)
+    SystemBootInformation(void* pStart)
     {
         scan(pStart);
     }
@@ -40,12 +38,12 @@ public:
     /// @brief Scans the System Boot Information table.
     /// @param pStart Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
@@ -83,26 +81,24 @@ public:
     }
 
 private:
-    void *m_pStart{}; ///< Start address of the structure.
-    void *m_pEnd{};   ///< End address of the structure.
+    void* m_pStart {}; ///< Start address of the structure.
+    void* m_pEnd {}; ///< End address of the structure.
 
     // Private methods to get the addresses of different fields.
 
     /// @brief Gets the address of the Type field.
     /// @return Pointer to the Type field.
-    uint8_t *getTypeAddr() const { return reinterpret_cast<uint8_t *>(m_pStart) + 0x00; }
+    uint8_t* getTypeAddr() const { return reinterpret_cast<uint8_t*>(m_pStart) + 0x00; }
 
     /// @brief Gets the address of the Length field.
     /// @return Pointer to the Length field.
-    uint8_t *getLengthAddr() const { return reinterpret_cast<uint8_t *>(m_pStart) + 0x01; }
+    uint8_t* getLengthAddr() const { return reinterpret_cast<uint8_t*>(m_pStart) + 0x01; }
 
     /// @brief Gets the address of the Handle field.
     /// @return Pointer to the Handle field.
-    uint16_t *getHandleAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t* getHandleAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x02); }
 
     /// @brief Gets the address of the Boot Status field.
     /// @return Pointer to the Boot Status field.
-    uint8_t *getBootStatusAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0A); }
+    uint8_t* getBootStatusAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0A); }
 };
-
-#endif /* E600C230_FFAE_4392_A5C8_6582F0F6DA30 */

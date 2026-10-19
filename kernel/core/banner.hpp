@@ -17,22 +17,18 @@
  *
  * */
 
-#ifndef F45F0187_3CBF_4D6A_BCD4_FF30A48CA03F
-#define F45F0187_3CBF_4D6A_BCD4_FF30A48CA03F
+#pragma once
 
 #if defined(__cplusplus)
-extern "C"
-{
+extern "C" {
 #endif
 
-    /**
-     * @brief Prints banner and version infoormation
-     *
-     */
-    void atlOSBanner();
+/**
+ * @brief Prints banner and version infoormation
+ *
+ */
+void atlOSBanner();
 
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif
-
-#endif /* F45F0187_3CBF_4D6A_BCD4_FF30A48CA03F */

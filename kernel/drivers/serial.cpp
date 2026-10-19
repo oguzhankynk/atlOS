@@ -27,92 +27,89 @@
 
 #include <arch/x86_64/io/ioport.hpp>
 
-namespace SerialPort
+namespace SerialPort {
+
+static constexpr uint16_t port = 0x3F8; // COM1
+// static constexpr uint16_t PORT = 0x2F8;// COM2
+// static constexpr uint16_t PORT = 0x3E8;// COM3
+// static constexpr uint16_t PORT = 0x2E8;// COM4
+// static constexpr uint16_t PORT = 0x5F8;// COM5
+// static constexpr uint16_t PORT = 0x4F8;// COM6
+// static constexpr uint16_t PORT = 0x5E8;// COM7
+// static constexpr uint16_t PORT = 0x4E8;// COM8
+
+static int isTransmitEmpty();
+
+/**
+ * @brief Initializes the serial port.
+ *
+ * Sets up the serial port for communication. This function must be called before
+ * any other serial port functions.
+ *
+ * @return 0 on success, -1 on failure.
+ */
+int init()
 {
+    IOPort::outportb(port + 1, 0x00); // Disable all interrupts
+    IOPort::outportb(port + 3, 0x80); // Enable DLAB (set baud rate divisor)
+    IOPort::outportb(port + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
+    IOPort::outportb(port + 1, 0x00); //                  (hi byte)
+    IOPort::outportb(port + 3, 0x03); // 8 bits, no parity, one stop bit
+    IOPort::outportb(port + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+    IOPort::outportb(port + 4, 0x0B); // IRQs enabled, RTS/DSR set
+    IOPort::outportb(port + 4, 0x1E); // Set in loopback mode, test the serial chip
+    IOPort::outportb(port + 0, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
 
-    static constexpr uint16_t port = 0x3F8; // COM1
-    // static constexpr uint16_t PORT = 0x2F8;// COM2
-    // static constexpr uint16_t PORT = 0x3E8;// COM3
-    // static constexpr uint16_t PORT = 0x2E8;// COM4
-    // static constexpr uint16_t PORT = 0x5F8;// COM5
-    // static constexpr uint16_t PORT = 0x4F8;// COM6
-    // static constexpr uint16_t PORT = 0x5E8;// COM7
-    // static constexpr uint16_t PORT = 0x4E8;// COM8
-
-    static int isTransmitEmpty();
-
-    /**
-     * @brief Initializes the serial port.
-     *
-     * Sets up the serial port for communication. This function must be called before
-     * any other serial port functions.
-     *
-     * @return 0 on success, -1 on failure.
-     */
-    int init()
-    {
-        IOPort::outportb(port + 1, 0x00); // Disable all interrupts
-        IOPort::outportb(port + 3, 0x80); // Enable DLAB (set baud rate divisor)
-        IOPort::outportb(port + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
-        IOPort::outportb(port + 1, 0x00); //                  (hi byte)
-        IOPort::outportb(port + 3, 0x03); // 8 bits, no parity, one stop bit
-        IOPort::outportb(port + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
-        IOPort::outportb(port + 4, 0x0B); // IRQs enabled, RTS/DSR set
-        IOPort::outportb(port + 4, 0x1E); // Set in loopback mode, test the serial chip
-        IOPort::outportb(port + 0, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
-
-        // Check if the serial port is properly initialized
-        if (IOPort::inportb(port + 0) != 0xAE)
-        {
-            return -1; // Failure
-        }
-
-        IOPort::outportb(port + 4, 0x0F);
-        return 0;
+    // Check if the serial port is properly initialized
+    if (IOPort::inportb(port + 0) != 0xAE) {
+        return -1; // Failure
     }
 
-    /**
-     * @brief Reads a byte from the serial port.
-     *
-     * @return The byte of data read from the serial port.
-     */
-    char readSerial()
-    {
-        // Wait until the serial port is ready to read
-        while (!(IOPort::inportb(port + 5) & 0x01))
-            ;
-        return IOPort::inportb(port);
-    }
+    IOPort::outportb(port + 4, 0x0F);
+    return 0;
+}
 
-    /**
-     * @brief Writes a byte to the serial port.
-     *
-     * @param a The byte of data to send.
-     */
-    void writeSerial(char a)
-    {
-        // Wait until the serial port is ready to write
-        while (!isTransmitEmpty())
-            ;
-        IOPort::outportb(port, a);
-    }
+/**
+ * @brief Reads a byte from the serial port.
+ *
+ * @return The byte of data read from the serial port.
+ */
+char readSerial()
+{
+    // Wait until the serial port is ready to read
+    while (!(IOPort::inportb(port + 5) & 0x01))
+        ;
+    return IOPort::inportb(port);
+}
 
-    void writeSerial(const char *data, size_t size)
-    {
-        while (!isTransmitEmpty())
-            ;
+/**
+ * @brief Writes a byte to the serial port.
+ *
+ * @param a The byte of data to send.
+ */
+void writeSerial(char a)
+{
+    // Wait until the serial port is ready to write
+    while (!isTransmitEmpty())
+        ;
+    IOPort::outportb(port, a);
+}
 
-        while (size > 0)
-        {
-            IOPort::outportb(port, *data);
-            data++;
-            size--;
-        }
-    }
+void writeSerial(const char* data, size_t size)
+{
+    while (!isTransmitEmpty())
+        ;
 
-    int isTransmitEmpty()
-    {
-        return IOPort::inportb(port + 5) & 0x20;
+    while (size > 0) {
+        IOPort::outportb(port, *data);
+        data++;
+        size--;
     }
+}
+
+int isTransmitEmpty()
+{
+    return IOPort::inportb(port + 5) & 0x20;
+}
 
 } // namespace SerialPort

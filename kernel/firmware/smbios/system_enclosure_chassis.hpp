@@ -16,16 +16,14 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef D9D2E7CD_CE66_4545_AC83_AB1DD86799B2
-#define D9D2E7CD_CE66_4545_AC83_AB1DD86799B2
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Class representing System Enclosure or Chassis structure, inheriting from BIOSStructureCommon.
-class SystemEnclosureChassis : public BIOSStructureCommon
-{
+class SystemEnclosureChassis : public BIOSStructureCommon {
 public:
     /**
      * @brief Default constructor for SystemEnclosureChassis class.
@@ -36,7 +34,7 @@ public:
      * @brief Constructor for SystemEnclosureChassis class.
      * @param pStart Pointer to the start of the structure.
      */
-    SystemEnclosureChassis(void *pStart)
+    SystemEnclosureChassis(void* pStart)
     {
         scan(pStart);
     }
@@ -46,19 +44,19 @@ public:
      * @param pStart Pointer to the start of the structure.
      * @return Pointer to the end address of the SystemEnclosureChassis
      */
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
+        extractStringAddress((const char*)ptr, (const char*)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
@@ -170,7 +168,7 @@ public:
      * @brief Get the contained elements of the enclosure or chassis.
      * @return Contained elements of the enclosure or chassis.
      */
-    uint8_t *getContainedElements() const { return getContainedElementsAddr(); }
+    uint8_t* getContainedElements() const { return getContainedElementsAddr(); }
 
     /**
      * @brief Get the SKU number of the enclosure or chassis.
@@ -203,14 +201,12 @@ public:
         printf("Contained Elements: ");
         uint8_t numElements = getContainedElementCount();
         uint8_t recordLength = getContainedElementRecordLength();
-        for (int i = 0; i < numElements * recordLength; i++)
-        {
+        for (int i = 0; i < numElements * recordLength; i++) {
             printf("%u ", getContainedElements()[i] & 0xFF);
         }
         printf("\n");
         printf("SKU Number: %u\n", getSkuNumber());
-        for (size_t i = 0; i < stringCount; ++i)
-        {
+        for (size_t i = 0; i < stringCount; ++i) {
             printf("[%d]:%s ", i, m_strings[i]);
         }
         printf("\n");
@@ -218,8 +214,8 @@ public:
     }
 
 private:
-    void *m_pStart; ///< Pointer to the start address of the BIOS structure.
-    void *m_pEnd;   ///< Pointer to the end address of the BIOS structure.
+    void* m_pStart; ///< Pointer to the start address of the BIOS structure.
+    void* m_pEnd; ///< Pointer to the end address of the BIOS structure.
 
     /*
        ManufacturerString;
@@ -229,63 +225,62 @@ private:
        SKUNumberString;
    */
     static constexpr uint8_t stringCount = 5; ///< Maximum number of strings to extract.
-    const char *m_strings[stringCount]{};     ///< Array to store extracted strings.
+    const char* m_strings[stringCount] {}; ///< Array to store extracted strings.
 
     /// @brief Get the address of the Type field in the System Enclosure or Chassis Information structure.
-    uint8_t *getTypeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }
+    uint8_t* getTypeAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x00); }
 
     /// @brief Get the address of the Length field in the System Enclosure or Chassis Information structure.
-    uint8_t *getLengthAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x01); }
+    uint8_t* getLengthAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x01); }
 
     /// @brief Get the address of the Handle field in the System Enclosure or Chassis Information structure.
-    uint16_t *getHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t* getHandleAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x02); }
 
     /// @brief Get the address of the Manufacturer field in the System Enclosure or Chassis Information structure.
-    uint8_t *getManufacturerAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x04); }
+    uint8_t* getManufacturerAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x04); }
 
     /// @brief Get the address of the Type field (again) in the System Enclosure or Chassis Information structure.
-    uint8_t *getType2Addr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x05); }
+    uint8_t* getType2Addr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x05); }
 
     /// @brief Get the address of the Version field in the System Enclosure or Chassis Information structure.
-    uint8_t *getVersionAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x06); }
+    uint8_t* getVersionAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x06); }
 
     /// @brief Get the address of the Serial Number field in the System Enclosure or Chassis Information structure.
-    uint8_t *getSerialNumberAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x07); }
+    uint8_t* getSerialNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x07); }
 
     /// @brief Get the address of the Asset Tag Number field in the System Enclosure or Chassis Information structure.
-    uint8_t *getAssetTagNumberAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x08); }
+    uint8_t* getAssetTagNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x08); }
 
     /// @brief Get the address of the Boot-up State field in the System Enclosure or Chassis Information structure.
-    uint8_t *getBootUpStateAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x09); }
+    uint8_t* getBootUpStateAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x09); }
 
     /// @brief Get the address of the Power Supply State field in the System Enclosure or Chassis Information structure.
-    uint8_t *getPowerSupplyStateAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0A); }
+    uint8_t* getPowerSupplyStateAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x0A); }
 
     /// @brief Get the address of the Thermal State field in the System Enclosure or Chassis Information structure.
-    uint8_t *getThermalStateAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0B); }
+    uint8_t* getThermalStateAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x0B); }
 
     /// @brief Get the address of the Security Status field in the System Enclosure or Chassis Information structure.
-    uint8_t *getSecurityStatusAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x0C); }
+    uint8_t* getSecurityStatusAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x0C); }
 
     /// @brief Get the address of the OEM-defined field in the System Enclosure or Chassis Information structure.
-    uint32_t *getOemDefinedAddr() const { return (uint32_t *)(static_cast<uint8_t *>(m_pStart) + 0x0D); }
+    uint32_t* getOemDefinedAddr() const { return (uint32_t*)(static_cast<uint8_t*>(m_pStart) + 0x0D); }
 
     /// @brief Get the address of the Height field in the System Enclosure or Chassis Information structure.
-    uint8_t *getHeightAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x11); }
+    uint8_t* getHeightAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x11); }
 
     /// @brief Get the address of the Number of Power Cords field in the System Enclosure or Chassis Information structure.
-    uint8_t *getNumPowerCordsAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x12); }
+    uint8_t* getNumPowerCordsAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x12); }
 
     /// @brief Get the address of the Contained Element Count field in the System Enclosure or Chassis Information structure.
-    uint8_t *getContainedElementCountAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x13); }
+    uint8_t* getContainedElementCountAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x13); }
 
     /// @brief Get the address of the Contained Element Record Length field in the System Enclosure or Chassis Information structure.
-    uint8_t *getContainedElementRecordLengthAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x14); }
+    uint8_t* getContainedElementRecordLengthAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x14); }
 
     /// @brief Get the address of the Contained Elements field in the System Enclosure or Chassis Information structure.
-    uint8_t *getContainedElementsAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x15); }
+    uint8_t* getContainedElementsAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x15); }
 
     /// @brief Get the address of the SKU Number field in the System Enclosure or Chassis Information structure.
-    uint8_t *getSkuNumberAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x15 + getContainedElementCount() * getContainedElementRecordLength()); }
+    uint8_t* getSkuNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x15 + getContainedElementCount() * getContainedElementRecordLength()); }
 };
-#endif /* D9D2E7CD_CE66_4545_AC83_AB1DD86799B2 */

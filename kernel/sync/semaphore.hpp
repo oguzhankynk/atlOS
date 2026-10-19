@@ -17,14 +17,8 @@
  *
  */
 
-#ifndef B459C93A_FE28_4350_8EE4_069FF768C27C
-#define B459C93A_FE28_4350_8EE4_069FF768C27C
+#pragma once
 
-namespace Sync
-{
-
- 
+namespace Sync {
 
 } // namespace Sync
-
-#endif /* B459C93A_FE28_4350_8EE4_069FF768C27C */

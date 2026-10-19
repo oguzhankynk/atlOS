@@ -19,7 +19,7 @@
 #include <drivers/disk/disk.hpp>
 #include <string.h>
 
-Disk::Disk(const char *name) noexcept
+Disk::Disk(const char* name) noexcept
     : Device(name)
 {
 }

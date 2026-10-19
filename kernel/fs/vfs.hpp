@@ -16,27 +16,22 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef D8146028_ADEC_4A31_A0B3_BE8F58ED3E8F
-#define D8146028_ADEC_4A31_A0B3_BE8F58ED3E8F
+#pragma once
 
 #include <stdint.h>
 
 #include <fs/filesystem.hpp>
 
-namespace FileSystem
-{
-	namespace VFS
-	{
+namespace FileSystem {
+namespace VFS {
 
-		File *open(const char *filename);
-		ssize_t read(File *file, void *buffer, size_t size);
-		ssize_t write(File *file, const void *buffer, size_t size);
-		int close(File *file);
-		int remove(const char *filename);
+    File* open(const char* filename);
+    ssize_t read(File* file, void* buffer, size_t size);
+    ssize_t write(File* file, const void* buffer, size_t size);
+    int close(File* file);
+    int remove(const char* filename);
 
-		bool addFileSystem(IFileSystem &fs);
+    bool addFileSystem(IFileSystem& fs);
 
-	} // namespace VFS
+} // namespace VFS
 } // namespace FileSystem
-
-#endif /* D8146028_ADEC_4A31_A0B3_BE8F58ED3E8F */

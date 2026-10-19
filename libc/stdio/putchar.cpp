@@ -15,23 +15,22 @@
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <stdio.h>
 #include <stddef.h>
+#include <stdio.h>
 
 static stdout_handler_t current_handler;
 
 int putchar(int ic)
 {
-	char c = (char)ic;
-	if (current_handler)
-	{
-		current_handler(&c, sizeof(c));
-	}
+    char c = (char)ic;
+    if (current_handler) {
+        current_handler(&c, sizeof(c));
+    }
 
-	return ic;
+    return ic;
 }
 
 void set_write_handler(stdout_handler_t new_handler)
 {
-	current_handler = new_handler;
+    current_handler = new_handler;
 }

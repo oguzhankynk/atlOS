@@ -17,43 +17,40 @@
  *
  */
 
-#ifndef CC04DEBE_B0F3_4321_AA29_F8861E1DEABD
-#define CC04DEBE_B0F3_4321_AA29_F8861E1DEABD
+#pragma once
 
-#include <firmware/smbios/bios_information.hpp>
-#include <firmware/smbios/system_information.hpp>
 #include <firmware/smbios/baseboard_information.hpp>
-#include <firmware/smbios/system_enclosure_chassis.hpp>
-#include <firmware/smbios/processor_information.hpp>
-#include <firmware/smbios/physical_memory_array.hpp>
-#include <firmware/smbios/memory_device.hpp>
-#include <firmware/smbios/memory_array_mapped_address.hpp>
-#include <firmware/smbios/system_boot_information.hpp>
+#include <firmware/smbios/bios_information.hpp>
 #include <firmware/smbios/end_of_table.hpp>
+#include <firmware/smbios/memory_array_mapped_address.hpp>
+#include <firmware/smbios/memory_device.hpp>
+#include <firmware/smbios/physical_memory_array.hpp>
+#include <firmware/smbios/processor_information.hpp>
+#include <firmware/smbios/system_boot_information.hpp>
+#include <firmware/smbios/system_enclosure_chassis.hpp>
+#include <firmware/smbios/system_information.hpp>
 
 /// @brief Structure representing the SMBIOS Entry Point.
 /// @brief Structure representing the SMBIOS Entry Point.
-struct SMBIOSEntryPoint
-{
-    char signature[4];              ///< Signature identifying the SMBIOS Entry Point.
-    uint8_t checksum;               ///< Checksum of the Entry Point structure.
-    uint8_t length;                 ///< Length of the Entry Point structure.
-    uint8_t majorVersion;           ///< Major version of the SMBIOS specification.
-    uint8_t minorVersion;           ///< Minor version of the SMBIOS specification.
-    uint16_t maximumStructureSize;  ///< Maximum size of the SMBIOS structure.
-    uint8_t entryPointRevision;     ///< Revision of the Entry Point structure.
-    char formattedArea[5];          ///< Formatted area.
-    char intermediateAnchor[5];     ///< Intermediate anchor string.
-    uint8_t intermediateChecksum;   ///< Checksum of the intermediate structure.
-    uint16_t structureTableLength;  ///< Length of the structure table.
+struct SMBIOSEntryPoint {
+    char signature[4]; ///< Signature identifying the SMBIOS Entry Point.
+    uint8_t checksum; ///< Checksum of the Entry Point structure.
+    uint8_t length; ///< Length of the Entry Point structure.
+    uint8_t majorVersion; ///< Major version of the SMBIOS specification.
+    uint8_t minorVersion; ///< Minor version of the SMBIOS specification.
+    uint16_t maximumStructureSize; ///< Maximum size of the SMBIOS structure.
+    uint8_t entryPointRevision; ///< Revision of the Entry Point structure.
+    char formattedArea[5]; ///< Formatted area.
+    char intermediateAnchor[5]; ///< Intermediate anchor string.
+    uint8_t intermediateChecksum; ///< Checksum of the intermediate structure.
+    uint16_t structureTableLength; ///< Length of the structure table.
     uint32_t structureTableAddress; ///< Address of the structure table.
-    uint16_t numberOfStructures;    ///< Number of structures in the structure table.
-    uint8_t bcdRevision;            ///< BCD revision.
+    uint16_t numberOfStructures; ///< Number of structures in the structure table.
+    uint8_t bcdRevision; ///< BCD revision.
 };
 
 /// @brief Class for handling SMBIOS data.
-class SMBIOS
-{
+class SMBIOS {
 public:
     /// @brief Default constructor.
     SMBIOS();
@@ -89,17 +86,15 @@ public:
     void printSystemBootInformation() const;
 
 private:
-    SMBIOSEntryPoint m_SMBIOSEntryPoint;                 ///< SMBIOS entry point structure.
-    BIOSInformation m_BIOSInformation;                   ///< BIOS information structure.
-    SystemInformation m_SystemInformation;               ///< System information structure.
-    BaseBoardInformation m_BaseBoardInformation;         ///< BaseBoardInformation structure.
-    SystemEnclosureChassis m_SystemEnclosureChassis;     ///< SystemEnclosureChassis structure.
-    ProcessorInformation m_ProcessorInformation;         ///< ProcessorInformation structure.
-    PhysicalMemoryArray m_PhysicalMemoryArray;           ///< PhysicalMemoryArray structure.
-    MemoryDevice m_MemoryDevice;                         ///< MemoryDevice structure.
+    SMBIOSEntryPoint m_SMBIOSEntryPoint; ///< SMBIOS entry point structure.
+    BIOSInformation m_BIOSInformation; ///< BIOS information structure.
+    SystemInformation m_SystemInformation; ///< System information structure.
+    BaseBoardInformation m_BaseBoardInformation; ///< BaseBoardInformation structure.
+    SystemEnclosureChassis m_SystemEnclosureChassis; ///< SystemEnclosureChassis structure.
+    ProcessorInformation m_ProcessorInformation; ///< ProcessorInformation structure.
+    PhysicalMemoryArray m_PhysicalMemoryArray; ///< PhysicalMemoryArray structure.
+    MemoryDevice m_MemoryDevice; ///< MemoryDevice structure.
     MemoryArrayMappedAddress m_MemoryArrayMappedAddress; ///< MemoryDevice structure.
-    SystemBootInformation m_SystemBootInformation;       ///< System Boot Information
-    EndOfTable m_EndOfTable;                             ///< System Boot Information
+    SystemBootInformation m_SystemBootInformation; ///< System Boot Information
+    EndOfTable m_EndOfTable; ///< System Boot Information
 };
-
-#endif /* CC04DEBE_B0F3_4321_AA29_F8861E1DEABD */

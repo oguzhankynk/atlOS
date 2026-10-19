@@ -20,7 +20,7 @@
 #include <core/version.hpp>
 #include <stdio.h>
 
-static const char *s_banner = "\
+static const char* s_banner = "\
 |============================================|\n\
 |          Welcome to atlOS                  |\n\
 |   Developed by: Oguzhan KAYNAK             |\n\
@@ -35,6 +35,6 @@ void atlOSBanner()
     printf("%s", s_banner);
     char version[256];
     sprintf(version, "atlOS Version: %d.%d.%d Build Time: %s",
-            MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, BUILD_TIME);
+        MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, BUILD_TIME);
     printf("%s\n", version);
 }

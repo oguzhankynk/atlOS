@@ -19,74 +19,69 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef E3ADD1BE_2B74_461B_B7F8_9A289895F125
-#define E3ADD1BE_2B74_461B_B7F8_9A289895F125
+#pragma once
 
 #include <stdint.h>
 
-namespace Threading
-{
-    class Thread;
-    struct TCB;
+namespace Threading {
+class Thread;
+struct TCB;
 };
 
-namespace Scheduler
-{
-    /**
-     * @brief Register the boot flow as the first task and start the 1 ms tick.
-     * Needs the PIC to be initialized.
-     */
-    void init();
+namespace Scheduler {
+/**
+ * @brief Register the boot flow as the first task and start the 1 ms tick.
+ * Needs the PIC to be initialized.
+ */
+void init();
 
-    void addTask(Threading::Thread &thread);
+void addTask(Threading::Thread& thread);
 
-    /**
-     * @brief Remove a thread from the run queue. No-op if it is not queued
-     * (e.g. it has already exited). The running thread can not remove itself.
-     */
-    void removeTask(Threading::Thread &thread);
+/**
+ * @brief Remove a thread from the run queue. No-op if it is not queued
+ * (e.g. it has already exited). The running thread can not remove itself.
+ */
+void removeTask(Threading::Thread& thread);
 
-    /**
-     * @brief Run the next runnable thread, if there is one.
-     */
-    void yield();
+/**
+ * @brief Run the next runnable thread, if there is one.
+ */
+void yield();
 
-    /**
-     * @brief Let other threads run for at least ms milliseconds.
-     */
-    void sleep(uint64_t ms);
+/**
+ * @brief Let other threads run for at least ms milliseconds.
+ */
+void sleep(uint64_t ms);
 
-    /**
-     * @brief Stop running the current thread until someone calls unblock on it.
-     */
-    void block();
+/**
+ * @brief Stop running the current thread until someone calls unblock on it.
+ */
+void block();
 
-    /**
-     * @brief Make a Blocked thread runnable again. Other states are left alone.
-     */
-    void unblock(Threading::TCB &tcb);
+/**
+ * @brief Make a Blocked thread runnable again. Other states are left alone.
+ */
+void unblock(Threading::TCB& tcb);
 
-    /**
-     * @brief End the current thread. It leaves the run queue and never runs again;
-     * its owner still has to delete the Thread object.
-     */
-    [[noreturn]] void exit();
+/**
+ * @brief End the current thread. It leaves the run queue and never runs again;
+ * its owner still has to delete the Thread object.
+ */
+[[noreturn]] void exit();
 
-    /**
-     * @brief TCB of the running thread.
-     */
-    Threading::TCB &current();
+/**
+ * @brief TCB of the running thread.
+ */
+Threading::TCB& current();
 
-    /**
-     * @brief Milliseconds since Init.
-     */
-    uint64_t ticks();
+/**
+ * @brief Milliseconds since Init.
+ */
+uint64_t ticks();
 
-    /**
-     * @brief Number of queued tasks, including the boot flow.
-     */
-    uint32_t taskCount();
+/**
+ * @brief Number of queued tasks, including the boot flow.
+ */
+uint32_t taskCount();
 
 } // namespace Scheduler
-
-#endif /* E3ADD1BE_2B74_461B_B7F8_9A289895F125 */

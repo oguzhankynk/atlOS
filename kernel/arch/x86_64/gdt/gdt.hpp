@@ -16,8 +16,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef B8E0EF46_0B01_45A0_8AA2_0B2B4992066F
-#define B8E0EF46_0B01_45A0_8AA2_0B2B4992066F
+#pragma once
 
 #include <stdint.h>
 
@@ -27,34 +26,29 @@
  * The GDT namespace encapsulates the GDT table and its operations. It provides functions
  * for initializing the GDT, setting entries, and loading the GDT into the CPU.
  */
-namespace GDT
-{
+namespace GDT {
 
-    /// @brief Represents a GDT entry.
-    struct GDTEntry
-    {
-        uint16_t limit_low;           /**< Limit 0:15 */
-        uint16_t base_low;            /**< Base 0:15 */
-        uint8_t base_middle;          /**< Base 16:23 */
-        uint8_t access;               /**< empty (2 bit). */
-        uint8_t limit_high_and_flags; /**< Limit 16:19 and Flags */
-        uint8_t base_high;            /**< Base 24:31 */
-    } __attribute__((packed));
+/// @brief Represents a GDT entry.
+struct GDTEntry {
+    uint16_t limit_low; /**< Limit 0:15 */
+    uint16_t base_low; /**< Base 0:15 */
+    uint8_t base_middle; /**< Base 16:23 */
+    uint8_t access; /**< empty (2 bit). */
+    uint8_t limit_high_and_flags; /**< Limit 16:19 and Flags */
+    uint8_t base_high; /**< Base 24:31 */
+} __attribute__((packed));
 
-    /// @brief Represents the Global Descriptor Table Register (GDTR).
-    struct GDTR
-    {
-        uint16_t limit; ///< Size of the GDT - 1
-        uintptr_t base; ///< Base address of the GDT
-    } __attribute__((packed));
+/// @brief Represents the Global Descriptor Table Register (GDTR).
+struct GDTR {
+    uint16_t limit; ///< Size of the GDT - 1
+    uintptr_t base; ///< Base address of the GDT
+} __attribute__((packed));
 
-    /**
-     * @brief Returns a reference to the GDTR.
-     *
-     * @return const GDTR&
-     */
-    const GDTR &getGDTR();
+/**
+ * @brief Returns a reference to the GDTR.
+ *
+ * @return const GDTR&
+ */
+const GDTR& getGDTR();
 
 };
-
-#endif /* B8E0EF46_0B01_45A0_8AA2_0B2B4992066F */

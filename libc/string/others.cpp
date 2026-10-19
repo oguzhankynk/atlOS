@@ -19,13 +19,11 @@
 
 #include <string.h>
 
-char *strchr(const char *str, int character)
+char* strchr(const char* str, int character)
 {
-    while (*str)
-    {
-        if (*str == character)
-        {
-            return (char *)str;
+    while (*str) {
+        if (*str == character) {
+            return (char*)str;
         }
         ++str;
     }

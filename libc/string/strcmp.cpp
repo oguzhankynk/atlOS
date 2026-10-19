@@ -18,34 +18,30 @@
  */
 
 #include <string.h>
-int strcmp(const char *str1, const char *str2)
+int strcmp(const char* str1, const char* str2)
 {
-    while (*str1 && (*str1 == *str2))
-    {
+    while (*str1 && (*str1 == *str2)) {
         str1++;
         str2++;
     }
-    return *(const unsigned char *)str1 - *(const unsigned char *)str2;
+    return *(const unsigned char*)str1 - *(const unsigned char*)str2;
 }
 
-int strncmp(const char *str1, const char *str2, size_t num)
+int strncmp(const char* str1, const char* str2, size_t num)
 {
-    for (auto i = 0; i < num; i++)
-    {
-        if (*(str1 + i) != *(str2 + i) || *(str1 + i) == '\0' || *(str2 + i) == '\0')
-        {
-            return (*(unsigned char *)(str1 + i) - *(unsigned char *)(str2 + i));
+    for (auto i = 0; i < num; i++) {
+        if (*(str1 + i) != *(str2 + i) || *(str1 + i) == '\0' || *(str2 + i) == '\0') {
+            return (*(unsigned char*)(str1 + i) - *(unsigned char*)(str2 + i));
         }
     }
 
     return 0;
 }
 
-char *strcpy(char *des, const char *src)
+char* strcpy(char* des, const char* src)
 {
-    char *dest_start = des;
-    while (*src != '\0')
-    {
+    char* dest_start = des;
+    while (*src != '\0') {
         *des = *src;
         des++;
         src++;
@@ -54,18 +50,16 @@ char *strcpy(char *des, const char *src)
     return dest_start;
 }
 
-char *strncpy(char *des, const char *src, size_t num)
+char* strncpy(char* des, const char* src, size_t num)
 {
-    char *dest_start = des;
+    char* dest_start = des;
     size_t i;
 
-    for (i = 0; i < num && src[i] != '\0'; i++)
-    {
+    for (i = 0; i < num && src[i] != '\0'; i++) {
         des[i] = src[i];
     }
 
-    for (; i < num; i++)
-    {
+    for (; i < num; i++) {
         des[i] = '\0';
     }
 

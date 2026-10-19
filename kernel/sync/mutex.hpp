@@ -17,12 +17,8 @@
  *
  */
 
-#ifndef B7261DC7_517A_48A0_A691_3CF0F90A412F
-#define B7261DC7_517A_48A0_A691_3CF0F90A412F
+#pragma once
 
-namespace Sync
-{
+namespace Sync {
 
 } // namespace Sync
-
-#endif /* B7261DC7_517A_48A0_A691_3CF0F90A412F */

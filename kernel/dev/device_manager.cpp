@@ -29,132 +29,118 @@
 
 #include <drivers/pic.hpp>
 
-#include <drivers/serial.hpp>
 #include <drivers/disk/ata.hpp>
 #include <drivers/keyboard.hpp>
+#include <drivers/serial.hpp>
 
 #include <arch/x86_64/idt/handlers.hpp>
 
+#include <fs/fat16.hpp>
 #include <fs/filesystem.hpp>
 #include <fs/vfs.hpp>
-#include <fs/fat16.hpp>
 
 #include <core/panic.hpp>
 
-namespace DeviceManager
+namespace DeviceManager {
+static constexpr size_t numberOfMaxDevice = 10;
+
+static Device* s_deviceList[numberOfMaxDevice] {};
+
+struct PartitionEntry {
+    uint8_t status {}; // Partition status
+    uint8_t chs_first[3] {}; // CHS address of first absolute sector
+    uint8_t type {}; // Partition type
+    uint8_t chs_last[3] {}; // CHS address of last absolute sector
+    uint32_t lba_first_sector {}; // LBA of first absolute sector
+    uint32_t num_sectors {}; // Number of sectors in partition
+
+    void print() const noexcept
+    {
+        printf("  Status: 0x%02X ", status);
+        printf("  Type: 0x%02X ", type);
+        printf("  First LBA sector: %u ", lba_first_sector);
+        printf("  Number of sectors: %u\n", num_sectors);
+    }
+
+} __attribute__((packed));
+
+/**
+ * @brief Master Boot Record.
+ *
+ */
+struct MBR {
+    uint8_t code[446] {}; /// Code Area
+    PartitionEntry partition_table[4] {}; /// Partition tables
+    uint16_t magic_number {}; /// MBR signature :  0xAA55.
+} __attribute__((packed));
+
+static void detectATADevices()
 {
-    static constexpr size_t numberOfMaxDevice = 10;
+    ATA* ataDevice = new ATA("/dev/ata0");
 
-    static Device *s_deviceList[numberOfMaxDevice]{};
+    kernelPanicAssert(ataDevice != nullptr);
 
-    struct PartitionEntry
-    {
-        uint8_t status{};            // Partition status
-        uint8_t chs_first[3]{};      // CHS address of first absolute sector
-        uint8_t type{};              // Partition type
-        uint8_t chs_last[3]{};       // CHS address of last absolute sector
-        uint32_t lba_first_sector{}; // LBA of first absolute sector
-        uint32_t num_sectors{};      // Number of sectors in partition
+    uint8_t sectorData[512] {};
 
-        void print() const noexcept
-        {
-            printf("  Status: 0x%02X ", status);
-            printf("  Type: 0x%02X ", type);
-            printf("  First LBA sector: %u ", lba_first_sector);
-            printf("  Number of sectors: %u\n", num_sectors);
-        }
+    //! read boot sector
+    ataDevice->readSector(0, (uint8_t*)sectorData);
 
-    } __attribute__((packed));
+    if (sectorData[510] == 0x55 && sectorData[511] == 0xAA) {
+        if ((sectorData[446] == 0x00 || sectorData[446] == 0x80) && sectorData[450] != 0x00) {
+            // MBR detected
 
-    /**
-     * @brief Master Boot Record.
-     *
-     */
-    struct MBR
-    {
-        uint8_t code[446]{};                 /// Code Area
-        PartitionEntry partition_table[4]{}; /// Partition tables
-        uint16_t magic_number{};             /// MBR signature :  0xAA55.
-    } __attribute__((packed));
+            const MBR& mbr = *(MBR*)sectorData;
 
-    static void detectATADevices()
-    {
-        ATA *ataDevice = new ATA("/dev/ata0");
+            auto validPartition = 0;
 
-        kernelPanicAssert(ataDevice != nullptr);
+            printf("MBR info: \n");
+            for (const auto& part : mbr.partition_table) {
+                if (part.type != 0x00) {
+                    part.print();
 
-        uint8_t sectorData[512]{};
+                    char deviceName[32];
+                    snprintf(deviceName, 32, "/dev/ata0p%d", validPartition);
 
-        //! read boot sector
-        ataDevice->readSector(0, (uint8_t *)sectorData);
+                    ATA* newPartition = new ATA(deviceName);
+                    kernelPanicAssert(newPartition != nullptr);
 
-        if (sectorData[510] == 0x55 && sectorData[511] == 0xAA)
-        {
-            if ((sectorData[446] == 0x00 || sectorData[446] == 0x80) && sectorData[450] != 0x00)
-            {
-                // MBR detected
+                    uint8_t partitionSectorData[512] {};
 
-                const MBR &mbr = *(MBR *)sectorData;
+                    newPartition->readSector(part.lba_first_sector, partitionSectorData);
 
-                auto validPartition = 0;
+                    if (partitionSectorData[0] == 0xEB || partitionSectorData[0] == 0xE9) {
+                        // FAT 16 detected
 
-                printf("MBR info: \n");
-                for (const auto &part : mbr.partition_table)
-                {
-                    if (part.type != 0x00)
-                    {
-                        part.print();
+                        auto* fat16 = new FileSystem::FAT16::FAT16FileSystem(*newPartition,
+                            part.lba_first_sector);
+                        auto ret = FileSystem::VFS::addFileSystem(*fat16);
 
-                        char deviceName[32];
-                        snprintf(deviceName, 32, "/dev/ata0p%d", validPartition);
-
-                        ATA *newPartition = new ATA(deviceName);
-                        kernelPanicAssert(newPartition != nullptr);
-
-                        uint8_t partitionSectorData[512]{};
-
-                        newPartition->readSector(part.lba_first_sector, partitionSectorData);
-
-                        if (partitionSectorData[0] == 0xEB || partitionSectorData[0] == 0xE9)
-                        {
-                            // FAT 16 detected
-
-                            auto *fat16 = new FileSystem::FAT16::FAT16FileSystem(*newPartition,
-                                                                                 part.lba_first_sector);
-                            auto ret = FileSystem::VFS::addFileSystem(*fat16);
-
-                            break;
-                        }
-                        // TODO
-
-                        validPartition++;
+                        break;
                     }
-                }
+                    // TODO
 
-                for (const auto &part : mbr.partition_table)
-                {
+                    validPartition++;
                 }
             }
-            else
-            {
-                // TODO
+
+            for (const auto& part : mbr.partition_table) {
             }
+        } else {
+            // TODO
         }
-        else
-        {
-            printf("Invalid disk signature\n");
-            delete ataDevice;
-            return;
-        }
+    } else {
+        printf("Invalid disk signature\n");
+        delete ataDevice;
+        return;
     }
+}
 
-    void init()
-    {
-        // PIC::init(); not used anymore in favor of APIC
+void init()
+{
+    // PIC::init(); not used anymore in favor of APIC
 
-        // Keyboard::init();
+    // Keyboard::init();
 
-
-        //detectATADevices();
-    }
+    // detectATADevices();
+}
 } // namespace DeviceManager

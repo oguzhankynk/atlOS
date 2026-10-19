@@ -19,19 +19,19 @@
  */
 #include <arch/x86_64/cpu/cpuid.hpp>
 
-void cpuid(unsigned int value, unsigned int *eax, unsigned int *ebx, unsigned int *ecx, unsigned int *edx)
+void cpuid(unsigned int value, unsigned int* eax, unsigned int* ebx, unsigned int* ecx, unsigned int* edx)
 {
-  unsigned int eaxres, ebxres, ecxres, edxres;
+    unsigned int eaxres, ebxres, ecxres, edxres;
 
-  __asm__ volatile("cpuid"
-                   : "=b"(ebxres),
+    __asm__ volatile("cpuid"
+                     : "=b"(ebxres),
                      "=c"(ecxres),
                      "=d"(edxres),
                      "=a"(eaxres)
-                   : "a"(value));
+                     : "a"(value));
 
-  *eax = eaxres;
-  *ebx = ebxres;
-  *ecx = ecxres;
-  *edx = edxres;
+    *eax = eaxres;
+    *ebx = ebxres;
+    *ecx = ecxres;
+    *edx = edxres;
 }

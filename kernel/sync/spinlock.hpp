@@ -17,33 +17,28 @@
  *
  */
 
-#ifndef C5A55AD4_BF4E_4248_A6BE_7A596A2BDFEE
-#define C5A55AD4_BF4E_4248_A6BE_7A596A2BDFEE
+#pragma once
 
-namespace Sync
-{
-    class Spinlock
-    {
-    private:
-        /**
-         * @brief Atomic boolean to indicate if the lock is currently held
-         *
-         */
-        volatile bool m_locked{false};
+namespace Sync {
+class Spinlock {
+private:
+    /**
+     * @brief Atomic boolean to indicate if the lock is currently held
+     *
+     */
+    volatile bool m_locked { false };
 
-    public:
-        /**
-         * @brief Acquire the lock, spin until it is available
-         *
-         */
-        void lock();
+public:
+    /**
+     * @brief Acquire the lock, spin until it is available
+     *
+     */
+    void lock();
 
-        /**
-         * @brief  Release the lock, allowing other threads to acquire it
-         *
-         */
-        void unlock();
-    };
+    /**
+     * @brief  Release the lock, allowing other threads to acquire it
+     *
+     */
+    void unlock();
+};
 } // namespace Sync
-
-#endif /* C5A55AD4_BF4E_4248_A6BE_7A596A2BDFEE */

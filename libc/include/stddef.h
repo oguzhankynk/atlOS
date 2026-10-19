@@ -25,7 +25,7 @@ typedef long unsigned int size_t;
 #ifdef __cplusplus
 #define NULL 0
 #else
-#define NULL ((void *)0)
+#define NULL ((void*)0)
 #endif
 
 #endif /* _STDDEF_H */

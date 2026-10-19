@@ -16,23 +16,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef AB42FE93_A33B_4AA5_9CF2_CBC263FCA5AE
-#define AB42FE93_A33B_4AA5_9CF2_CBC263FCA5AE
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Class representing BIOS Information structure, inheriting from BIOSStructureCommon.
-class BIOSInformation : public BIOSStructureCommon
-{
+class BIOSInformation : public BIOSStructureCommon {
 public:
     /// @brief Default constructor.
     BIOSInformation() = default;
 
     /// @brief Constructor that initializes the object and scans the BIOS information.
     /// @param pStart Pointer to the start address of the BIOS structure.
-    BIOSInformation(void *pStart)
+    BIOSInformation(void* pStart)
     {
         scan(pStart);
     };
@@ -40,33 +38,33 @@ public:
     /// @brief Scans the BIOS information structure.
     /// @param pStart Pointer to the start address of the BIOS structure.
     /// @return Pointer to the end address of the BIOS structure.
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
+        extractStringAddress((const char*)ptr, (const char*)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
 
     /// @brief Returns the start address of the BIOS structure.
     /// @return Start address of the BIOS structure.
-    void *getStartAddr() const
+    void* getStartAddr() const
     {
         return m_pStart;
     }
 
     /// @brief Returns the end address of the BIOS structure.
     /// @return End address of the BIOS structure.
-    void *getEndAddr() const
+    void* getEndAddr() const
     {
         return m_pEnd;
     }
@@ -179,16 +177,15 @@ public:
         printf("System BIOS Minor Release: %u\n", getSystemBiosMinorRelease());
         printf("Embedded Controller Firmware Major Release: %u\n", getEmbeddedControllerFirmwareMajorRelease());
         printf("Embedded Controller Firmware Minor Release: %u\n", getEmbeddedControllerFirmwareMinorRelease());
-        for (size_t i = 0; i < stringCount; ++i)
-        {
+        for (size_t i = 0; i < stringCount; ++i) {
             printf("[%d]:%s ", i, m_strings[i]);
         }
         printf("\n");
     }
 
 private:
-    void *m_pStart; ///< Pointer to the start address of the BIOS structure.
-    void *m_pEnd;   ///< Pointer to the end address of the BIOS structure.
+    void* m_pStart; ///< Pointer to the start address of the BIOS structure.
+    void* m_pEnd; ///< Pointer to the end address of the BIOS structure.
 
     /*
        vendorString;
@@ -196,91 +193,89 @@ private:
        releaseDateString;
    */
     static constexpr uint8_t stringCount = 3; ///< Maximum number of strings to extract.
-    const char *m_strings[stringCount]{};     ///< Array to store extracted strings.
+    const char* m_strings[stringCount] {}; ///< Array to store extracted strings.
 
     /// @brief Returns the address of the type field in the BIOS structure.
-    uint8_t *getTypeAddr() const
+    uint8_t* getTypeAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0);
     }
 
     /// @brief Returns the address of the length field in the BIOS structure.
-    uint8_t *getLengthAddr() const
+    uint8_t* getLengthAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 1);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 1);
     }
 
     /// @brief Returns the address of the handle field in the BIOS structure.
-    uint16_t *getHandleAddr() const
+    uint16_t* getHandleAddr() const
     {
-        return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 2);
+        return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 2);
     }
 
     /// @brief Returns the address of the vendor string field in the BIOS structure.
-    uint8_t *getVendorStringAddr() const
+    uint8_t* getVendorStringAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 4);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 4);
     }
 
     /// @brief Returns the address of the version string field in the BIOS structure.
-    uint8_t *getVersionStringAddr() const
+    uint8_t* getVersionStringAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 5);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 5);
     }
 
     /// @brief Returns the address of the start segment field in the BIOS structure.
-    uint16_t *getStartSegmentAddr() const
+    uint16_t* getStartSegmentAddr() const
     {
-        return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 6);
+        return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 6);
     }
 
     /// @brief Returns the address of the release date string field in the BIOS structure.
-    uint8_t *getReleaseDateStringAddr() const
+    uint8_t* getReleaseDateStringAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 8);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 8);
     }
 
     /// @brief Returns the address of the ROM size field in the BIOS structure.
-    uint8_t *getRomSizeAddr() const
+    uint8_t* getRomSizeAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 9);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 9);
     }
 
     /// @brief Returns the address of the characteristics field in the BIOS structure.
-    uint64_t *getCharacteristicsAddr() const
+    uint64_t* getCharacteristicsAddr() const
     {
-        return (uint64_t *)(static_cast<uint8_t *>(m_pStart) + 10);
+        return (uint64_t*)(static_cast<uint8_t*>(m_pStart) + 10);
     }
 
     /// @brief Returns the address of the extension byte field in the BIOS structure.
-    uint8_t *getExtensionByteAddr() const
+    uint8_t* getExtensionByteAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 14);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 14);
     }
 
     /// @brief Returns the address of the system BIOS major release field in the BIOS structure.
-    uint8_t *getSystemBiosMajorReleaseAddr() const
+    uint8_t* getSystemBiosMajorReleaseAddr() const
     {
-        return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + getLength() - 4);
+        return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + getLength() - 4);
     }
 
     /// @brief Returns the address of the system BIOS minor release field in the BIOS structure.
-    uint8_t *getSystemBiosMinorReleaseAddr() const
+    uint8_t* getSystemBiosMinorReleaseAddr() const
     {
         return getSystemBiosMajorReleaseAddr() + 1;
     }
 
     /// @brief Returns the address of the embedded controller firmware major release field in the BIOS structure.
-    uint8_t *getEmbeddedControllerFirmwareMajorReleaseAddr() const
+    uint8_t* getEmbeddedControllerFirmwareMajorReleaseAddr() const
     {
         return getSystemBiosMinorReleaseAddr() + 1;
     }
 
     /// @brief Returns the address of the embedded controller firmware minor release field in the BIOS structure.
-    uint8_t *getEmbeddedControllerFirmwareMinorReleaseAddr() const
+    uint8_t* getEmbeddedControllerFirmwareMinorReleaseAddr() const
     {
         return getEmbeddedControllerFirmwareMajorReleaseAddr() + 1;
     }
 };
-
-#endif /* AB42FE93_A33B_4AA5_9CF2_CBC263FCA5AE */

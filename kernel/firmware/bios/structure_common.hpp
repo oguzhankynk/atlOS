@@ -16,31 +16,26 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef C4ED04D9_0FCD_4B1F_9597_24FD51FBB80F
-#define C4ED04D9_0FCD_4B1F_9597_24FD51FBB80F
+#pragma once
 
 /// @brief Class representing common functionality for handling BIOS structures.
-class BIOSStructureCommon
-{
+class BIOSStructureCommon {
 public:
     /// @brief Extract the strings that at end of BIOS structure definations
     /// @param strStart String starting address of the BIOS structure
     /// @param strEnd End address of the BIOS structure
     /// @param addresses array of strings that fill with extracted strings
     /// @param maxStrings length of 'addresses' array
-    void extractStringAddress(const char *strStart, const char *strEnd, const char *addresses[], unsigned int maxStrings)
+    void extractStringAddress(const char* strStart, const char* strEnd, const char* addresses[], unsigned int maxStrings)
     {
         unsigned int count = 0;
-        while (*strStart != '\0' && count < maxStrings && strStart <= strEnd)
-        {
+        while (*strStart != '\0' && count < maxStrings && strStart <= strEnd) {
             addresses[count++] = strStart;
             strStart += strlen(strStart) + 1; // Bir sonraki dizeye geç
         }
     }
 
-    virtual void *scan(void *pStart) = 0;
+    virtual void* scan(void* pStart) = 0;
 
     virtual void print() const = 0;
 };
-
-#endif /* C4ED04D9_0FCD_4B1F_9597_24FD51FBB80F */

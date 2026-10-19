@@ -1,3 +1,5 @@
+// Third party (mpaland/printf), kept as upstream
+// clang-format off
 /**
  * @file printf.cpp
  * @brief Tiny printf, sprintf and (v)snprintf implementation, optimized for speed on

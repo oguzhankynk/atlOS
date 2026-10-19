@@ -20,21 +20,19 @@
  *
  */
 
-#include <stdio.h>
 #include <core/panic.hpp>
+#include <stdio.h>
 
-void kernelPanic(const char *str)
+void kernelPanic(const char* str)
 {
     printf("%s\n", str);
-    while (1)
-    {
+    while (1) {
     }
 }
 
 void kernelPanicAssert(bool condition)
 {
-    if (!condition)
-    {
+    if (!condition) {
         kernelPanic("ASSERTION-FAILED");
     }
 }

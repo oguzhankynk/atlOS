@@ -18,69 +18,61 @@
 
 #include <fs/vfs.hpp>
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <dev/device.hpp>
 #include <drivers/disk/disk.hpp>
 
-namespace FileSystem
-{
-	namespace VFS
-	{
-		struct FileSystemInfo
-		{
-			char name[32]{};
-			IFileSystem *fs{};
-		};
+namespace FileSystem {
+namespace VFS {
+    struct FileSystemInfo {
+        char name[32] {};
+        IFileSystem* fs {};
+    };
 
-		static constexpr uint16_t maxFileSystem = 5;
+    static constexpr uint16_t maxFileSystem = 5;
 
-		static FileSystemInfo *s_fileSystems[maxFileSystem]{};
+    static FileSystemInfo* s_fileSystems[maxFileSystem] {};
 
-		bool addFileSystem(IFileSystem &fs)
-		{
-			int fsIndex = 0;
+    bool addFileSystem(IFileSystem& fs)
+    {
+        int fsIndex = 0;
 
-			for (fsIndex = 0; fsIndex < maxFileSystem; fsIndex++)
-			{
-				if (s_fileSystems[fsIndex] == nullptr)
-				{
-					break;
-				}
-			}
+        for (fsIndex = 0; fsIndex < maxFileSystem; fsIndex++) {
+            if (s_fileSystems[fsIndex] == nullptr) {
+                break;
+            }
+        }
 
-			if (fsIndex == maxFileSystem)
-			{
-				return false;
-			}
+        if (fsIndex == maxFileSystem) {
+            return false;
+        }
 
-			auto &newFs = s_fileSystems[fsIndex];
+        auto& newFs = s_fileSystems[fsIndex];
 
-			newFs = new FileSystemInfo;
+        newFs = new FileSystemInfo;
 
-			if (newFs == nullptr)
-			{
-				return false;
-			}
+        if (newFs == nullptr) {
+            return false;
+        }
 
-			newFs->fs = &fs;
-			snprintf(newFs->name, sizeof(newFs->name), "/fs%d", fsIndex);
+        newFs->fs = &fs;
+        snprintf(newFs->name, sizeof(newFs->name), "/fs%d", fsIndex);
 
-			auto ret = newFs->fs->mount();
+        auto ret = newFs->fs->mount();
 
-			if (ret == false)
-			{
-				delete newFs;
-				newFs = nullptr;
-				return false;
-			}
+        if (ret == false) {
+            delete newFs;
+            newFs = nullptr;
+            return false;
+        }
 
-			printf("vfs: %s mounted on %s \n", newFs->name, newFs->fs->getDisk().getName());
+        printf("vfs: %s mounted on %s \n", newFs->name, newFs->fs->getDisk().getName());
 
-			newFs->fs->printFilelist();
+        newFs->fs->printFilelist();
 
-			return true;
-		}
-	} // namespace VFS
+        return true;
+    }
+} // namespace VFS
 } // namespace FileSystem

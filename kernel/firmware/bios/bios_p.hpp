@@ -17,17 +17,13 @@
  *
  */
 
-#ifndef C1A89A8C_95D9_4708_8742_B82CD9D74F7A
-#define C1A89A8C_95D9_4708_8742_B82CD9D74F7A
+#pragma once
 
 #include <firmware/smbios/smbios.hpp>
 
 /// @brief Class representing BIOS information.
-class BIOS : public SMBIOS
-{
+class BIOS : public SMBIOS {
 public:
     /// @brief Default constructor.
     BIOS() = default;
 };
-
-#endif /* C1A89A8C_95D9_4708_8742_B82CD9D74F7A */

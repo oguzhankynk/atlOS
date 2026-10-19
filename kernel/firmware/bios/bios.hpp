@@ -16,20 +16,16 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef EB497FF7_83CA_4F01_A507_7433482E25D2
-#define EB497FF7_83CA_4F01_A507_7433482E25D2
+#pragma once
 
 #if defined(__cplusplus)
-extern "C"
-{
+extern "C" {
 #endif
 
-    /// @brief Initializes the BIOS and retrieves BIOS information.
-    /// @param
-    void biosInit();
+/// @brief Initializes the BIOS and retrieves BIOS information.
+/// @param
+void biosInit();
 
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif
-
-#endif /* EB497FF7_83CA_4F01_A507_7433482E25D2 */

@@ -17,23 +17,19 @@
  *
  */
 
-#ifndef AAF5B2F0_31B2_484F_A4C8_2633C73C0662
-#define AAF5B2F0_31B2_484F_A4C8_2633C73C0662
+#pragma once
 
 #include <stdint.h>
 
-namespace PIT
-{
+namespace PIT {
 
-    /**
-     * @brief Initializes the PIT8253/8254 with the desired settings.
-     *
-     * @param periodNs The desired period in nanoseconds.
-     * @param handler A function pointer to the interrupt handler that will be called when the timer triggers.
-     * @param args Optional arguments to be passed to the handler function.
-     */
-    void init(uint32_t periodNs, void (*handler)(void *), void *args = nullptr);
+/**
+ * @brief Initializes the PIT8253/8254 with the desired settings.
+ *
+ * @param periodNs The desired period in nanoseconds.
+ * @param handler A function pointer to the interrupt handler that will be called when the timer triggers.
+ * @param args Optional arguments to be passed to the handler function.
+ */
+void init(uint32_t periodNs, void (*handler)(void*), void* args = nullptr);
 
 }
-
-#endif /* AAF5B2F0_31B2_484F_A4C8_2633C73C0662 */

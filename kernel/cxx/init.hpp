@@ -17,22 +17,18 @@
  *
  */
 
-#ifndef C23ED70C_3462_4E77_B98A_58F7DBC3FFFE
-#define C23ED70C_3462_4E77_B98A_58F7DBC3FFFE
+#pragma once
 
-namespace Cxx
-{
-    /**
-     * @brief Initialize all global/static C++ constructors.
-     *
-     */
-    void callConstructors();
+namespace Cxx {
+/**
+ * @brief Initialize all global/static C++ constructors.
+ *
+ */
+void callConstructors();
 
-    /**
-     * @brief Call all global/static C++ destructors.
-     *
-     */
-    void callDestructors();
+/**
+ * @brief Call all global/static C++ destructors.
+ *
+ */
+void callDestructors();
 }
-
-#endif /* C23ED70C_3462_4E77_B98A_58F7DBC3FFFE */

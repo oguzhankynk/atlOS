@@ -16,19 +16,17 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef E783A862_53F3_4C99_B779_8123301B75AE
-#define E783A862_53F3_4C99_B779_8123301B75AE
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Class for handling Processor Information (Type 4) structure in SMBIOS.
-class ProcessorInformation : public BIOSStructureCommon
-{
+class ProcessorInformation : public BIOSStructureCommon {
 public:
     ProcessorInformation() = default;
-    ProcessorInformation(void *pStart)
+    ProcessorInformation(void* pStart)
     {
         scan(pStart);
     }
@@ -36,20 +34,20 @@ public:
     /// @brief Scans the Processor Information structure starting from the given address.
     /// @param pStart Pointer to the start address of the Processor Information structure.
     /// @return Pointer to the end address of the structure.
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
 
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
+        extractStringAddress((const char*)ptr, (const char*)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
@@ -163,16 +161,15 @@ public:
         printf("Thread Count: %u\n", getThreadCount());
         printf("Processor Characteristics: %u\n", getProcessorCharacteristics());
         printf("Processor Family 2: %u\n", getProcessorFamily2());
-        for (size_t i = 0; i < stringCount; ++i)
-        {
+        for (size_t i = 0; i < stringCount; ++i) {
             printf("[%d]:%s ", i, m_strings[i]);
         }
         printf("\n");
     }
 
 private:
-    void *m_pStart{}; ///< Start address of the structure.
-    void *m_pEnd{};   ///< End address of the structure.
+    void* m_pStart {}; ///< Start address of the structure.
+    void* m_pEnd {}; ///< End address of the structure.
 
     /*
         Socket Designation String;
@@ -183,86 +180,85 @@ private:
         Part Number String;
     */
     static constexpr uint8_t stringCount = 6; ///< Number of string fields.
-    const char *m_strings[stringCount]{};     ///< Array to store string fields.
+    const char* m_strings[stringCount] {}; ///< Array to store string fields.
 
     // Private methods to find addresses of structure fields
 
     /// @brief Gets the address of the type field.
-    uint8_t *getTypeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }
+    uint8_t* getTypeAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x00); }
 
     /// @brief Gets the address of the length field.
-    uint8_t *getLengthAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x01); }
+    uint8_t* getLengthAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x01); }
 
     /// @brief Gets the address of the handle field.
-    uint16_t *getHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t* getHandleAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x02); }
 
     /// @brief Gets the address of the socket designation field.
-    uint8_t *getSocketDesignationAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x04); }
+    uint8_t* getSocketDesignationAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x04); }
 
     /// @brief Gets the address of the processor type field.
-    uint8_t *getProcessorTypeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x05); }
+    uint8_t* getProcessorTypeAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x05); }
 
     /// @brief Gets the address of the processor family field.
-    uint8_t *getProcessorFamilyAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x06); }
+    uint8_t* getProcessorFamilyAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x06); }
 
     /// @brief Gets the address of the processor manufacturer field.
-    uint8_t *getProcessorManufacturerAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x07); }
+    uint8_t* getProcessorManufacturerAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x07); }
 
     /// @brief Gets the address of the processor ID field.
-    uint32_t *getProcessorIDAddr() const { return (uint32_t *)(static_cast<uint8_t *>(m_pStart) + 0x08); }
+    uint32_t* getProcessorIDAddr() const { return (uint32_t*)(static_cast<uint8_t*>(m_pStart) + 0x08); }
 
     /// @brief Gets the address of the processor version field.
-    uint8_t *getProcessorVersionAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x10); }
+    uint8_t* getProcessorVersionAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x10); }
 
     /// @brief Gets the address of the voltage field.
-    uint8_t *getVoltageAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x11); }
+    uint8_t* getVoltageAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x11); }
 
     /// @brief Gets the address of the external clock field.
-    uint16_t *getExternalClockAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x12); }
+    uint16_t* getExternalClockAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x12); }
 
     /// @brief Gets the address of the maximum speed field.
-    uint16_t *getMaxSpeedAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x14); }
+    uint16_t* getMaxSpeedAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x14); }
 
     /// @brief Gets the address of the current speed field.
-    uint16_t *getCurrentSpeedAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x16); }
+    uint16_t* getCurrentSpeedAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x16); }
 
     /// @brief Gets the address of the status field.
-    uint8_t *getStatusAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x18); }
+    uint8_t* getStatusAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x18); }
 
     /// @brief Gets the address of the processor upgrade field.
-    uint8_t *getProcessorUpgradeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x19); }
+    uint8_t* getProcessorUpgradeAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x19); }
 
     /// @brief Gets the address of the L1 cache handle field.
-    uint16_t *getL1CacheHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x1A); }
+    uint16_t* getL1CacheHandleAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x1A); }
 
     /// @brief Gets the address of the L2 cache handle field.
-    uint16_t *getL2CacheHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x1C); }
+    uint16_t* getL2CacheHandleAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x1C); }
 
     /// @brief Gets the address of the L3 cache handle field.
-    uint16_t *getL3CacheHandleAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x1E); }
+    uint16_t* getL3CacheHandleAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x1E); }
 
     /// @brief Gets the address of the serial number field.
-    uint8_t *getSerialNumberAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x20); }
+    uint8_t* getSerialNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x20); }
 
     /// @brief Gets the address of the asset tag number field.
-    uint8_t *getAssetTagAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x21); }
+    uint8_t* getAssetTagAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x21); }
 
     /// @brief Gets the address of the part number field.
-    uint8_t *getPartNumberAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x22); }
+    uint8_t* getPartNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x22); }
 
     /// @brief Gets the address of the core count field.
-    uint8_t *getCoreCountAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x23); }
+    uint8_t* getCoreCountAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x23); }
 
     /// @brief Gets the address of the core enabled field.
-    uint8_t *getCoreEnabledAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x24); }
+    uint8_t* getCoreEnabledAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x24); }
 
     /// @brief Gets the address of the thread count field.
-    uint8_t *getThreadCountAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x25); }
+    uint8_t* getThreadCountAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x25); }
 
     /// @brief Gets the address of the processor characteristics field.
-    uint16_t *getProcessorCharacteristicsAddr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x26); }
+    uint16_t* getProcessorCharacteristicsAddr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x26); }
 
     /// @brief Gets the address of the secondary processor family field.
-    uint16_t *getProcessorFamily2Addr() const { return (uint16_t *)(static_cast<uint8_t *>(m_pStart) + 0x28); }
+    uint16_t* getProcessorFamily2Addr() const { return (uint16_t*)(static_cast<uint8_t*>(m_pStart) + 0x28); }
 };
-#endif /* E783A862_53F3_4C99_B779_8123301B75AE */

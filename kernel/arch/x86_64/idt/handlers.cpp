@@ -25,72 +25,69 @@
 #include <arch/x86_64/idt/idt.hpp>
 #include <drivers/pic.hpp>
 
-namespace Handlers
+namespace Handlers {
+
+static InterruptHandlerFunction s_funcs[IDT::idtTableLen];
+static void* s_args[IDT::idtTableLen];
+
+/**
+ * @brief Default handler function
+ *
+ * @param param
+ */
+static void defaultHandlerFunction(void* param)
 {
+    printf("defaultHandlerFunction: %x \n", (uintptr_t)param);
+}
 
-    static InterruptHandlerFunction s_funcs[IDT::idtTableLen];
-    static void *s_args[IDT::idtTableLen];
-
-    /**
-     * @brief Default handler function
-     *
-     * @param param
-     */
-    static void defaultHandlerFunction(void *param)
-    {
-        printf("defaultHandlerFunction: %x \n", (uintptr_t)param);
+/**
+ * @brief Initializes the Handler
+ *
+ */
+void init()
+{
+    for (auto i = 0; i < IDT::idtTableLen; i++) {
+        addInterruptHandler(i, (InterruptHandlerFunction)defaultHandlerFunction, reinterpret_cast<void*>(i));
     }
+}
 
-    /**
-     * @brief Initializes the Handler
-     *
-     */
-    void init()
-    {
-        for (auto i = 0; i < IDT::idtTableLen; i++)
-        {
-            addInterruptHandler(i, (InterruptHandlerFunction)defaultHandlerFunction, reinterpret_cast<void *>(i));
-        }
+/**
+ * @brief Registers an Interrupt handler for a specific exception number.
+ *
+ * @param exceptionNo The Interrupt number to register the handler for.
+ * @param function The function to be called when the specified exception occurs.
+ * @param arg The argument to be passed to the registered handler function
+ * @return true if the Interrupt handler was successfully registered
+ * @return false otherwise
+ */
+bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function, void* arg)
+{
+    if (exceptionNo >= IDT::idtTableLen)
+        return false;
+
+    s_funcs[exceptionNo] = function;
+    s_args[exceptionNo] = arg;
+
+    return true;
+}
+
+/**
+ * @brief Call the Interrupt Handler function
+ *
+ * @param exceptionNo
+ */
+void interruptHandler(uint32_t exceptionNo)
+{
+    if (exceptionNo >= IDT::idtTableLen)
+        return;
+
+    // Send EOI if exception_no is in the range of IRQs (32-47)
+    if (exceptionNo >= 32 && exceptionNo < 48) {
+        PIC::sendEoi(static_cast<PIC::IRQ>(exceptionNo - 32));
     }
-
-    /**
-     * @brief Registers an Interrupt handler for a specific exception number.
-     *
-     * @param exceptionNo The Interrupt number to register the handler for.
-     * @param function The function to be called when the specified exception occurs.
-     * @param arg The argument to be passed to the registered handler function
-     * @return true if the Interrupt handler was successfully registered
-     * @return false otherwise
-     */
-    bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function, void *arg)
-    {
-        if (exceptionNo >= IDT::idtTableLen)
-            return false;
-
-        s_funcs[exceptionNo] = function;
-        s_args[exceptionNo] = arg;
-
-        return true;
-    }
-
-    /**
-     * @brief Call the Interrupt Handler function
-     *
-     * @param exceptionNo
-     */
-    void interruptHandler(uint32_t exceptionNo)
-    {
-        if (exceptionNo >= IDT::idtTableLen)
-            return;
-
-        // Send EOI if exception_no is in the range of IRQs (32-47)
-        if (exceptionNo >= 32 && exceptionNo < 48)
-        {
-            PIC::sendEoi(static_cast<PIC::IRQ>(exceptionNo - 32));
-        }
-        auto fn = s_funcs[exceptionNo];
-        auto arg = s_args[exceptionNo];
-        fn(arg);
-    }
+    auto fn = s_funcs[exceptionNo];
+    auto arg = s_args[exceptionNo];
+    fn(arg);
+}
 
 }; // namespace Handlers

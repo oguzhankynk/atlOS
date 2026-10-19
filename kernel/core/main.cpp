@@ -22,18 +22,18 @@
  *
  */
 
-#include <stdio.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 
-#include <drivers/tty.hpp>
 #include <core/banner.hpp>
+#include <drivers/tty.hpp>
 
-#include <mm/memory.hpp>
 #include <mm/constants.hpp>
+#include <mm/heap.hpp>
+#include <mm/memory.hpp>
 #include <mm/pmm.hpp>
 #include <mm/vmm.hpp>
-#include <mm/heap.hpp>
 
 #include <dev/device_manager.hpp>
 #include <drivers/serial.hpp>
@@ -84,13 +84,10 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     IDT::init();
 
     // Validate multiboot information
-    if (mbMagic != MULTIBOOT2_BOOTLOADER_MAGIC)
-    {
+    if (mbMagic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         printf("Invalid magic number: 0x%x\n", mbMagic);
         return;
-    }
-    else
-    {
+    } else {
         printf("Valid magic number: 0x%x\n", mbMagic);
     }
 
@@ -109,8 +106,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     SelfTest::exitQemu(failed == 0 ? 0 : 1);
 
     // Only reached when QEMU has no isa-debug-exit device
-    while (1)
-    {
+    while (1) {
         asm volatile("cli; hlt");
     }
 #endif
@@ -120,8 +116,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Threading::Thread t2(threadTaskB);
 
     printf("Threads running...\n");
-    while (1)
-    {
+    while (1) {
         Scheduler::yield();
     }
 }

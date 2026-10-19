@@ -1,6 +1,4 @@
-#ifndef _ARCH_X86_64_MMU_H_
-#define _ARCH_X86_64_MMU_H_
-
+#pragma once
 
 #define PML4_SIZE 0x1000
 #define PML4_ALIGNMENT 0x1000
@@ -25,5 +23,3 @@
 #define MMU_USER_MEMORY (1 << 2)
 #define MMU_PDE_TWO_MB (1 << 7)
 
-
-#endif // _ARCH_X86_64_MMU_H_

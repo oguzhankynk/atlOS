@@ -17,8 +17,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef CA54FFDF_8049_47E3_9ED3_76405AD1CF26
-#define CA54FFDF_8049_47E3_9ED3_76405AD1CF26
+#pragma once
 
 #include <stdint.h>
 
@@ -26,35 +25,32 @@
  * @brief A function pointer type for exception handling functions.
  *
  */
-typedef void (*InterruptHandlerFunction)(void *);
+typedef void (*InterruptHandlerFunction)(void*);
 
-namespace Handlers
-{
+namespace Handlers {
 
-    /**
-     * @brief Initializes the Handler
-     *
-     */
-    void init();
+/**
+ * @brief Initializes the Handler
+ *
+ */
+void init();
 
-    /**
-     * @brief Registers an Interrupt handler for a specific exception number.
-     *
-     * @param exceptionNo The Interrupt number to register the handler for.
-     * @param function The function to be called when the specified exception occurs.
-     * @param arg The argument to be passed to the registered handler function
-     * @return true if the Interrupt handler was successfully registered
-     * @return false otherwise
-     */
-    bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function, void *arg);
+/**
+ * @brief Registers an Interrupt handler for a specific exception number.
+ *
+ * @param exceptionNo The Interrupt number to register the handler for.
+ * @param function The function to be called when the specified exception occurs.
+ * @param arg The argument to be passed to the registered handler function
+ * @return true if the Interrupt handler was successfully registered
+ * @return false otherwise
+ */
+bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function, void* arg);
 
-    /**
-     * @brief Call the Interrupt Handler function
-     *
-     * @param exceptionNo
-     */
-    void interruptHandler(uint32_t exceptionNo);
+/**
+ * @brief Call the Interrupt Handler function
+ *
+ * @param exceptionNo
+ */
+void interruptHandler(uint32_t exceptionNo);
 
 }; // namespace Handlers
-
-#endif /* CA54FFDF_8049_47E3_9ED3_76405AD1CF26 */

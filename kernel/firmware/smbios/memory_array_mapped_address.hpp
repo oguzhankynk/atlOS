@@ -16,23 +16,21 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef C6BC6169_1E64_4073_B39E_B77AE44C5066
-#define C6BC6169_1E64_4073_B39E_B77AE44C5066
+#pragma once
 
+#include <firmware/bios/structure_common.hpp>
 #include <stdint.h>
 #include <stdio.h>
-#include <firmware/bios/structure_common.hpp>
 
 /// @brief Class to represent the Memory Array Mapped Address table (Type 19).
-class MemoryArrayMappedAddress : public BIOSStructureCommon
-{
+class MemoryArrayMappedAddress : public BIOSStructureCommon {
 public:
     /// @brief Default constructor.
     MemoryArrayMappedAddress() = default;
 
     /// @brief Constructor that takes a pointer to the start of the structure.
     /// @param pStart Pointer to the start of the structure.
-    MemoryArrayMappedAddress(void *pStart)
+    MemoryArrayMappedAddress(void* pStart)
     {
         scan(pStart);
     }
@@ -40,12 +38,12 @@ public:
     /// @brief Scans the Memory Array Mapped Address table.
     /// @param pStart Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *scan(void *pStart) override
+    void* scan(void* pStart) override
     {
         m_pStart = pStart;
 
         int end = 1;
-        uint8_t *ptr = (uint8_t *)m_pStart + getLength();
+        uint8_t* ptr = (uint8_t*)m_pStart + getLength();
 
         for (; ptr[end - 1] != '\0' || ptr[end] != '\0'; end++)
             ;
@@ -108,46 +106,44 @@ public:
     }
 
 private:
-    void *m_pStart{}; ///< Start address of the structure.
-    void *m_pEnd{};   ///< End address of the structure.
+    void* m_pStart {}; ///< Start address of the structure.
+    void* m_pEnd {}; ///< End address of the structure.
 
     // Private methods to get the addresses of different fields.
 
     /// @brief Gets the address of the Type field.
     /// @return Pointer to the Type field.
-    uint8_t *getTypeAddr() const { return reinterpret_cast<uint8_t *>(m_pStart) + 0x00; }
+    uint8_t* getTypeAddr() const { return reinterpret_cast<uint8_t*>(m_pStart) + 0x00; }
 
     /// @brief Gets the address of the Length field.
     /// @return Pointer to the Length field.
-    uint8_t *getLengthAddr() const { return reinterpret_cast<uint8_t *>(m_pStart) + 0x01; }
+    uint8_t* getLengthAddr() const { return reinterpret_cast<uint8_t*>(m_pStart) + 0x01; }
 
     /// @brief Gets the address of the Handle field.
     /// @return Pointer to the Handle field.
-    uint16_t *getHandleAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x02); }
+    uint16_t* getHandleAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x02); }
 
     /// @brief Gets the address of the Starting Address field.
     /// @return Pointer to the Starting Address field.
-    uint32_t *getStartingAddressAddr() const { return reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x04); }
+    uint32_t* getStartingAddressAddr() const { return reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x04); }
 
     /// @brief Gets the address of the Ending Address field.
     /// @return Pointer to the Ending Address field.
-    uint32_t *getEndingAddressAddr() const { return reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x08); }
+    uint32_t* getEndingAddressAddr() const { return reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x08); }
 
     /// @brief Gets the address of the Memory Array Handle field.
     /// @return Pointer to the Memory Array Handle field.
-    uint16_t *getMemoryArrayHandleAddr() const { return reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0C); }
+    uint16_t* getMemoryArrayHandleAddr() const { return reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0C); }
 
     /// @brief Gets the address of the Partition Width field.
     /// @return Pointer to the Partition Width field.
-    uint8_t *getPartitionWidthAddr() const { return reinterpret_cast<uint8_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0E); }
+    uint8_t* getPartitionWidthAddr() const { return reinterpret_cast<uint8_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0E); }
 
     /// @brief Gets the address of the Extended Starting Address field.
     /// @return Pointer to the Extended Starting Address field.
-    uint64_t *getExtendedStartingAddressAddr() const { return reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x0F); }
+    uint64_t* getExtendedStartingAddressAddr() const { return reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x0F); }
 
     /// @brief Gets the address of the Extended Ending Address field.
     /// @return Pointer to the Extended Ending Address field.
-    uint64_t *getExtendedEndingAddressAddr() const { return reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(m_pStart) + 0x17); }
+    uint64_t* getExtendedEndingAddressAddr() const { return reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(m_pStart) + 0x17); }
 };
-
-#endif /* C6BC6169_1E64_4073_B39E_B77AE44C5066 */

@@ -17,8 +17,7 @@
  *
  */
 
-#ifndef CA43A890_B7F4_4423_83C8_F73B23F5AA52
-#define CA43A890_B7F4_4423_83C8_F73B23F5AA52
+#pragma once
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -30,10 +29,9 @@
  * - LogFlag::Log: Enable logging.
  * - LogFlag::NoLog: Disable logging.
  */
-enum class LogFlag
-{
+enum class LogFlag {
     NoLog, ///< Disables logging.
-    Log    ///< Enables logging.
+    Log ///< Enables logging.
 };
 
 /**
@@ -46,20 +44,16 @@ enum class LogFlag
  *
  * @note This function uses variadic arguments to support formatted messages.
  */
-static inline void logMsg(LogFlag flag, const char *format, ...)
+static inline void logMsg(LogFlag flag, const char* format, ...)
 {
-    if (flag == LogFlag::NoLog)
-    {
+    if (flag == LogFlag::NoLog) {
         return; // Do nothing
     }
 
-    if (flag == LogFlag::Log)
-    {
+    if (flag == LogFlag::Log) {
         va_list args;
         va_start(args, format);
         vprintf(format, args); // Print the formatted message
         va_end(args);
     }
 }
-
-#endif /* CA43A890_B7F4_4423_83C8_F73B23F5AA52 */
