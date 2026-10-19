@@ -54,9 +54,9 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     ${ARCHDIR}/idt/*.cpp
     ${ARCHDIR}/idt/isr.S
     ${ARCHDIR}/io/*.cpp
+    ${ARCHDIR}/cpu/*.cpp
     ${ARCHDIR}/cpu/context.S
 )
-# Not built (yet): arch/x86_64/cpu/cpu.cpp, cpuid.cpp
 
 # Linked in a fixed order around the other objects, see the link rule below
 add_library(crts OBJECT

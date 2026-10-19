@@ -19,6 +19,7 @@
 #include <mm/heap.hpp>
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
+#include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 
 namespace SelfTest
@@ -333,6 +334,32 @@ namespace SelfTest
     }
 
     // ------------------------------------------------------------
+    // CPU
+    // ------------------------------------------------------------
+
+    static void TestCPU()
+    {
+        group("CPU");
+
+        static CPU_Info info;
+        InitializeCPUInfo(&info);
+        printCPUInfo(&info); // only to the serial log
+
+        // Every x86_64 CPU has leaf 1, SSE2 and FXSR
+        CHECK(info.maksimumIndex >= 1);
+        CHECK(info.CPUFeaturesInfo.SSE2 == 1);
+        CHECK(info.CPUFeaturesInfo.FXSR == 1);
+
+        // Vendor string such as "GenuineIntel"
+        bool printable = strlen(info.cpu) == 12;
+        for (size_t i = 0; i < 12 && printable; i++)
+            printable = info.cpu[i] >= 0x20 && info.cpu[i] < 0x7f;
+        CHECK(printable);
+
+        CHECK(info.cacheList.cacheCount <= sizeof(info.cacheList.cacheInfo) / sizeof(info.cacheList.cacheInfo[0]));
+    }
+
+    // ------------------------------------------------------------
     // Threads and scheduler
     // ------------------------------------------------------------
 
@@ -512,6 +539,7 @@ namespace SelfTest
         TestVMM();
         TestHeap();
         TestInterrupts();
+        TestCPU();
         TestThreadStack();
         TestRoundRobin();
         TestSleep();

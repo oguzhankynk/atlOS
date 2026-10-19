@@ -18,6 +18,7 @@
  *
  */
 #include <stdio.h>
+#include <string.h>
 #include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/cpu/cpuid.hpp>
 
@@ -29,28 +30,29 @@ static void cpuid_00h_command(uint32_t *p_maximumIndex, char *p_CPUstr);
 static void cpuid_01h_command(ProcessorType *p_ProcessorType, CPUFeatures *p_CPUFeatures);
 static void cpuid_04h_command(CacheList *p_CacheList);
 
-void InitiliazeCPUInfo(CPU_Info *cpu_info)
+void InitializeCPUInfo(CPU_Info *cpu_info)
 {
+	// Fields a leaf does not fill (e.g. the topology) stay zero
+	memset(cpu_info, 0, sizeof(*cpu_info));
 
-	// cpuid_00h_command(&cpu_info->maksimumIndex, cpu_info->cpu);
-	// cpuid_01h_command(&cpu_info->processorType, &cpu_info->CPUFeatures);
-	cpuid_04h_command(&cpu_info->cacheList);
+	cpuid_00h_command(&cpu_info->maksimumIndex, cpu_info->cpu);
 
-	if (cpu_info->CPUFeaturesInfo.HTT == 0)
-	{
-		cpu_info->CPUTopologyInfo.logical_CPU_bits = 0;
-		cpu_info->CPUTopologyInfo.core_bits = 0;
-	}
+	if (cpu_info->maksimumIndex >= 0x01)
+		cpuid_01h_command(&cpu_info->processorType, &cpu_info->CPUFeaturesInfo);
+
+	// Above the highest supported leaf CPUID returns unrelated data
+	if (cpu_info->maksimumIndex >= 0x04)
+		cpuid_04h_command(&cpu_info->cacheList);
 }
 
 void printCPUInfo(const CPU_Info *cpu_info)
 {
-	// printf("CPU: %s\n", cpu_info->cpu);
-	// printf("Maksimum Index: %u\n", cpu_info->maksimumIndex);
-	// printCPUFeatures(&cpu_info->CPUFeatures);
-	// printf("\n");
-	// printProcessorType(&cpu_info->processorType);
-	// printCacheInfo(&cpu_info->cacheList);
+	printf("CPU: %s\n", cpu_info->cpu);
+	printf("Maksimum Index: %u\n", cpu_info->maksimumIndex);
+	printCPUFeatures(&cpu_info->CPUFeaturesInfo);
+	printf("\n");
+	printProcessorType(&cpu_info->processorType);
+	printCacheInfo(&cpu_info->cacheList);
 }
 
 /// @brief Prints the CPU features.
@@ -280,7 +282,9 @@ static void cpuid_04h_command(CacheList *p_CacheList)
 {
 	p_CacheList->cacheCount = 0;
 
-	while (1)
+	constexpr uint8_t MAX_CACHES = sizeof(p_CacheList->cacheInfo) / sizeof(p_CacheList->cacheInfo[0]);
+
+	while (p_CacheList->cacheCount < MAX_CACHES)
 	{
 		CacheInfo *p_CacheInfo = &p_CacheList->cacheInfo[p_CacheList->cacheCount];
 

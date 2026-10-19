@@ -20,8 +20,9 @@ Working:
 - In-kernel self tests run headless in QEMU
 
 In the tree but not wired up yet: ATA, FAT16 and VFS code, the keyboard driver,
-CPUID helpers, mutex and semaphore. There is no user mode, no system calls and
-no shell; atlOS runs on a single CPU.
+mutex and semaphore. The CPUID helpers are built and tested but not called at
+boot. There is no user mode, no system calls and no shell; atlOS runs on a
+single CPU.
 
 ## Quick start
 
@@ -46,7 +47,7 @@ cmake --build --preset default --target run
 
 ```
 kernel/
-  arch/x86_64/   boot, crt, cpu (context switch), gdt, idt (+ISR stubs), io ports, mmu
+  arch/x86_64/   boot, crt, cpu (context switch, CPUID), gdt, idt (+ISR stubs), io ports, mmu
   core/          kernel entry (main.cpp), panic, logger, banner
   cxx/           C++ runtime support (global constructors, new/delete)
   mm/            pmm, vmm, heap (liballoc)

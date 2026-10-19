@@ -18,7 +18,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 66 passed, 0 failed
+[SELFTEST] done: 71 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -36,6 +36,7 @@ serial log is written to `build-selftest/selftest.log`.
 | VMM | allocate/write/free, range reuse, `VirtToPhysAddr`, `map`/`unmap` alias in a new page directory, no leak |
 | Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
+| CPU | CPUID: max leaf, vendor string, SSE2/FXSR present, cache list bounded |
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
 | Scheduler | round robin and exit, `sleep`, `block`/`unblock`, removing a queued thread |
 
