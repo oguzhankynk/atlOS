@@ -220,43 +220,83 @@ namespace Memory
          * @param num_pages
          * @return uint64_t
          */
-        uint64_t mapPages(uint64_t page_index, uint64_t num_pages)
+        /**
+         * @brief Get the PD entry mapping a virtual address, creating the PD if needed
+         */
+        static uint64_t *getOrCreatePDEntry(uintptr_t v_addr)
         {
+            uint64_t pml4_idx = (v_addr >> 39) & 0x1FF;
+            uint64_t pdpt_idx = (v_addr >> 30) & 0x1FF;
+            uint64_t pd_idx = (v_addr >> 21) & 0x1FF;
+
             uint64_t *pml4_table = (uint64_t *)getPML4Virt();
 
+            // PDPT check (PML4 entry)
+            if (!(pml4_table[pml4_idx] & MMU_PRESENT))
+            {
+                kernel_panic("Dynamic PDPT creation not implemented yet!");
+            }
+
+            uint64_t *pdpt_table = (uint64_t *)getPDPTVirt(pml4_idx);
+
+            if (!(pdpt_table[pdpt_idx] & MMU_PRESENT))
+            {
+                uint64_t new_pd_phys = (uintptr_t)PhysicalMemory::AllocateFrame();
+                if (new_pd_phys == 0)
+                    kernel_panic("VMM: out of physical memory for page directory");
+
+                pdpt_table[pdpt_idx] = (new_pd_phys & TABLE_ADDR_MASK) | MMU_PRESENT | MMU_WRITABLE;
+
+                PageDirectoryEntry64 *pd_table = getPDVirt(pml4_idx, pdpt_idx);
+                asm volatile("invlpg (%0)" : : "r"(pd_table) : "memory");
+
+                memset(pd_table, 0, FRAME_SIZE_4KB);
+            }
+
+            return (uint64_t *)getPDVirt(pml4_idx, pdpt_idx) + pd_idx;
+        }
+
+        /**
+         * @brief Clear a PD entry and give the PD back to the PMM once it is empty
+         *
+         * The boot PDs live in the kernel image, they are never freed.
+         */
+        static void clearPDEntry(uintptr_t v_addr, uint64_t *pd_entry)
+        {
+            *pd_entry = 0;
+            asm volatile("invlpg (%0)" : : "r"((void *)v_addr) : "memory");
+
+            uint64_t *pd_table = (uint64_t *)((uintptr_t)pd_entry & ~(uintptr_t)(FRAME_SIZE_4KB - 1));
+            for (uint64_t i = 0; i < 512; i++)
+            {
+                if (pd_table[i] & MMU_PRESENT)
+                    return;
+            }
+
+            uint64_t pml4_idx = (v_addr >> 39) & 0x1FF;
+            uint64_t pdpt_idx = (v_addr >> 30) & 0x1FF;
+            uint64_t *pdpt_table = (uint64_t *)getPDPTVirt(pml4_idx);
+            uint64_t pd_phys = pdpt_table[pdpt_idx] & TABLE_ADDR_MASK;
+
+            if (pd_phys == (uintptr_t)high_page_directory_table || pd_phys == (uintptr_t)low_page_directory_table)
+                return;
+
+            pdpt_table[pdpt_idx] = 0;
+            asm volatile("invlpg (%0)" : : "r"(pd_table) : "memory");
+
+            PhysicalMemory::FreeFrame((void *)pd_phys);
+            LOG_MSG(DBG_LOG, "VMM: freed empty PD at 0x%llx (PML4=%llu, PDPT=%llu)\n", pd_phys, pml4_idx, pdpt_idx);
+        }
+
+        uint64_t mapPages(uint64_t page_index, uint64_t num_pages)
+        {
             for (uint64_t i = 0; i < num_pages; ++i)
             {
                 uintptr_t v_addr = (uintptr_t)getVirtAddrFromPageIndex(page_index + i);
-                uint64_t pml4_idx = (v_addr >> 39) & 0x1FF;
-                uint64_t pdpt_idx = (v_addr >> 30) & 0x1FF;
-                uint64_t pd_idx = (v_addr >> 21) & 0x1FF;
 
-                LOG_MSG(DBG_LOG, "VMM: Mapping page %llu: VA=0x%llx (PML4=%llu, PDPT=%llu, PD=%llu)\n",
-                        page_index + i, v_addr, pml4_idx, pdpt_idx, pd_idx);
+                LOG_MSG(DBG_LOG, "VMM: Mapping page %llu: VA=0x%llx\n", page_index + i, v_addr);
 
-                // PDPT check (PML4 entry)
-                if (!(pml4_table[pml4_idx] & MMU_PRESENT))
-                {
-                    kernel_panic("Dynamic PDPT creation not implemented yet!");
-                }
-
-                uint64_t *pdpt_table = (uint64_t *)getPDPTVirt(pml4_idx);
-
-                if (!(pdpt_table[pdpt_idx] & MMU_PRESENT))
-                {
-                    uint64_t new_pd_phys = (uintptr_t)PhysicalMemory::AllocateFrame();
-                    if (new_pd_phys == 0)
-                        kernel_panic("VMM: out of physical memory for page directory");
-
-                    pdpt_table[pdpt_idx] = (new_pd_phys & TABLE_ADDR_MASK) | MMU_PRESENT | MMU_WRITABLE;
-
-                    PageDirectoryEntry64 *pd_table = getPDVirt(pml4_idx, pdpt_idx);
-                    asm volatile("invlpg (%0)" : : "r"(pd_table) : "memory");
-
-                    memset(pd_table, 0, FRAME_SIZE_4KB);
-                }
-
-                uint64_t *pd_entry = (uint64_t *)getPDVirt(pml4_idx, pdpt_idx) + pd_idx;
+                uint64_t *pd_entry = getOrCreatePDEntry(v_addr);
                 if (*pd_entry & MMU_PRESENT)
                     kernel_panic("VMM: mapPages: page already mapped!");
 
@@ -275,21 +315,75 @@ namespace Memory
         {
             for (uint64_t i = 0; i < num_pages; ++i)
             {
-                void *virt = getVirtAddrFromPageIndex(page_index + i);
+                uintptr_t v_addr = (uintptr_t)getVirtAddrFromPageIndex(page_index + i);
 
-                uint64_t *pd_entry = getPDEntry((uintptr_t)virt);
+                uint64_t *pd_entry = getPDEntry(v_addr);
                 if (pd_entry == nullptr || !(*pd_entry & MMU_PRESENT))
                     kernel_panic("VMM: unmapPages: page not present!");
 
                 void *phys_addr = (void *)(*pd_entry & PAGE_2MB_ADDR_MASK);
                 PhysicalMemory::FreeBlocks(phys_addr, 1);
 
-                *pd_entry = 0;
-
-                asm volatile("invlpg (%0)" : : "r"(virt) : "memory");
+                clearPDEntry(v_addr, pd_entry);
             }
 
             return num_pages;
+        }
+
+        void mapPhysical(const void *virt_addr, const void *phys_addr)
+        {
+            uintptr_t v_addr = (uintptr_t)virt_addr;
+            uint64_t phys = (uintptr_t)phys_addr;
+
+            if ((v_addr | phys) & (PAGE_SIZE_2MB - 1))
+                kernel_panic("VMM: mapPhysical: addresses must be 2 MB aligned");
+
+            uint64_t *pd_entry = getOrCreatePDEntry(v_addr);
+            if (*pd_entry & MMU_PRESENT)
+                kernel_panic("VMM: mapPhysical: page already mapped!");
+
+            *pd_entry = (phys & PAGE_2MB_ADDR_MASK) | MMU_PRESENT | MMU_WRITABLE | MMU_PDE_TWO_MB;
+
+            asm volatile("invlpg (%0)" : : "r"((void *)v_addr) : "memory");
+        }
+
+        void unmapPhysical(const void *virt_addr)
+        {
+            uintptr_t v_addr = (uintptr_t)virt_addr & ~(uintptr_t)(PAGE_SIZE_2MB - 1);
+
+            uint64_t *pd_entry = getPDEntry(v_addr);
+            if (pd_entry == nullptr || !(*pd_entry & MMU_PRESENT))
+                kernel_panic("VMM: unmapPhysical: page not present!");
+
+            clearPDEntry(v_addr, pd_entry);
+        }
+
+        void *virtToPhys(const void *virt_addr)
+        {
+            uintptr_t v_addr = (uintptr_t)virt_addr;
+            uint64_t pml4_idx = (v_addr >> 39) & 0x1FF;
+            uint64_t pdpt_idx = (v_addr >> 30) & 0x1FF;
+
+            uint64_t *pml4_table = (uint64_t *)getPML4Virt();
+            if (!(pml4_table[pml4_idx] & MMU_PRESENT))
+                return nullptr;
+
+            // 1 GB page
+            uint64_t pdpt_entry = ((uint64_t *)getPDPTVirt(pml4_idx))[pdpt_idx];
+            if (!(pdpt_entry & MMU_PRESENT))
+                return nullptr;
+            if (pdpt_entry & MMU_PDE_TWO_MB)
+                return (void *)((pdpt_entry & 0x000FFFFFC0000000ULL) | (v_addr & 0x3FFFFFFFULL));
+
+            uint64_t *pd_entry = getPDEntry(v_addr);
+            if (!(*pd_entry & MMU_PRESENT))
+                return nullptr;
+
+            // Only 2 MB pages are used, there are no 4 KB page tables
+            if (!(*pd_entry & MMU_PDE_TWO_MB))
+                kernel_panic("VMM: virtToPhys: 4 KB pages are not supported");
+
+            return (void *)((*pd_entry & PAGE_2MB_ADDR_MASK) | (v_addr & (PAGE_SIZE_2MB - 1)));
         }
 
         /// Simple contiguous page allocator

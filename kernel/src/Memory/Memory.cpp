@@ -139,15 +139,23 @@ namespace Memory
      */
     void *VirtToPhysAddr(void *virtualaddr)
     {
-        return nullptr;
+        return VirtualMemory::virtToPhys(virtualaddr);
     }
 
+    /**
+     * @brief Map a 2 MB page at virtualaddr to physicaladdr. Both must be 2 MB aligned.
+     */
     void map(void *physicaladdr, void *virtualaddr)
     {
+        VirtualMemory::mapPhysical(virtualaddr, physicaladdr);
     }
 
+    /**
+     * @brief Remove the 2 MB page containing virtualaddr. The physical memory is not freed.
+     */
     void unmap(void *virtualaddr)
     {
+        VirtualMemory::unmapPhysical(virtualaddr);
     }
 
 } // namespace Memory
