@@ -32,17 +32,22 @@ namespace Threading
     {
     public:
         ThreadImpl(EntryPoint entry);                               // Constructor to initialize the thread
+        ~ThreadImpl();                                              // Gives the stack page back
         TCB m_tcb{};                                                // Thread Control Block (TCB) to store thread context
         EntryPoint m_entry{};                                       // Entry point function for the thread
         char m_name[16]{};                                          // Thread name (for debugging purposes)
         static constexpr size_t STACK_SIZE = Memory::PAGE_SIZE_2MB; // Stack size for the thread
-        uint8_t m_stack[STACK_SIZE];                                // Stack for the thread
+        uint8_t *m_stack{};                                         // Stack for the thread, its own 2 MB page
         static void threadStartPoint(void *obj);                    // Static function to start the thread
     };
 
     ThreadImpl::ThreadImpl(EntryPoint entry)
         : m_entry{entry}
     {
+        // A page of its own keeps the stack 2 MB aligned (so the top is 16 byte
+        // aligned as the ABI needs) and out of the heap. allocatePage panics on OOM.
+        m_stack = static_cast<uint8_t *>(Memory::VirtualMemory::allocatePage(STACK_SIZE / Memory::PAGE_SIZE_2MB));
+
         snprintf(m_name, 16, "t%d", s_TaskIdCounter++);
 
           // Set up the stack
@@ -82,6 +87,11 @@ namespace Threading
 
         m_tcb.regs.rsp = reinterpret_cast<uint64_t>(sp);
         m_tcb.regs.rbp = m_tcb.regs.rsp;
+    }
+
+    ThreadImpl::~ThreadImpl()
+    {
+        Memory::VirtualMemory::freePage(m_stack, STACK_SIZE / Memory::PAGE_SIZE_2MB);
     }
 
     void ThreadImpl::threadStartPoint(void *obj)

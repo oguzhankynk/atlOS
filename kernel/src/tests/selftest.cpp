@@ -309,9 +309,14 @@ namespace SelfTest
 
     static volatile uint64_t s_countA{};
     static volatile uint64_t s_countB{};
+    static volatile bool s_frameAligned{};
 
     static void counterA()
     {
+        // After "push rbp" the frame must be 16 byte aligned if the thread was
+        // started with an ABI conformant stack
+        s_frameAligned = ((uintptr_t)__builtin_frame_address(0) % 16) == 0;
+
         while (true)
         {
             s_countA = s_countA + 1;
@@ -326,6 +331,23 @@ namespace SelfTest
             s_countB = s_countB + 1;
             Scheduler::yield();
         }
+    }
+
+    static void TestThreadStack()
+    {
+        group("Thread stack");
+
+        Threading::Thread *t = new Threading::Thread(counterA, false);
+
+        // threadStartPoint is entered by "ret", so rsp must look like right after a call
+        uintptr_t sp = t->getTCB().regs.rsp;
+        CHECK(sp % 16 == 8);
+
+        // The stack is a page of its own, given back when the thread is deleted
+        uintptr_t page = sp & ~(uintptr_t)(PAGE_SIZE_2MB - 1);
+        CHECK(VirtToPhysAddr((void *)page) != nullptr);
+        delete t;
+        CHECK(VirtToPhysAddr((void *)page) == nullptr);
     }
 
     // Must run last: the threads stay in the run queue for good
@@ -344,6 +366,7 @@ namespace SelfTest
 
         CHECK(s_countA == ROUNDS);
         CHECK(s_countB == ROUNDS);
+        CHECK(s_frameAligned);
     }
 
     int Run()
@@ -354,6 +377,7 @@ namespace SelfTest
         TestPMMBlocks();
         TestVMM();
         TestHeap();
+        TestThreadStack();
         TestScheduler();
 
         printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
