@@ -60,8 +60,12 @@ extern void threadTaskB();
 // Objects owned by kernelMain, the composition root. They are constructed
 // explicitly below, in dependency order, and handed to their users by
 // reference; nothing else reaches them through a global.
+static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
+
+// One bit per 2 MB block, enough for 256 GB of physical memory
+static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL * 1024 * 1024 * 1024)];
 
 /**
  * @brief entry point of atlOS
@@ -101,8 +105,11 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
         printf("Valid magic number: 0x%x\n", mbMagic);
     }
 
-    // Initialize memory management (pmm and vmm)
-    Memory::init(mbInfo);
+    // Memory: physical blocks from the multiboot memory map, then the VMM on top
+    Memory::printLayout();
+    Memory::PhysicalMemoryManager& pmm = s_pmm.construct(s_pmmBitmap, sizeof(s_pmmBitmap));
+    Memory::populateFromMultiboot(pmm, mbInfo);
+    Memory::VirtualMemory::init(pmm);
 
     DeviceManager::init();
 
@@ -118,7 +125,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Scheduler::init(pit);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run();
+    int failed = SelfTest::run(pmm);
     SelfTest::exitQemu(failed == 0 ? 0 : 1);
 
     // Only reached when QEMU has no isa-debug-exit device

@@ -5,22 +5,33 @@ Three layers, all in `kernel/mm/`:
 ```
 kmalloc / kfree            heap.hpp      liballoc 1.1, 2 MB pages from the VMM
 allocatePage / map         vmm.cpp       2 MB pages, recursive page tables
-allocateBlock / Frame      pmm.cpp       2 MB blocks, 4 KB frames for page tables
+allocateBlocks / Frame     pmm.cpp       2 MB blocks, 4 KB frames for page tables
 ```
 
 ## Physical memory (`pmm.cpp`)
 
-- A bitmap with one bit per **2 MB block**, sized for up to 256 GB.
-- `Memory::init` starts with everything used, frees the `AVAILABLE` regions of
+`Memory::PhysicalMemoryManager` keeps a bitmap with one bit per **2 MB
+block**. The bitmap storage is passed to the constructor, so the capacity is
+the caller's choice: `kernelMain` gives it a static buffer for 256 GB, the self
+tests give small ones. The manager only does bookkeeping and never touches the
+memory it describes.
+
+- Everything starts in use. `addRegion(base, size)` frees whole, aligned
+  blocks (beyond the capacity they are ignored); `reserveRegion(base, size)`
+  marks every block it touches as used again.
+- `Memory::populateFromMultiboot(pmm, mbInfo)` adds the `AVAILABLE` regions of
   the multiboot memory map (rounded inwards to 2 MB), then reserves
   `0 .. kernel_physical_end` (low memory, boot page tables, kernel image) and
   the multiboot info structure.
-- `allocateBlock(n)` returns `n` contiguous blocks or `nullptr`;
-  `freeBlocks(addr, n)` rejects unaligned addresses and double frees.
+- `allocateBlocks(n)` returns `n` contiguous blocks (first fit) or `nullptr`;
+  `freeBlocks(addr, n)` rejects unaligned addresses and double frees. Block 0
+  is never handed out, its address would look like `nullptr`.
 - `allocateFrame()` / `freeFrame()` hand out **4 KB frames** for page tables.
   A frame pool splits one 2 MB block into 512 frames (up to 16 pools); a pool
   that becomes empty gives its block back.
-- `getFreeBlockCount()` is used by the self tests to detect leaks.
+- `freeBlockCount()` is used by the self tests to detect leaks.
+- The VMM gets the manager through `VirtualMemory::init(pmm)` until it becomes
+  an object itself.
 
 ## Virtual memory (`vmm.cpp`)
 

@@ -13,7 +13,7 @@
 
 namespace Memory {
 
-static void printSegmentAddresses()
+void printLayout()
 {
     printf("=== Boot Segments ===\n");
     printf("_boottext: %p - %p, size: 0x%X\n", &_boottext_start, &_boottext_end, &_boottext_end - &_boottext_start);
@@ -48,19 +48,8 @@ static void printSegmentAddresses()
     printf("kernel_physical_start: %p, kernel_physical_end: %p, size: 0x%X\n", (uint64_t)&kernel_physical_start, (uint64_t)&kernel_physical_end, (uint64_t)&kernel_physical_end - (uint64_t)&kernel_physical_start);
 }
 
-/**
- * @brief
- *
- * @param memHigh
- * @param physicalAllocStart
- */
-void init(uintptr_t mbInfoAddr)
+void populateFromMultiboot(PhysicalMemoryManager& pmm, uintptr_t mbInfoAddr)
 {
-    printSegmentAddresses();
-
-    PhysicalMemory::init();
-    VirtualMemory::init();
-
     multiboot_tag* tag;
     uint8_t* addr = (uint8_t*)(uintptr_t)mbInfoAddr;
 
@@ -108,7 +97,7 @@ void init(uintptr_t mbInfoAddr)
                     uint64_t base = (entry->addr + (2 * 1024 * 1024 - 1)) & ~(2 * 1024 * 1024 - 1);
                     uint64_t end = (entry->addr + entry->len) & ~(2 * 1024 * 1024 - 1);
                     if (end > base) {
-                        PhysicalMemory::addMemoryRegion((void*)base, end - base);
+                        pmm.addRegion((void*)base, end - base);
                     }
                 }
             }
@@ -118,10 +107,10 @@ void init(uintptr_t mbInfoAddr)
     // The firmware reports the memory holding the kernel as AVAILABLE. Reserve
     // everything below kernel_physical_end (low memory, boot page tables and
     // stack, kernel image) so the PMM never hands those frames out.
-    PhysicalMemory::removeMemoryRegion(nullptr, (uint64_t)&kernel_physical_end);
+    pmm.reserveRegion(nullptr, (uint64_t)&kernel_physical_end);
 
     // GRUB may place the multiboot info outside the kernel image
-    PhysicalMemory::removeMemoryRegion((void*)mbInfoAddr, totalSize);
+    pmm.reserveRegion((void*)mbInfoAddr, totalSize);
 }
 
 /**

@@ -16,8 +16,9 @@
    2. banner, global C++ constructors (`cxx::callConstructors`)
    3. `IDT::init` (exception and IRQ vectors)
    4. checks the multiboot2 magic
-   5. `Memory::init`: PMM, recursive mapping, free memory from the multiboot
-      memory map, reserves the kernel image (see [memory.md](memory.md))
+   5. constructs the `Memory::PhysicalMemoryManager`, fills it from the
+      multiboot memory map (`Memory::populateFromMultiboot`, reserves the
+      kernel image) and sets up the VMM on top (see [memory.md](memory.md))
    6. `DeviceManager::init` (currently empty)
    7. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
       lines masked) and binds it to the ISR dispatcher

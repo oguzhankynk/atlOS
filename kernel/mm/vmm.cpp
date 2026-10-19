@@ -185,8 +185,14 @@ namespace VirtualMemory {
     // Initialization
     // ------------------------------------------------------------
 
-    void init()
+    // Physical memory for page tables and pages. Until the VMM is an object
+    // itself (docs/style.md, Design) it keeps the manager it is given here.
+    static PhysicalMemoryManager* s_pmm {};
+
+    void init(PhysicalMemoryManager& pmm)
     {
+        s_pmm = &pmm;
+
         logMsg(infLog, "VMM: init start. Setting up recursive mapping...\n");
 
         uint64_t currentCr3 = readCr3() & ~0xFFFULL;
@@ -227,7 +233,7 @@ namespace VirtualMemory {
         uint64_t* pdptTable = (uint64_t*)getPDPTVirt(pml4Idx);
 
         if (!(pdptTable[pdptIdx] & MMU_PRESENT)) {
-            uint64_t newPdPhys = (uintptr_t)PhysicalMemory::allocateFrame();
+            uint64_t newPdPhys = (uintptr_t)s_pmm->allocateFrame();
             if (newPdPhys == 0)
                 kernelPanic("VMM: out of physical memory for page directory");
 
@@ -278,7 +284,7 @@ namespace VirtualMemory {
                      : "r"(pdTable)
                      : "memory");
 
-        PhysicalMemory::freeFrame((void*)pdPhys);
+        s_pmm->freeFrame((void*)pdPhys);
         logMsg(dbgLog, "VMM: freed empty PD at 0x%llx (PML4=%llu, PDPT=%llu)\n", pdPhys, pml4Idx, pdptIdx);
     }
 
@@ -293,7 +299,7 @@ namespace VirtualMemory {
             if (*pdEntry & MMU_PRESENT)
                 kernelPanic("VMM: mapPages: page already mapped!");
 
-            uint64_t phys = (uintptr_t)PhysicalMemory::allocateBlock(1);
+            uint64_t phys = (uintptr_t)s_pmm->allocateBlocks(1);
             if (phys == 0)
                 kernelPanic("VMM: out of physical memory");
 
@@ -317,7 +323,7 @@ namespace VirtualMemory {
                 kernelPanic("VMM: unmapPages: page not present!");
 
             void* physAddr = (void*)(*pdEntry & page2MbAddrMask);
-            PhysicalMemory::freeBlocks(physAddr, 1);
+            s_pmm->freeBlocks(physAddr, 1);
 
             clearPDEntry(vAddr, pdEntry);
         }

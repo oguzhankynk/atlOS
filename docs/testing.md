@@ -18,7 +18,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 89 passed, 0 failed
+[SELFTEST] done: 109 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -31,8 +31,10 @@ serial log is written to `build-selftest/selftest.log`.
 
 | Group | Checks |
 |---|---|
-| PMM frames | alignment, no overlap with the kernel, uniqueness, reuse, double free, pools give blocks back |
-| PMM blocks | every free block can be allocated, then `nullptr`; double free; contiguous allocation; no leak |
+| PMM blocks (isolated) | own 64 block instance: regions, reservations, exhaustion, bad frees, first fit, capacity clipping |
+| PMM frames (isolated) | alignment, uniqueness, reuse, double free, pools give blocks back, the pool limit |
+| PMM from a multiboot memory map | `populateFromMultiboot` on a fake multiboot2 info: rounding, kernel reservation |
+| PMM (kernel instance) | the real manager hands out blocks and frames above the kernel, no leak |
 | VMM | allocate/write/free, range reuse, `virtToPhysAddr`, `map`/`unmap` alias in a new page directory, no leak |
 | Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |

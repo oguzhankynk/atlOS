@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <cxx/uninitialized.hpp>
@@ -58,32 +59,128 @@ static bool aboveKernel(const void* phys)
 
 // ------------------------------------------------------------
 // PMM
+//
+// The manager never touches the memory it describes, so these tests build
+// their own small instances instead of draining the kernel's.
 // ------------------------------------------------------------
+
+static constexpr uint64_t blockSize = PhysicalMemoryManager::blockSize;
+
+static void* blockAddress(uint64_t block)
+{
+    return reinterpret_cast<void*>(block * blockSize);
+}
+
+static bool isBlock(const void* address, uint64_t block)
+{
+    return address == blockAddress(block);
+}
+
+static void testPmmBlocks()
+{
+    group("PMM blocks (isolated)");
+
+    static uint8_t s_bitmap[8]; // 64 blocks, 128 MB
+    PhysicalMemoryManager pmm(s_bitmap, sizeof(s_bitmap));
+
+    CHECK(pmm.capacity() == 64);
+    CHECK(pmm.freeBlockCount() == 0);
+    CHECK(pmm.allocateBlocks(1) == nullptr);
+
+    // Blocks 0..31; block 0 is never handed out
+    pmm.addRegion(blockAddress(0), 32 * blockSize);
+    CHECK(pmm.freeBlockCount() == 31);
+
+    // An unaligned region is rejected
+    pmm.addRegion((uint8_t*)blockAddress(40) + 4096, 4 * blockSize);
+    CHECK(pmm.freeBlockCount() == 31);
+
+    // Reserving covers every block it touches
+    pmm.reserveRegion(blockAddress(5), 3 * blockSize); // 5..7
+    pmm.reserveRegion((uint8_t*)blockAddress(8) + 100, 10); // 8
+    CHECK(pmm.freeBlockCount() == 27);
+
+    // Every free block can be allocated, then nullptr
+    static void* s_blocks[64];
+    uint64_t n = 0;
+    bool valid = true;
+    while (n < 64 && (s_blocks[n] = pmm.allocateBlocks(1)) != nullptr) {
+        uint64_t address = (uint64_t)s_blocks[n];
+        uint64_t block = address / blockSize;
+        valid &= address % blockSize == 0 && block >= 1 && block < 32 && (block < 5 || block > 8);
+        n++;
+    }
+    CHECK(n == 27);
+    CHECK(valid);
+    CHECK(pmm.freeBlockCount() == 0);
+    CHECK(pmm.allocateBlocks(1) == nullptr);
+
+    bool unique = true;
+    for (uint64_t i = 0; i < n; i++)
+        for (uint64_t j = i + 1; j < n; j++)
+            unique &= s_blocks[i] != s_blocks[j];
+    CHECK(unique);
+
+    for (uint64_t i = 0; i < n; i++)
+        pmm.freeBlocks(s_blocks[i], 1);
+    CHECK(pmm.freeBlockCount() == 27);
+
+    // Bad frees are rejected (each logs an error) and do not change the count
+    printf("[SELFTEST] expecting three freeBlocks errors:\n");
+    pmm.freeBlocks(s_blocks[0], 1); // double free
+    pmm.freeBlocks((uint8_t*)blockAddress(2) + 4096, 1); // unaligned
+    pmm.freeBlocks(blockAddress(40), 1); // never added
+    CHECK(pmm.freeBlockCount() == 27);
+
+    // Contiguous allocations are first fit and skip reserved blocks
+    void* first = pmm.allocateBlocks(4);
+    void* second = pmm.allocateBlocks(4);
+    CHECK(isBlock(first, 1)); // 1..4
+    CHECK(isBlock(second, 9)); // 9..12, after the reserved 5..8
+    pmm.freeBlocks(first, 4);
+    pmm.freeBlocks(second, 4);
+
+    // Enough free blocks but no run that long
+    CHECK(pmm.allocateBlocks(24) == nullptr);
+    void* longest = pmm.allocateBlocks(23); // 9..31
+    CHECK(isBlock(longest, 9));
+    pmm.freeBlocks(longest, 23);
+    CHECK(pmm.freeBlockCount() == 27);
+
+    // Memory beyond the capacity is ignored
+    pmm.addRegion(blockAddress(60), 10 * blockSize); // only 60..63 exist
+    CHECK(pmm.freeBlockCount() == 31);
+}
 
 static void testPmmFrames()
 {
-    group("PMM frames");
-    uint64_t freeBefore = PhysicalMemory::getFreeBlockCount();
+    group("PMM frames (isolated)");
+
+    static uint8_t s_bitmap[8];
+    PhysicalMemoryManager pmm(s_bitmap, sizeof(s_bitmap));
+    pmm.addRegion(blockAddress(0), 32 * blockSize); // blocks 1..31
+    uint64_t freeBefore = pmm.freeBlockCount();
 
     // More than two pools of 512 frames
     constexpr int n = 1100;
     static void* s_frames[n];
 
-    bool allocated = true, aligned = true, outsideKernel = true;
+    bool allocated = true, aligned = true, inRange = true;
     for (int i = 0; i < n; i++) {
-        s_frames[i] = PhysicalMemory::allocateFrame();
+        s_frames[i] = pmm.allocateFrame();
         if (s_frames[i] == nullptr) {
             allocated = false;
             break;
         }
         aligned &= ((uintptr_t)s_frames[i] % frameSize4Kb) == 0;
-        outsideKernel &= aboveKernel(s_frames[i]);
+        inRange &= s_frames[i] >= blockAddress(1) && s_frames[i] < blockAddress(32);
     }
     CHECK(allocated);
     if (!allocated)
         return;
     CHECK(aligned);
-    CHECK(outsideKernel);
+    CHECK(inRange);
+    CHECK(pmm.freeBlockCount() == freeBefore - 3);
 
     bool unique = true;
     for (int i = 0; i < n && unique; i++)
@@ -95,87 +192,121 @@ static void testPmmFrames()
     CHECK(unique);
 
     // A freed frame is handed out again
-    PhysicalMemory::freeFrame(s_frames[5]);
-    void* again = PhysicalMemory::allocateFrame();
+    pmm.freeFrame(s_frames[5]);
+    void* again = pmm.allocateFrame();
     CHECK(again == s_frames[5]);
     s_frames[5] = again;
 
     // A double free is rejected (logs an error), so the frame is not handed out twice
     printf("[SELFTEST] expecting a freeFrame error:\n");
-    PhysicalMemory::freeFrame(s_frames[6]);
-    PhysicalMemory::freeFrame(s_frames[6]);
-    void* a = PhysicalMemory::allocateFrame();
-    void* b = PhysicalMemory::allocateFrame();
+    pmm.freeFrame(s_frames[6]);
+    pmm.freeFrame(s_frames[6]);
+    void* a = pmm.allocateFrame();
+    void* b = pmm.allocateFrame();
     CHECK(a != b);
     s_frames[6] = a;
-    PhysicalMemory::freeFrame(b);
+    pmm.freeFrame(b);
 
     for (int i = 0; i < n; i++)
-        PhysicalMemory::freeFrame(s_frames[i]);
+        pmm.freeFrame(s_frames[i]);
 
     // Empty pools give their blocks back
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore);
+    CHECK(pmm.freeBlockCount() == freeBefore);
+
+    // The pools are bounded: maxFramePools blocks of framesPerBlock frames
+    constexpr uint64_t limit = PhysicalMemoryManager::maxFramePools * PhysicalMemoryManager::framesPerBlock;
+    static void* s_all[limit];
+    uint64_t count = 0;
+    void* frame;
+    while (count < limit + 1 && (frame = pmm.allocateFrame()) != nullptr)
+        s_all[count++] = frame;
+    CHECK(count == limit);
+    CHECK(pmm.freeBlockCount() == freeBefore - PhysicalMemoryManager::maxFramePools);
+
+    for (uint64_t i = 0; i < count; i++)
+        pmm.freeFrame(s_all[i]);
+    CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
-static void testPmmBlocks()
+static void testPmmMultiboot()
 {
-    group("PMM blocks");
-    uint64_t freeBefore = PhysicalMemory::getFreeBlockCount();
+    group("PMM from a multiboot memory map");
 
-    constexpr uint64_t max = 4096;
-    static void* s_blocks[max];
+    // multiboot2 info: header, one memory map tag with three entries, end tag
+    static constexpr uint32_t entries = 3;
+    static constexpr uint32_t mmapSize = sizeof(multiboot_tag_mmap) + entries * sizeof(multiboot_mmap_entry);
+    static constexpr uint32_t totalSize = 8 + mmapSize + sizeof(multiboot_tag);
+    alignas(8) static uint8_t s_info[totalSize];
 
-    // Every free block can be allocated, including the last one
-    uint64_t n = 0;
-    bool aligned = true, outsideKernel = true;
-    while (n < max && (s_blocks[n] = PhysicalMemory::allocateBlock(1)) != nullptr) {
-        aligned &= ((uintptr_t)s_blocks[n] % pageSize2Mb) == 0;
-        outsideKernel &= aboveKernel(s_blocks[n]);
-        n++;
-    }
+    memset(s_info, 0, sizeof(s_info));
+    uint32_t header[2] = { totalSize, 0 };
+    memcpy(s_info, header, sizeof(header));
 
-    if (freeBefore <= max) {
-        CHECK(n == freeBefore);
-        CHECK(PhysicalMemory::getFreeBlockCount() == 0);
-        CHECK(PhysicalMemory::allocateBlock(1) == nullptr);
-    } else {
-        printf("[SELFTEST] more than %llu free blocks, exhaustion check skipped\n", max);
-    }
-    CHECK(aligned);
-    CHECK(outsideKernel);
+    multiboot_tag_mmap mmap {};
+    mmap.type = MULTIBOOT_TAG_TYPE_MMAP;
+    mmap.size = mmapSize;
+    mmap.entry_size = sizeof(multiboot_mmap_entry);
+    memcpy(s_info + 8, &mmap, sizeof(mmap));
 
-    for (uint64_t i = 0; i < n; i++)
-        PhysicalMemory::freeBlocks(s_blocks[i], 1);
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore);
+    // Like QEMU: low memory, a hole, then 128 MB from 1 MB on
+    multiboot_mmap_entry map[entries] = {
+        { 0x0, 0x9FC00, MULTIBOOT_MEMORY_AVAILABLE, 0 },
+        { 0x9FC00, 0x400, MULTIBOOT_MEMORY_RESERVED, 0 },
+        { 0x100000, 0x7F00000, MULTIBOOT_MEMORY_AVAILABLE, 0 },
+    };
+    memcpy(s_info + 8 + sizeof(mmap), map, sizeof(map));
 
-    // A double free does not change the free count
-    printf("[SELFTEST] expecting a freeBlocks error:\n");
-    PhysicalMemory::freeBlocks(s_blocks[0], 1);
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore);
+    multiboot_tag end { MULTIBOOT_TAG_TYPE_END, sizeof(multiboot_tag) };
+    memcpy(s_info + 8 + mmapSize, &end, sizeof(end));
 
-    // Contiguous multi block allocation
-    void* multi = PhysicalMemory::allocateBlock(3);
-    CHECK(multi != nullptr);
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore - 3);
-    PhysicalMemory::freeBlocks(multi, 3);
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore);
+    static uint8_t s_bitmap[8]; // 64 blocks
+    PhysicalMemoryManager pmm(s_bitmap, sizeof(s_bitmap));
+    populateFromMultiboot(pmm, (uintptr_t)s_info);
+
+    // The second AVAILABLE entry rounds inwards to blocks 1..63; the kernel
+    // (below kernel_physical_end) is reserved. The first entry is smaller than
+    // a block, and this fake info lives in the higher half, beyond the capacity.
+    uint64_t kernelBlocks = (uint64_t)&kernel_physical_end / blockSize;
+    CHECK(pmm.freeBlockCount() == 63 - (kernelBlocks - 1));
+
+    void* block = pmm.allocateBlocks(1);
+    CHECK(isBlock(block, kernelBlocks));
+}
+
+static void testPmmKernel(PhysicalMemoryManager& pmm)
+{
+    group("PMM (kernel instance)");
+
+    uint64_t freeBefore = pmm.freeBlockCount();
+    CHECK(freeBefore > 0);
+
+    void* block = pmm.allocateBlocks(1);
+    CHECK(block != nullptr && aboveKernel(block));
+    CHECK((uintptr_t)block % blockSize == 0);
+    pmm.freeBlocks(block, 1);
+
+    void* frame = pmm.allocateFrame();
+    CHECK(frame != nullptr && aboveKernel(frame));
+    pmm.freeFrame(frame);
+
+    CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
 // ------------------------------------------------------------
 // VMM
 // ------------------------------------------------------------
 
-static void testVmm()
+static void testVmm(PhysicalMemoryManager& pmm)
 {
     group("VMM");
-    uint64_t freeBefore = PhysicalMemory::getFreeBlockCount();
+    uint64_t freeBefore = pmm.freeBlockCount();
 
     // Allocate, touch the first and last word of every page, free
     constexpr uint64_t n = 8;
     constexpr uint64_t words = pageSize2Mb / sizeof(uint64_t);
     uint64_t* base = (uint64_t*)VirtualMemory::allocatePage(n);
     CHECK((uintptr_t)base >= (uintptr_t)&kernel_virtual_end);
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore - n);
+    CHECK(pmm.freeBlockCount() == freeBefore - n);
 
     for (uint64_t p = 0; p < n; p++) {
         base[p * words] = 0xA5A5000000000000ULL | p;
@@ -189,7 +320,7 @@ static void testVmm()
     CHECK(intact);
 
     VirtualMemory::freePage(base, n);
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore);
+    CHECK(pmm.freeBlockCount() == freeBefore);
 
     // The freed range is found again
     void* again = VirtualMemory::allocatePage(n);
@@ -224,7 +355,7 @@ static void testVmm()
     VirtualMemory::freePage(page, 1);
 
     // Includes the PD frame pool created for the alias
-    CHECK(PhysicalMemory::getFreeBlockCount() == freeBefore);
+    CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
 // ------------------------------------------------------------
@@ -612,13 +743,15 @@ static void testRemove()
     CHECK(!s_ran);
 }
 
-int run()
+int run(PhysicalMemoryManager& pmm)
 {
     printf("[SELFTEST] start\n");
 
-    testPmmFrames();
     testPmmBlocks();
-    testVmm();
+    testPmmFrames();
+    testPmmMultiboot();
+    testPmmKernel(pmm);
+    testVmm(pmm);
     testHeap();
     testInterrupts();
     testUninitialized();

@@ -21,7 +21,7 @@ scripts/build.sh format-check   # fail if a file is not formatted
 | What | Style | Example |
 |---|---|---|
 | types, namespaces, enum values | PascalCase | `PhysicalMemory`, `ThreadState::Running` |
-| functions, methods | camelCase | `allocateBlock`, `addTask` |
+| functions, methods | camelCase | `allocateBlocks`, `addTask` |
 | variables, parameters, struct fields | camelCase | `pageIndex`, `lbaFirstSector` |
 | class data members | `m_` + camelCase | `m_name` |
 | static and namespace scope variables | `s_` + camelCase | `s_readyQueue` |
@@ -64,9 +64,10 @@ The kernel is clean: new warnings should be fixed, not suppressed. Code inside
 
 Agreed direction, introduced subsystem by subsystem. Done: the interrupt
 controller and timer (`Drivers::PIC`, `Drivers::PIT` behind
-`InterruptController` / `TickSource`, built by `kernelMain` in
-`Cxx::Uninitialized` storage). Still to do: PMM, VMM, heap, scheduler and
-threads, console/logger, which use namespaces with file scope state today.
+`InterruptController` / `TickSource`) and the physical memory manager
+(`Memory::PhysicalMemoryManager`), all built by `kernelMain` in
+`Cxx::Uninitialized` storage. Still to do: VMM, heap, scheduler and threads,
+console/logger, which use namespaces with file scope state today.
 
 - **No singletons.** Each subsystem is a class that owns its state
   (`PhysicalMemoryManager`, `AddressSpace`, `Heap`, `Scheduler`, drivers);

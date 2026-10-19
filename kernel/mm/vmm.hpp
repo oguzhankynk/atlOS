@@ -5,6 +5,9 @@
 #include <mm/constants.hpp>
 
 namespace Memory {
+
+class PhysicalMemoryManager;
+
 namespace VirtualMemory {
 
     /**
@@ -30,7 +33,10 @@ namespace VirtualMemory {
         uint64_t nx : 1; /**< No-execute */
     };
 
-    void init();
+    /**
+     * @brief Set up the recursive mapping; page tables and pages come from pmm.
+     */
+    void init(PhysicalMemoryManager& pmm);
     uint64_t mapPages(uint64_t pageIndex, uint64_t numPages);
     void* allocatePage(uint64_t numPages);
     int freePage(const void* addr, uint64_t numPages);
