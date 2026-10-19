@@ -4,7 +4,7 @@
 # Usage: scripts/build.sh [command...]
 #   all       build libc, kernel and the ISO (default)
 #   iso       build the ISO
-#   run       boot the ISO in QEMU, serial on the terminal (Ctrl-A X quits)
+#   run       boot the ISO in QEMU, serial on the terminal (Ctrl-C quits)
 #   debug     boot the ISO in QEMU and wait for gdb on :1234
 #   selftest  build the self test kernel and run it (exit code 0 = passed)
 #   docs      generate the Doxygen API docs into build/docs

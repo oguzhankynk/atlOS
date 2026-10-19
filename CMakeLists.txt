@@ -45,7 +45,7 @@ endif()
 # ------------------------------------------------------------
 
 if(GRUB_MKRESCUE AND QEMU)
-    # Serial output on the terminal; Ctrl-A X quits
+    # Serial output on the terminal; Ctrl-C quits
     add_custom_target(run
         COMMAND ${QEMU} -cdrom ${ATLOS_ISO} -m 512M -nographic -monitor none -serial stdio -no-shutdown
         DEPENDS iso
