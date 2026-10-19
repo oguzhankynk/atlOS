@@ -34,6 +34,11 @@ namespace Memory
         uint64_t GetMaxBlockSize();
 
         /**
+         * @brief Number of free 2 MB blocks.
+         */
+        uint64_t GetFreeBlockCount();
+
+        /**
          * @brief Allocate a single 4 KB physical frame (e.g. for a page table).
          *
          * @return Physical address of the frame, or nullptr if out of memory.

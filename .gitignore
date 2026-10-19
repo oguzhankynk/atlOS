@@ -4,3 +4,4 @@ sysroot/
 VirtualDisk/disk.img
 isodir/
 atlOS.iso
+selftest.log

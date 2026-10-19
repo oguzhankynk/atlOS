@@ -253,6 +253,11 @@ namespace Memory
             return maxBlocks / 8;
         }
 
+        uint64_t GetFreeBlockCount()
+        {
+            return freeBlocks;
+        }
+
         // ------------------------------------------------------------
         // 4 KB frame allocator
         // ------------------------------------------------------------

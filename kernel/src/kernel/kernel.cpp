@@ -46,59 +46,10 @@
 #include <Scheduler/scheduler.hpp>
 #include <Thread/thread.hpp>
 
+#include <tests/selftest.hpp>
+
 extern void threadTaskA();
 extern void threadTaskB();
-
-void TestMemoryManager()
-{
-    printf("=== Memory Manager Test Start ===\n");
-
-    // 1) Allocate 4 pages (2MB each)
-    constexpr size_t NUM_PAGES = 4;
-    void *pages = Memory::VirtualMemory::allocatePage(NUM_PAGES);
-    printf("Allocated %zu pages at virtual address: %p\n", NUM_PAGES, pages);
-
-    // 2) Write some pattern to each 2MB page
-    uint64_t *base = reinterpret_cast<uint64_t *>(pages);
-    constexpr uint64_t PATTERN = 0xDEADBEEFDEADBEEF;
-    for (size_t page = 0; page < NUM_PAGES; ++page)
-    {
-        size_t index = (page * Memory::PAGE_SIZE_2MB) / sizeof(uint64_t);
-        base[index] = PATTERN;
-    }
-    printf("Wrote pattern to pages\n");
-
-    // 3) Verify the pattern
-    for (size_t page = 0; page < NUM_PAGES; ++page)
-    {
-        size_t index = (page * Memory::PAGE_SIZE_2MB) / sizeof(uint64_t);
-        if (base[index] != PATTERN)
-        {
-            printf("Memory verification failed at page %zu (addr=%p)\n",
-                   page, &base[index]);
-            return;
-        }
-    }
-    printf("Memory verification passed\n");
-
-    // 4) Free pages
-    Memory::VirtualMemory::freePage(pages, 4);
-    printf("Freed 4 pages\n");
-
-    // 5) malloc/free test
-    void *ptr1 = kmalloc(1024);
-    void *ptr2 = kmalloc(4096);
-    printf("malloc ptr1: %p, ptr2: %p\n", ptr1, ptr2);
-
-    memset(ptr1, 0xAA, 1024);
-    memset(ptr2, 0xBB, 4096);
-
-    kfree(ptr1);
-    kfree(ptr2);
-    printf("Freed malloc blocks\n");
-
-    printf("=== Memory Manager Test End ===\n");
-}
 
 /**
  * @brief entry point of atlOS
@@ -145,9 +96,19 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Memory::Init(mbInfo);
 
     DeviceManager::Init();
-    TestMemoryManager();
 
     Scheduler::Init();
+
+#ifdef ATLOS_SELFTEST
+    int failed = SelfTest::Run();
+    SelfTest::ExitQemu(failed == 0 ? 0 : 1);
+
+    // Only reached when QEMU has no isa-debug-exit device
+    while (1)
+    {
+        asm volatile("cli; hlt");
+    }
+#endif
 
     printf("Creating threads...\n");
     Threading::Thread t1(threadTaskA);

@@ -29,7 +29,8 @@ cmake "$PROJECT_DIR" \
     -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/CMakeModule/atlOS.toolchain.cmake" \
     -DCMAKE_MODULE_PATH="${SCRIPT_DIR}/CMakeModule" \
     -DSYSROOT="${SYSROOT}" \
-    -B"${PROJECT_DIR}/build"
+    -B"${PROJECT_DIR}/build" \
+    "$@"
 
 
 if [ $? -ne 0 ]; then

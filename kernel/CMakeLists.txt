@@ -36,6 +36,12 @@ SET (CMAKE_ASM_FLAGS "${ATLOS_KERNEL_COMPILER_FLAGS} ")
 
 
 
+# Run the in-kernel self tests instead of the demo threads (see test.sh)
+option(ATLOS_SELFTEST "Build the kernel in self test mode" OFF)
+if(ATLOS_SELFTEST)
+    add_compile_definitions(ATLOS_SELFTEST)
+endif()
+
 # Define the ARCHDIR as kernel/arch/x86_64
 set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64)
 
@@ -61,6 +67,7 @@ file(GLOB_RECURSE KERNEL_FILES
     src/sys/*.cpp
     src/tty/*.cpp
     src/Thread/*.cpp
+    src/tests/*.cpp
     ${ARCHDIR}/GDT/gdt.cpp
     ${ARCHDIR}/IDT/idt.cpp
     ${ARCHDIR}/IDT/ISR.S
