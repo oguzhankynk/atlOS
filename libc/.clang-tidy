@@ -1,0 +1,2 @@
+# Not renamed to the atlOS naming style (see the root .clang-tidy)
+Checks: '-*,readability-identifier-naming'

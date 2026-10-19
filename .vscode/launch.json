@@ -5,7 +5,7 @@
             "name": "Debug Kernel",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/kernel/build/atlOS.kernel",
+            "program": "${workspaceFolder}/build/default/kernel/atlOS.kernel",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -19,18 +19,20 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "Build & Run",
             "miDebuggerPath": "/usr/bin/gdb",
-            "miDebuggerArgs": "",
             "targetArchitecture": "x86_64",
             "customLaunchSetupCommands": [
+                {
+                    "text": "shell sleep 1",
+                    "description": "Wait for QEMU to start gdbserver"
+                },
                 {
                     "text": "target remote localhost:1234",
                     "description": "Connect to QEMU remote debugger"
                 },
                 {
-                    "text": "symbol-file atlOS.kernel",
-                    "description": "Get kernel symbols"
+                    "text": "symbol-file ${workspaceFolder}/build/default/kernel/atlOS.kernel",
+                    "description": "Load kernel symbols"
                 }
             ],
             "avoidWindowsConsoleRedirection": true

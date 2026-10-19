@@ -7,7 +7,8 @@
         "bios.h": "c",
         "liballoc_1_1.h": "c",
         "stdint.h": "c",
-        "new": "c"
+        "new": "c",
+        "*.inc": "cpp"
     },
     "doxygen_runner.configuration_file_override": "${workspaceFolder}/Doxyfile",
     "doxdocgen.generic.authorEmail": "",
@@ -21,6 +22,5 @@
     "doxdocgen.generic.commandSuggestionAddPrefix": true,
     "debug.onTaskErrors": "debugAnyway",
     "format": "hex",
-    "C_Cpp.default.compilerPath": "/home/oguzhan/opt/cross/bin/i686-elf-gcc",
-
+    "C_Cpp.default.compilerPath": "/home/oguzhan/opt/cross/bin/x86_64-elf-gcc",
 }

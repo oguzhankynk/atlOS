@@ -1,0 +1,168 @@
+#include <core/panic.hpp>
+#include <drivers/tick_source.hpp>
+#include <sched/scheduler.hpp>
+#include <sched/thread.hpp>
+#include <stdio.h>
+
+extern "C" void switchTask(Threading::Registers* from, Threading::Registers* to);
+
+namespace Threading {
+
+static bool isRunnable(const TCB* tcb)
+{
+    return tcb->state == ThreadState::Ready || tcb->state == ThreadState::Running;
+}
+
+Scheduler::Scheduler(Drivers::TickSource& ticks)
+{
+    m_bootTcb.state = ThreadState::Running;
+    m_readyQueue[0] = &m_bootTcb;
+    m_threadCount = 1;
+    m_currentThreadIndex = 0;
+
+    if (!ticks.start(tickPeriodNs, onTick, this))
+        kernelPanic("Scheduler: the tick source does not support a 1 ms period");
+}
+
+void Scheduler::onTick(void* scheduler)
+{
+    auto* self = static_cast<Scheduler*>(scheduler);
+    self->m_ticks = self->m_ticks + 1;
+}
+
+void Scheduler::wakeSleepers()
+{
+    uint64_t now = m_ticks;
+    for (uint32_t i = 0; i < m_threadCount; i++) {
+        if (m_readyQueue[i]->state == ThreadState::Sleeping && now >= m_readyQueue[i]->wakeTick)
+            m_readyQueue[i]->state = ThreadState::Ready;
+    }
+}
+
+void Scheduler::removeAt(uint32_t index)
+{
+    for (uint32_t i = index; i + 1 < m_threadCount; i++)
+        m_readyQueue[i] = m_readyQueue[i + 1];
+
+    m_threadCount--;
+}
+
+void Scheduler::switchTo(uint32_t nextIndex)
+{
+    TCB* from = m_readyQueue[m_currentThreadIndex];
+    TCB* to = m_readyQueue[nextIndex];
+
+    // An exited thread leaves the queue here. Its stack is still in use
+    // until switchTask is done, the owner frees it later.
+    if (from->state == ThreadState::Terminated) {
+        removeAt(m_currentThreadIndex);
+        if (nextIndex > m_currentThreadIndex)
+            nextIndex--;
+    } else if (from->state == ThreadState::Running) {
+        from->state = ThreadState::Ready;
+    }
+
+    to->state = ThreadState::Running;
+    m_currentThreadIndex = nextIndex;
+
+    switchTask(&from->regs, &to->regs);
+}
+
+// Switch to the next runnable thread after the current one. If the current
+// thread is the only runnable one, keep running it. If nothing can run,
+// halt until an interrupt (e.g. the timer waking a sleeper) changes that.
+void Scheduler::schedule()
+{
+    while (true) {
+        wakeSleepers();
+
+        for (uint32_t k = 1; k < m_threadCount; k++) {
+            uint32_t index = (m_currentThreadIndex + k) % m_threadCount;
+            if (isRunnable(m_readyQueue[index])) {
+                switchTo(index);
+                return;
+            }
+        }
+
+        if (isRunnable(m_readyQueue[m_currentThreadIndex]))
+            return;
+
+        asm volatile("sti; hlt");
+    }
+}
+
+void Scheduler::addTask(Thread& thread)
+{
+    if (m_threadCount < maxTasks) {
+        m_readyQueue[m_threadCount++] = &thread.getTCB();
+    } else {
+        printf("Scheduler: run queue full, %s is not added\n", thread.getName());
+    }
+}
+
+void Scheduler::removeTask(Thread& thread)
+{
+    TCB* tcb = &thread.getTCB();
+
+    for (uint32_t i = 0; i < m_threadCount; i++) {
+        if (m_readyQueue[i] != tcb)
+            continue;
+
+        if (i == m_currentThreadIndex)
+            kernelPanic("Scheduler: a thread can not remove itself");
+
+        removeAt(i);
+        if (i < m_currentThreadIndex)
+            m_currentThreadIndex--;
+        return;
+    }
+}
+
+void Scheduler::yield()
+{
+    schedule();
+}
+
+void Scheduler::sleep(uint64_t ms)
+{
+    if (ms == 0) {
+        yield();
+        return;
+    }
+
+    TCB* self = m_readyQueue[m_currentThreadIndex];
+    self->wakeTick = m_ticks + ms;
+    self->state = ThreadState::Sleeping;
+    schedule();
+}
+
+void Scheduler::block()
+{
+    m_readyQueue[m_currentThreadIndex]->state = ThreadState::Blocked;
+    schedule();
+}
+
+void Scheduler::unblock(TCB& tcb)
+{
+    if (tcb.state == ThreadState::Blocked)
+        tcb.state = ThreadState::Ready;
+}
+
+void Scheduler::exit()
+{
+    if (m_readyQueue[m_currentThreadIndex] == &m_bootTcb)
+        kernelPanic("Scheduler: the boot flow can not exit");
+
+    m_readyQueue[m_currentThreadIndex]->state = ThreadState::Terminated;
+    schedule();
+
+    // A terminated thread is never picked again
+    kernelPanic("Scheduler: exited thread was resumed");
+}
+
+TCB& Scheduler::current()
+{
+    return *m_readyQueue[m_currentThreadIndex];
+}
+
+} // namespace Threading

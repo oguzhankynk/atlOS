@@ -22,12 +22,11 @@
 #include <sys/cdefs.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-    /// @brief abort the program
-    __attribute__((__noreturn__)) void abort(void);
+/// @brief abort the program
+__attribute__((__noreturn__)) void abort(void);
 
 #ifdef __cplusplus
 }

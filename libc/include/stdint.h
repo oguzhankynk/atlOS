@@ -164,6 +164,6 @@ typedef uint64_t uintmax_t;
 /**
  * @brief Integer type capable of holding a pointer.
  */
-typedef uint32_t uintptr_t;
+typedef uint64_t uintptr_t;
 
 #endif /* BA22560F_9F55_4018_A630_CB062C833243 */

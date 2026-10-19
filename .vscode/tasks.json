@@ -2,64 +2,50 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Clear",
+            "label": "Clean",
             "type": "shell",
-            "command": "./run.sh clean",
-            "group": {
-                "kind": "build",
-                "isDefault": false
-            },
+            "command": "./scripts/build.sh clean",
             "problemMatcher": []
         },
-
         {
-            "label": "Compile",
+            "label": "Build",
             "type": "shell",
-            "command": "./run.sh clean build-all",
+            "command": "./scripts/build.sh all",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": []
+            "problemMatcher": "$gcc"
         },
-
-        {
-            "label": "Create ISO",
-            "type": "shell",
-            "command": "./run.sh iso",
-            "group": "build",
-            "problemMatcher": []
-        },
-
         {
             "label": "Run",
             "type": "shell",
-            "command": "./run.sh iso run",
+            "command": "./scripts/build.sh run",
             "group": {
                 "kind": "test",
                 "isDefault": true
             },
             "problemMatcher": []
         },
-
         {
-            "label": "Build & Run",
+            "label": "Self tests",
             "type": "shell",
-            "command": "./run.sh clean build-all iso run",
-            "group": {
-                "kind": "test",
-                "isDefault": false
-            },
+            "command": "./scripts/build.sh selftest",
+            "group": "test",
             "problemMatcher": []
         },
-
+        {
+            "label": "Run QEMU Debug",
+            "type": "shell",
+            "isBackground": true,
+            "command": "./scripts/build.sh debug",
+            "problemMatcher": []
+        },
         {
             "label": "Create Disk Image (FAT16)",
             "type": "shell",
-            "command": "./VirtualDisk/create_disk_image.sh 16",
-            "group": "build",
+            "command": "./tools/disk/create_disk_image.sh 16",
             "problemMatcher": []
         }
-
     ]
 }
