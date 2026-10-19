@@ -1,22 +1,21 @@
 #!/bin/sh
-# Build the kernel in self test mode, boot it in QEMU and report the result.
-# Exit code: 0 = all tests passed, 1 = failures, 2 = crash/timeout or build error.
+# Boot a self test kernel ISO in QEMU and report the result.
+# Used by the "selftest" target (scripts/build.sh selftest, ctest --preset selftest).
 #
-# Leaves a self test kernel in sysroot and atlOS.iso; run
-# "./run.sh build-kernel iso" to get the normal kernel back.
+# Usage: scripts/run-selftest.sh <atlOS.iso> [serial.log]
+# Exit code: 0 = all tests passed, 1 = failures, 2 = crash, timeout or bad usage.
 
-SCRIPT_DIR=$(dirname "$(realpath "$0")")
-cd "$SCRIPT_DIR" || exit 2
+ISO=$1
+LOG=${2:-selftest.log}
+TIMEOUT=${SELFTEST_TIMEOUT:-60}
 
-LOG="$SCRIPT_DIR/selftest.log"
-TIMEOUT=60
-
-./libcCMake.sh > /dev/null || { echo "libc build failed"; exit 2; }
-./kernelCMake.sh -DATLOS_SELFTEST=ON > /dev/null || { echo "kernel build failed"; exit 2; }
-./iso.sh > /dev/null 2>&1 || { echo "iso build failed"; exit 2; }
+if [ -z "$ISO" ] || [ ! -f "$ISO" ]; then
+    echo "usage: $0 <atlOS.iso> [serial.log]" >&2
+    exit 2
+fi
 
 timeout "$TIMEOUT" qemu-system-x86_64 \
-    -cdrom atlOS.iso \
+    -cdrom "$ISO" \
     -m 512M \
     -display none \
     -serial file:"$LOG" \

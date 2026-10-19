@@ -2,19 +2,11 @@
     "configurations": [
         {
             "name": "x86_64-elf",
-            "includePath": [
-                "${workspaceFolder}/kernel/include/*",
-                "${workspaceFolder}/libc/include/"
-            ],
-            "defines": [],
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
             "compilerPath": "/home/oguzhan/opt/cross/bin/x86_64-elf-gcc",
             "cStandard": "c17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64",
-            "compilerArgs": [
-                "--sysroot=${workspaceFolder}/sysroot",
-                "-ffreestanding"
-            ]
+            "intelliSenseMode": "linux-gcc-x64"
         }
     ],
     "version": 4

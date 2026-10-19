@@ -1,42 +1,26 @@
-cmake_minimum_required(VERSION 3.22.1)
+# libk: the freestanding C library linked into the kernel
 
-# Include the atlOS platform-specific settings
-include(${CMAKE_MODULE_PATH}/Platform/atlOS.cmake)
-
-# Check if SYSROOT is defined
-if(NOT DEFINED SYSROOT)
-    # Print error message and stop the configuration process
-    message(FATAL_ERROR "SYSROOT is not defined. Please define SYSROOT to specify the target root directory.")
-endif()
-
-# Define the project name
-project(atlOS_libk)
-
-# Define C++ compiler flags for the project
-SET (CMAKE_CXX_FLAGS "--sysroot=${SYSROOT} -isystem=/usr/include \
--std=c++17  -Wall -O0 -g -Wextra  -Wno-unused-variable -Wno-unused-function \
- -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic \
--fno-unwind-tables -fno-asynchronous-unwind-tables \
- -mcmodel=large -mno-red-zone ")
-
-# Recursively find all .cpp source files in stdio, stdlib, and string directories
-file(GLOB_RECURSE SOURCES
+file(GLOB_RECURSE LIBC_SOURCES CONFIGURE_DEPENDS
     stdio/*.cpp
     stdlib/*.cpp
     string/*.cpp
     ctype/*.cpp
 )
 
-# Print the list of found sources
-message(STATUS "Found sources: ${SOURCES}")
+add_library(k STATIC ${LIBC_SOURCES})
 
-# Add include directories for the project
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_compile_options(k PRIVATE
+    -O0 -g
+    -Wall -Wextra -Wno-unused-variable -Wno-unused-function
+    -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic
+    -fno-unwind-tables -fno-asynchronous-unwind-tables
+    -mcmodel=large -mno-red-zone
 )
 
-# Create a static library 'k' using the found sources
-add_library(k STATIC  ${SOURCES})
+set_target_properties(k PROPERTIES
+    CXX_STANDARD 17
+    CXX_EXTENSIONS OFF
+)
 
 target_compile_definitions(k PRIVATE
     __ATLOS__
@@ -45,15 +29,8 @@ target_compile_definitions(k PRIVATE
     __is_libc
 )
 
-SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> rcs  <TARGET> <LINK_FLAGS> <OBJECTS>")
-SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> rcs  <TARGET> <LINK_FLAGS> <OBJECTS>")
-
-# Copy the `k` static library to the target destination directories
-install(TARGETS k
-    LIBRARY DESTINATION ${SYSROOT}/usr/lib
-    ARCHIVE DESTINATION ${SYSROOT}/usr/lib
-    )
-
-# Copy the headers to the target destination directories
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${SYSROOT}/usr)
-   
+# C headers for everyone, the C++ wrappers (<cstdint>, <new>, ...) only for users
+target_include_directories(k
+    PUBLIC include
+    INTERFACE include/cpp
+)

@@ -1,6 +1,0 @@
-set(CMAKE_SYSTEM_PROCESSOR x86_64)
-
-set(CMAKE_C_COMPILER x86_64-elf-gcc) 
-set(CMAKE_CXX_COMPILER x86_64-elf-g++) 
-set(CMAKE_ASM_COMPILER x86_64-elf-gcc)
-set(CMAKE_LINKER x86_64-elf-ld)

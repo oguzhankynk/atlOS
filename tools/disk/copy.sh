@@ -1,8 +1,11 @@
 #!/bin/bash
 
-SRC_FILE="VirtualDisk/MY_HELLO.txt"
+# Paths are relative to this script, so it can be run from anywhere
+DIR=$(dirname "$(realpath "$0")")
 
-IMAGE_FILE="VirtualDisk/disk.img"
+SRC_FILE="$DIR/MY_HELLO.txt"
+
+IMAGE_FILE="$DIR/disk.img"
 LOOP_DEVICE="/dev/loop0"
 
 sudo losetup -P $LOOP_DEVICE $IMAGE_FILE

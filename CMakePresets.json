@@ -1,0 +1,48 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 22,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "atlOS",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-x86_64-elf.cmake",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "selftest",
+            "displayName": "atlOS self tests",
+            "inherits": "default",
+            "binaryDir": "${sourceDir}/build-selftest",
+            "cacheVariables": {
+                "ATLOS_SELFTEST": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default"
+        },
+        {
+            "name": "selftest",
+            "configurePreset": "selftest"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "selftest",
+            "configurePreset": "selftest",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

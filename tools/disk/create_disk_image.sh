@@ -1,7 +1,10 @@
 #!/bin/bash
 
+# Paths are relative to this script, so it can be run from anywhere
+DIR=$(dirname "$(realpath "$0")")
+
 # Specify the desired FAT format as an argument
-# Usage: ./create_disk_image.sh [12|16]
+# Usage: tools/disk/create_disk_image.sh [12|16]
 
 # Set default format to FAT16
 FORMAT_FAT=06
@@ -29,7 +32,7 @@ echo "FAT_PARAM=${FAT_PARAM}"
 
 
 # Defines
-IMAGE_FILE="VirtualDisk/disk.img"
+IMAGE_FILE="$DIR/disk.img"
 IMAGE_SIZE_MB=128
 PARTITION_COUNT=4
 LOOP_DEVICE="/dev/loop0"

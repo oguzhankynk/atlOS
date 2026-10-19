@@ -1,7 +1,6 @@
-libc/build
-kernel/build
-sysroot/
-VirtualDisk/disk.img
-isodir/
-atlOS.iso
-selftest.log
+# Build output (CMake presets)
+build/
+build-*/
+
+# FAT test disk image, see tools/disk/create_disk_image.sh
+tools/disk/disk.img
