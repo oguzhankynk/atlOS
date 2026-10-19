@@ -106,15 +106,10 @@ namespace Threading
         // Call the entry point function
         thread->m_entry();
 
-        // Thread has finished execution, set state to TERMINATED
+        // Thread has finished execution, leave the run queue for good
         printf("Thread %s finished execution.\n", thread->m_name);
 
-        thread->m_tcb.state = ThreadState::TERMINATED;
-
-        while (true)
-        {
-            Scheduler::yield();
-        }
+        Scheduler::exit();
     }
 
     Thread::Thread(EntryPoint entry, bool addToScheduler)
@@ -130,6 +125,9 @@ namespace Threading
     {
         // Destructor to clean up resources
         printf("Thread %s dtor called.\n", m_impl->m_name);
+
+        // The scheduler must not keep a pointer to the TCB we are about to free
+        Scheduler::removeTask(*this);
         delete m_impl;
     }
 

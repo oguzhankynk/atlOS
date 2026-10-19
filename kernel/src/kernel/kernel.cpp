@@ -46,6 +46,8 @@
 #include <Scheduler/scheduler.hpp>
 #include <Thread/thread.hpp>
 
+#include <hardware/pic.hpp>
+
 #include <tests/selftest.hpp>
 
 extern void threadTaskA();
@@ -97,6 +99,9 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     DeviceManager::Init();
 
+    // The scheduler tick comes from the PIT through the 8259 PIC (there is no
+    // APIC driver yet). Init also enables interrupts.
+    PIC::Init();
     Scheduler::Init();
 
 #ifdef ATLOS_SELFTEST

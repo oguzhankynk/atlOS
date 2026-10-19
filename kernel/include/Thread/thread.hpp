@@ -27,7 +27,8 @@ namespace Threading
     {
         RUNNING,
         READY,
-        BLOCKED,
+        BLOCKED,  // Waits for Scheduler::unblock
+        SLEEPING, // Waits until TCB::wakeTick
         TERMINATED
     };
 
@@ -47,8 +48,9 @@ namespace Threading
 
     struct TCB
     {
-        Registers regs;
+        Registers regs; // Must stay first, switchTask takes &regs
         ThreadState state;
+        uint64_t wakeTick; // Scheduler::ticks() value to leave SLEEPING at
     };
 
     class ThreadImpl;

@@ -9,13 +9,8 @@
  * This macro:
  *  - pushes error code (if exception does not supply one) and the vector number
  *  - saves general registers (rax..r15)
- *  - sets DS/ES/FS/GS to kernel data selector (0x10) for flat model
- *  - aligns stack so that `call` obeys SystemV ABI: RSP % 16 == 8 before CALL
  *  - calls the handler with RDI = pointer to the stack frame
- *  - restores stack and registers, then iretq
- *
- * Note: r12 is used as temporary to hold pad value. r12 was saved on stack earlier,
- * so it is safe to clobber here and rely on the later `popq` to restore original r12.
+ *  - restores registers, then iretq
  */
 .macro INT_DEFINITION NO HANDLER
     .global INT_\NO
@@ -50,11 +45,10 @@ INT_\NO:
     /* Pass pointer to current stack frame (RSP) in RDI */
     mov %rsp, %rdi
 
-    /* Call C handler */
+    /* Call C handler. The CPU aligns RSP to 16 before pushing the interrupt
+     * frame; frame (5) + err_code + int_no + 15 registers = 22 qwords, so RSP
+     * is already 16 byte aligned here and no padding is needed. */
     call \HANDLER
-
-    /* Restore stack */
-    add %r12, %rsp
 
     /* Restore general-purpose registers */
     popq %r15
@@ -73,11 +67,10 @@ INT_\NO:
     popq %rbx
     popq %rax
 
-    /* Pop int_no ve err_code */
-    popq %rax      /* int_no */
-    popq %rax      /* err_code */
+    /* Drop int_no and err_code without touching the restored registers */
+    addq $16, %rsp
 
-    sti
+    /* iretq restores RFLAGS (and so IF) of the interrupted code */
     iretq
 .endm
 
