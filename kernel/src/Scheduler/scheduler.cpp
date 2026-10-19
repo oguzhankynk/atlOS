@@ -6,18 +6,26 @@ extern "C" void switchTask(Threading::Registers *from, Threading::Registers *to)
 
 namespace Scheduler
 {
-    static Threading::Thread* readyQueue[16];
+    static constexpr uint32_t MAX_TASKS = 16;
+
+    // Context of the boot flow (kernelMain). It has no Thread object, but it
+    // must own a TCB so that the first switchTask has somewhere to save it.
+    static Threading::TCB bootTCB{};
+
+    static Threading::TCB *readyQueue[MAX_TASKS];
     static uint32_t threadCount = 0;
     static uint32_t currentThreadIndex = 0;
 
     void Init() {
-        threadCount = 0;
+        bootTCB.state = Threading::ThreadState::RUNNING;
+        readyQueue[0] = &bootTCB;
+        threadCount = 1;
         currentThreadIndex = 0;
     }
 
     void addTask(Threading::Thread &thread) {
-        if (threadCount < 16) {
-            readyQueue[threadCount++] = &thread;
+        if (threadCount < MAX_TASKS) {
+            readyQueue[threadCount++] = &thread.getTCB();
         }
     }
 
@@ -27,11 +35,11 @@ namespace Scheduler
         uint32_t prevIndex = currentThreadIndex;
         currentThreadIndex = (currentThreadIndex + 1) % threadCount;
 
-        Threading::Thread* from = readyQueue[prevIndex];
-        Threading::Thread* to = readyQueue[currentThreadIndex];
+        Threading::TCB* from = readyQueue[prevIndex];
+        Threading::TCB* to = readyQueue[currentThreadIndex];
 
         if (from != to) {
-            switchTask(&from->getTCB().regs, &to->getTCB().regs);
+            switchTask(&from->regs, &to->regs);
         }
     }
 }
