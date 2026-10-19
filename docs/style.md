@@ -68,7 +68,11 @@ controller and timer (`Drivers::PIC`, `Drivers::PIT` behind
 (`Memory::PhysicalMemoryManager`), the kernel address space
 (`Memory::AddressSpace`) and the scheduler (`Threading::Scheduler`; threads
 get it as their entry point argument), all built by `kernelMain` in
-`Cxx::Uninitialized` storage. Still to do: heap and console/logger.
+`Cxx::Uninitialized` storage, and the console (`Drivers::SerialPort` and
+`Drivers::VGATextConsole` behind `CharacterSink`, bound to printf with
+`Core::setConsole`). Not done: the heap, whose state lives in liballoc
+(third party) behind the `setHeapAddressSpace` boundary. `logMsg` keeps no
+state and stays a function over printf.
 
 - **No singletons.** Each subsystem is a class that owns its state
   (`PhysicalMemoryManager`, `AddressSpace`, `Heap`, `Scheduler`, drivers);

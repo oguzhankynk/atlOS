@@ -29,7 +29,6 @@
 
 #include <drivers/disk/ata.hpp>
 #include <drivers/keyboard.hpp>
-#include <drivers/serial.hpp>
 
 #include <arch/x86_64/idt/handlers.hpp>
 

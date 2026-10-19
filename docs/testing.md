@@ -18,7 +18,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 122 passed, 0 failed
+[SELFTEST] done: 139 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -40,6 +40,9 @@ serial log is written to `build/selftest/selftest.log`.
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
 | Uninitialized | `Cxx::Uninitialized<T>` constructs once, on demand, with the given arguments |
 | PIT (fake controller) | the PIT driver against a fake `InterruptController`: period checks, attaches and unmasks IRQ 0 |
+| Console (fake sink) | `Core::setConsole` routes printf to a sink and returns the previous one |
+| VGA text console (RAM buffer) | clearing, text, newline, tab, color, line wrap, scrolling, on a buffer in RAM |
+| Serial port (missing COM2) | a port that fails the loopback test reports it and drops writes instead of hanging |
 | CPU | CPUID: max leaf, vendor string, SSE2/FXSR present, cache list bounded |
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
 | Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, instances do not affect each other |

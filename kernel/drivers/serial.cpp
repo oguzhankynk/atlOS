@@ -1,7 +1,7 @@
 /**
  * @file serial.cpp
  * @author Oguzhan KAYNAK
- * @brief Implementation of serial port handling functions.
+ * @brief 16550 UART serial port
  *
  * This file contains the implementations of the functions for initializing,
  * reading from, and writing to serial ports.
@@ -21,95 +21,57 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#include <drivers/serial.hpp>
 
-#include <stdint.h>
+#include <drivers/serial.hpp>
 
 #include <arch/x86_64/io/ioport.hpp>
 
-namespace SerialPort {
+namespace Drivers {
 
-static constexpr uint16_t port = 0x3F8; // COM1
-// static constexpr uint16_t PORT = 0x2F8;// COM2
-// static constexpr uint16_t PORT = 0x3E8;// COM3
-// static constexpr uint16_t PORT = 0x2E8;// COM4
-// static constexpr uint16_t PORT = 0x5F8;// COM5
-// static constexpr uint16_t PORT = 0x4F8;// COM6
-// static constexpr uint16_t PORT = 0x5E8;// COM7
-// static constexpr uint16_t PORT = 0x4E8;// COM8
-
-static int isTransmitEmpty();
-
-/**
- * @brief Initializes the serial port.
- *
- * Sets up the serial port for communication. This function must be called before
- * any other serial port functions.
- *
- * @return 0 on success, -1 on failure.
- */
-int init()
+SerialPort::SerialPort(uint16_t port)
+    : m_port(port)
 {
-    IOPort::outportb(port + 1, 0x00); // Disable all interrupts
-    IOPort::outportb(port + 3, 0x80); // Enable DLAB (set baud rate divisor)
-    IOPort::outportb(port + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
-    IOPort::outportb(port + 1, 0x00); //                  (hi byte)
-    IOPort::outportb(port + 3, 0x03); // 8 bits, no parity, one stop bit
-    IOPort::outportb(port + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
-    IOPort::outportb(port + 4, 0x0B); // IRQs enabled, RTS/DSR set
-    IOPort::outportb(port + 4, 0x1E); // Set in loopback mode, test the serial chip
-    IOPort::outportb(port + 0, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
+    IOPort::outportb(m_port + 1, 0x00); // Disable all interrupts
+    IOPort::outportb(m_port + 3, 0x80); // Enable DLAB (set baud rate divisor)
+    IOPort::outportb(m_port + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
+    IOPort::outportb(m_port + 1, 0x00); //                  (hi byte)
+    IOPort::outportb(m_port + 3, 0x03); // 8 bits, no parity, one stop bit
+    IOPort::outportb(m_port + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+    IOPort::outportb(m_port + 4, 0x0B); // IRQs enabled, RTS/DSR set
+    IOPort::outportb(m_port + 4, 0x1E); // Set in loopback mode, test the serial chip
+    IOPort::outportb(m_port + 0, 0xAE); // Send 0xAE, it must come back
 
-    // Check if the serial port is properly initialized
-    if (IOPort::inportb(port + 0) != 0xAE) {
-        return -1; // Failure
-    }
+    if (IOPort::inportb(m_port + 0) != 0xAE)
+        return;
 
-    IOPort::outportb(port + 4, 0x0F);
-    return 0;
+    // Normal operation mode
+    IOPort::outportb(m_port + 4, 0x0F);
+    m_present = true;
 }
 
-/**
- * @brief Reads a byte from the serial port.
- *
- * @return The byte of data read from the serial port.
- */
-char readSerial()
+bool SerialPort::isTransmitEmpty() const
 {
-    // Wait until the serial port is ready to read
-    while (!(IOPort::inportb(port + 5) & 0x01))
-        ;
-    return static_cast<char>(IOPort::inportb(port));
+    return IOPort::inportb(m_port + 5) & 0x20;
 }
 
-/**
- * @brief Writes a byte to the serial port.
- *
- * @param a The byte of data to send.
- */
-void writeSerial(char a)
+void SerialPort::write(const char* data, size_t size)
 {
-    // Wait until the serial port is ready to write
-    while (!isTransmitEmpty())
-        ;
-    IOPort::outportb(port, a);
-}
+    if (!m_present)
+        return;
 
-void writeSerial(const char* data, size_t size)
-{
-    while (!isTransmitEmpty())
-        ;
-
-    while (size > 0) {
-        IOPort::outportb(port, *data);
-        data++;
-        size--;
+    // Wait for every byte: the FIFO only holds 16
+    for (size_t i = 0; i < size; i++) {
+        while (!isTransmitEmpty())
+            ;
+        IOPort::outportb(m_port, data[i]);
     }
 }
 
-int isTransmitEmpty()
+char SerialPort::read()
 {
-    return IOPort::inportb(port + 5) & 0x20;
+    while (!(IOPort::inportb(m_port + 5) & 0x01))
+        ;
+    return static_cast<char>(IOPort::inportb(m_port));
 }
 
-} // namespace SerialPort
+} // namespace Drivers

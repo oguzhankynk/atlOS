@@ -1,21 +1,22 @@
-#include <drivers/serial.hpp>
 #include <sched/scheduler.hpp>
+#include <stdio.h>
+
+// Demo threads: each prints its letter on the console and yields
 
 void threadTaskA(Threading::Scheduler& scheduler)
 {
     while (true) {
-        SerialPort::writeSerial('A');
-        SerialPort::writeSerial('\n');
+        printf("A\n");
         for (volatile int i = 0; i < 5000000; i++)
             ;
         scheduler.yield();
     }
 }
+
 void threadTaskB(Threading::Scheduler& scheduler)
 {
     while (true) {
-        SerialPort::writeSerial('B');
-        SerialPort::writeSerial('\n');
+        printf("B\n");
         for (volatile int i = 0; i < 5000000; i++)
             ;
         scheduler.yield();

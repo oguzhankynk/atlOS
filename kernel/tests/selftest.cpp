@@ -15,10 +15,14 @@
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/io/ioport.hpp>
+#include <core/console.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/character_sink.hpp>
 #include <drivers/interrupt_controller.hpp>
 #include <drivers/pit.hpp>
+#include <drivers/serial.hpp>
 #include <drivers/tick_source.hpp>
+#include <drivers/vga_console.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
 #include <mm/memory.hpp>
@@ -551,6 +555,114 @@ static void testPitWithFakeController(Threading::Scheduler& scheduler)
 }
 
 // ------------------------------------------------------------
+// Console
+// ------------------------------------------------------------
+
+// Collects what is written to it
+class FakeSink final : public Drivers::CharacterSink {
+public:
+    void write(const char* data, size_t size) override
+    {
+        for (size_t i = 0; i < size && m_length + 1 < sizeof(m_text); i++)
+            m_text[m_length++] = data[i];
+        m_text[m_length] = '\0';
+    }
+
+    const char* text() const { return m_text; }
+
+private:
+    char m_text[64] {};
+    size_t m_length {};
+};
+
+static void testConsole()
+{
+    group("Console (fake sink)");
+
+    FakeSink sink;
+    Drivers::CharacterSink* previous = Core::setConsole(sink);
+    printf("x=%d\n", 42);
+    Core::setConsole(*previous);
+
+    CHECK(previous != nullptr);
+    CHECK(strcmp(sink.text(), "x=42\n") == 0);
+}
+
+static char screenChar(const volatile uint16_t* screen, size_t x, size_t y)
+{
+    return static_cast<char>(screen[y * Drivers::VGATextConsole::width + x] & 0xFF);
+}
+
+static void writeText(Drivers::CharacterSink& sink, const char* text)
+{
+    sink.write(text, strlen(text));
+}
+
+static void testVgaConsole()
+{
+    group("VGA text console (RAM buffer)");
+
+    using Drivers::VGATextConsole;
+    constexpr size_t width = VGATextConsole::width;
+    constexpr size_t height = VGATextConsole::height;
+    static volatile uint16_t s_screen[width * height];
+
+    // Cleared to light grey spaces
+    {
+        VGATextConsole console(s_screen);
+        bool cleared = true;
+        for (size_t i = 0; i < width * height; i++)
+            cleared &= s_screen[i] == 0x0720;
+        CHECK(cleared);
+
+        writeText(console, "AB\nC\tD");
+        CHECK(screenChar(s_screen, 0, 0) == 'A');
+        CHECK(screenChar(s_screen, 1, 0) == 'B');
+        CHECK(screenChar(s_screen, 0, 1) == 'C');
+        CHECK(screenChar(s_screen, 1, 1) == ' '); // tab: four spaces
+        CHECK(screenChar(s_screen, 5, 1) == 'D');
+
+        console.setColor(0x1F);
+        writeText(console, "E");
+        CHECK(s_screen[1 * width + 6] == ((0x1F << 8) | 'E'));
+    }
+
+    // A full line wraps to the next one
+    {
+        VGATextConsole console(s_screen);
+        for (size_t i = 0; i < width + 1; i++)
+            writeText(console, "x");
+        CHECK(screenChar(s_screen, width - 1, 0) == 'x');
+        CHECK(screenChar(s_screen, 0, 1) == 'x');
+        CHECK(screenChar(s_screen, 1, 1) == ' ');
+    }
+
+    // 26 lines: the screen scrolls twice and shows "c".."z", the last row empty
+    {
+        VGATextConsole console(s_screen);
+        for (char letter = 'a'; letter <= 'z'; letter++) {
+            char line[2] = { letter, '\n' };
+            console.write(line, 2);
+        }
+        CHECK(screenChar(s_screen, 0, 0) == 'c');
+        CHECK(screenChar(s_screen, 0, height - 2) == 'z');
+        CHECK(screenChar(s_screen, 0, height - 1) == ' ');
+    }
+}
+
+static void testSerialPortMissing()
+{
+    group("Serial port (missing COM2)");
+
+    // QEMU runs the self tests with one serial port, so COM2 fails its loopback
+    // test; writing to it must return instead of waiting for the transmitter.
+    Drivers::SerialPort com2(Drivers::SerialPort::com2);
+    CHECK(!com2.isPresent());
+    writeText(com2, "dropped");
+    CHECK(true); // reached
+}
+
+// ------------------------------------------------------------
 // CPU
 // ------------------------------------------------------------
 
@@ -851,6 +963,9 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testInterrupts(scheduler);
     testUninitialized();
     testPitWithFakeController(scheduler);
+    testConsole();
+    testVgaConsole();
+    testSerialPortMissing();
     testCpu();
     testThreadStack(scheduler, space);
     testRoundRobin(space);

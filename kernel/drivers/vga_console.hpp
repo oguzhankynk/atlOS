@@ -1,7 +1,7 @@
 /**
- * @file tty.hpp
+ * @file vga_console.hpp
  * @author Oguzhan KAYNAK
- * @brief Header file defining functions and structures related to terminal devices (TTY).
+ * @brief VGA text mode console (80x25)
  *  TTY represents a terminal device that interacts with the user.
  *  This header file defines functions that perform terminal input/output operations.
  *
@@ -18,31 +18,43 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+
 #pragma once
 
+#include <drivers/character_sink.hpp>
 #include <stddef.h>
+#include <stdint.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+namespace Drivers {
 
-/// @brief Initializes the terminal.
-/// @param
-void terminalInitialize(void);
+class VGATextConsole final : public CharacterSink {
+public:
+    static constexpr size_t width = 80;
+    static constexpr size_t height = 25;
 
-/// @brief Writes a single character to the terminal.
-/// @param c The character to write.
-void terminalPutchar(char c);
+    /// Physical (and identity mapped) address of the VGA text buffer
+    static constexpr uintptr_t textBufferAddress = 0xB8000;
 
-/// @brief Writes a buffer of characters to the terminal.
-/// @param data Pointer to the buffer containing the characters to write.
-/// @param size Number of characters to write from the buffer.
-void terminalWrite(const char* data, size_t size);
+    /**
+     * @brief Clear buffer (width * height entries) and start at the top left.
+     * The default is the real screen; tests pass memory of their own.
+     */
+    explicit VGATextConsole(volatile uint16_t* buffer = reinterpret_cast<volatile uint16_t*>(textBufferAddress));
 
-/// @brief Writes a null-terminated string to the terminal.
-/// @param data Pointer to the null-terminated string to write.
-void terminalWritestring(const char* data);
+    void write(const char* data, size_t size) override;
 
-#if defined(__cplusplus)
-} /* extern "C" */
-#endif
+    void setColor(uint8_t color) { m_color = color; }
+
+private:
+    void putChar(char c);
+    void putEntryAt(unsigned char c, uint8_t color, size_t x, size_t y);
+    void newLine();
+    void scroll();
+
+    volatile uint16_t* m_buffer;
+    size_t m_row {};
+    size_t m_column {};
+    uint8_t m_color;
+};
+
+} // namespace Drivers

@@ -53,7 +53,7 @@ kernel/
   mm/            pmm, vmm, heap (liballoc)
   sched/         scheduler, threads
   sync/          spinlock, mutex, semaphore
-  drivers/       pic, pit, serial, tty/vga, keyboard, disk/ (ATA)
+  drivers/       pic, pit, serial, vga console, keyboard, disk/ (ATA)
   dev/           device manager
   fs/            vfs, fat16
   firmware/      bios, smbios

@@ -12,7 +12,9 @@
    - enables PAE/PSE, `EFER.LME` and paging, loads the GDT and far jumps to
      `_start64`, which calls `kernelMain(mbInfo, mbMagic)`.
 3. **`kernelMain`** (`kernel/core/main.cpp`):
-   1. VGA text terminal, then COM1 serial; `printf` goes to serial from here on
+   1. constructs the `Drivers::VGATextConsole` and the COM1 `Drivers::SerialPort`
+      and binds them as the console (`Core::setConsole`): `printf` goes to the
+      screen first, to COM1 once it passed its loopback test
    2. banner, global C++ constructors (`cxx::callConstructors`)
    3. `IDT::init` (exception and IRQ vectors)
    4. checks the multiboot2 magic

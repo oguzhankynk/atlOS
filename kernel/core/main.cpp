@@ -27,7 +27,8 @@
 #include <string.h>
 
 #include <core/banner.hpp>
-#include <drivers/tty.hpp>
+#include <core/console.hpp>
+#include <drivers/vga_console.hpp>
 
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
@@ -60,6 +61,8 @@ extern void threadTaskB(Threading::Scheduler& scheduler);
 // Objects owned by kernelMain, the composition root. They are constructed
 // explicitly below, in dependency order, and handed to their users by
 // reference; nothing else reaches them through a global.
+static Cxx::Uninitialized<Drivers::VGATextConsole> s_vga;
+static Cxx::Uninitialized<Drivers::SerialPort> s_serial;
 static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
 static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
@@ -76,19 +79,15 @@ static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL 
 extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 {
 
-    // Initialize vga terminal
-    terminalInitialize();
+    // Console: the VGA screen for the first messages, then COM1
+    Drivers::VGATextConsole& vga = s_vga.construct();
+    Core::setConsole(vga);
 
-    // Set the write handler to vga terminalWrite for early debugging output
-    set_write_handler(terminalWrite);
-
-    // Initialize serial port
-    int statSerialInit = SerialPort::init();
-
-    printf("stat_serial_init: %d \n", statSerialInit);
-
-    // Set the write handler to SerialPort::writeSerial for later debugging output
-    set_write_handler(SerialPort::writeSerial);
+    Drivers::SerialPort& serial = s_serial.construct(Drivers::SerialPort::com1);
+    if (serial.isPresent())
+        Core::setConsole(serial);
+    else
+        printf("COM1 not found, the console stays on the screen\n");
 
     // Print the banner
     atlOSBanner();

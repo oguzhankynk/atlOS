@@ -1,7 +1,7 @@
 /**
  * @file serial.hpp
  * @author Oguzhan KAYNAK
- * @brief  Serial port handling functions.
+ * @brief 16550 UART serial port
  *
  * This file contains the declarations for serial port handling, including
  * initialization, reading, and writing data to serial ports.
@@ -19,45 +19,39 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+
 #pragma once
 
+#include <drivers/character_sink.hpp>
+#include <stddef.h>
 #include <stdint.h>
-/**
- * @namespace SerialPort
- * @brief Provides functions for serial port initialization, reading, and writing.
- */
-namespace SerialPort {
 
-/**
- * @brief Initializes the serial port.
- *
- * Sets up the serial port for communication. This function must be called before
- * any other serial port functions.
- *
- * @return 0 on success, -1 on failure.
- */
-int init();
+namespace Drivers {
 
-/**
- * @brief Reads a byte from the serial port.
- *
- * @return The byte of data read from the serial port.
- */
-char readSerial();
+class SerialPort final : public CharacterSink {
+public:
+    static constexpr uint16_t com1 = 0x3F8;
+    static constexpr uint16_t com2 = 0x2F8;
 
-/**
- * @brief Writes a byte to the serial port.
- *
- * @param a The byte of data to send.
- */
-void writeSerial(char a);
+    /**
+     * @brief Set up the UART at the given I/O port: 38400 baud, 8N1, FIFO on.
+     * A loopback test decides whether the port is there, see isPresent().
+     */
+    explicit SerialPort(uint16_t port);
 
-/**
- * @brief Writes bytes to the serial port.
- *
- * @param data The bytes of data to send.
- * @param size The byte number of data
- */
-void writeSerial(const char* data, size_t size);
+    /// False if the loopback test failed; writes are dropped then
+    bool isPresent() const { return m_present; }
 
-} // namespace SerialPort
+    void write(const char* data, size_t size) override;
+
+    /// Wait for and return one received byte
+    char read();
+
+private:
+    bool isTransmitEmpty() const;
+
+    uint16_t m_port;
+    bool m_present { false };
+};
+
+} // namespace Drivers
