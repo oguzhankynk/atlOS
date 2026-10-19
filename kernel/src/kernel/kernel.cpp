@@ -43,7 +43,7 @@
 
 #include <cxx/init.hpp>
 
-#include <Schduler/schduler.hpp>
+#include <Scheduler/scheduler.hpp>
 #include <Thread/thread.hpp>
 
 extern void threadTaskA();
@@ -147,7 +147,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     DeviceManager::Init();
     TestMemoryManager();
 
-    Schedular::Init();
+    Scheduler::Init();
 
     printf("Creating threads...\n");
     Threading::Thread t1(threadTaskA);
@@ -156,6 +156,6 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     printf("Threads running...\n");
     while (1)
     {
-        Schedular::yield();
+        Scheduler::yield();
     }
 }

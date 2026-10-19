@@ -22,7 +22,7 @@
 
 #include <Memory/VirtualMemory.hpp>
 #include <Memory/KHeap.h>
-#include <Schduler/schduler.hpp>
+#include <Scheduler/scheduler.hpp>
 
 namespace Threading
 {
@@ -103,7 +103,7 @@ namespace Threading
 
         while (true)
         {
-            Schedular::yield();
+            Scheduler::yield();
         }
     }
 
@@ -112,7 +112,7 @@ namespace Threading
     {
         if (addToScheduler)
         {
-            Schedular::addTask(*this);
+            Scheduler::addTask(*this);
         }
     }
 

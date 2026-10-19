@@ -1,10 +1,10 @@
-#include <Schduler/schduler.hpp>
+#include <Scheduler/scheduler.hpp>
 #include <Thread/thread.hpp>
 #include <stdio.h>
 
 extern "C" void switchTask(Threading::Registers *from, Threading::Registers *to);
 
-namespace Schedular
+namespace Scheduler
 {
     static Threading::Thread* readyQueue[16];
     static uint32_t threadCount = 0;

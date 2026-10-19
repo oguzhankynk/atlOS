@@ -56,7 +56,7 @@ file(GLOB_RECURSE KERNEL_FILES
     src/Interfaces/*.cpp
     src/kernel/*.cpp
     src/Memory/*.cpp
-    src/Schduler/*.cpp
+    src/Scheduler/*.cpp
     src/sync/*.cpp
     src/sys/*.cpp
     src/tty/*.cpp

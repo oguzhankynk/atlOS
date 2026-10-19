@@ -1,5 +1,5 @@
 /**
- * @file ctype.h
+ * @file scheduler.hpp
  * @author Oguzhan KAYNAK ()
  * @brief
  *
@@ -14,18 +14,25 @@
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
  * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
  */
 
-#ifndef BCC0F96A_7989_4F9A_AF8D_BC6D3E1E9D7B
-#define BCC0F96A_7989_4F9A_AF8D_BC6D3E1E9D7B
+#ifndef E3ADD1BE_2B74_461B_B7F8_9A289895F125
+#define E3ADD1BE_2B74_461B_B7F8_9A289895F125
 
-/**
- * @brief Converts the given character to uppercase
- *
- * @param ch character to be converted.
- * @return int Uppercase version of ch or unmodified ch if no uppercase version is listed in the current C locale.
- */
-int toupper(int ch);
+#include <stdint.h>
 
-#endif /* BCC0F96A_7989_4F9A_AF8D_BC6D3E1E9D7B */
+namespace Threading
+{
+    class Thread;
+};
+
+namespace Scheduler
+{
+    void Init();
+    void addTask(Threading::Thread &thread);
+    void switchToThread(Threading::Thread &nextThread, uint32_t indx);
+    void yield();
+
+} // namespace Scheduler
+
+#endif /* E3ADD1BE_2B74_461B_B7F8_9A289895F125 */
