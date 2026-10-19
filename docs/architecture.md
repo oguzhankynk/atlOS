@@ -18,7 +18,8 @@
    4. checks the multiboot2 magic
    5. constructs the `Memory::PhysicalMemoryManager`, fills it from the
       multiboot memory map (`Memory::populateFromMultiboot`, reserves the
-      kernel image) and sets up the VMM on top (see [memory.md](memory.md))
+      kernel image), constructs the `Memory::AddressSpace` on top and binds it
+      to the heap (see [memory.md](memory.md))
    6. `DeviceManager::init` (currently empty)
    7. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
       lines masked) and binds it to the ISR dispatcher
@@ -42,7 +43,7 @@ at their physical address and everything else at
 | `0x0 .. kernel_physical_end` | identity map from boot (multiboot info, boot tables) |
 | `0xFFFFFF0000000000` (PML4[510]) | recursive mapping of the page tables |
 | `0xFFFFFFFF80000000 .. kernel_virtual_end` | kernel image |
-| `kernel_virtual_end .. 0xFFFFFFFFFFFFFFFF` | kernel heap, thread stacks, `Memory::map` mappings (2 MB pages) |
+| `kernel_virtual_end .. 0xFFFFFFFFFFFFFFFF` | kernel heap, thread stacks, `mapPhysical` mappings (2 MB pages) |
 
 ## Interrupts
 

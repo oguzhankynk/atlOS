@@ -8,38 +8,34 @@ namespace Memory {
 
 class PhysicalMemoryManager;
 
-namespace VirtualMemory {
+/**
+ * @brief The kernel's virtual address space.
+ *
+ * 2 MB pages between kernel_virtual_end and the top of the address space,
+ * backed by blocks of the given PhysicalMemoryManager. The page tables are
+ * reached through a recursive mapping in PML4[510], which only works for the
+ * active tables (CR3): an AddressSpace works on the tables that are loaded.
+ * Today there is one, built by boot.S.
+ */
+class AddressSpace {
+public:
+    /**
+     * @brief Take over the active page tables and install the recursive mapping.
+     * @param pmm Source of the physical pages and page directories; must outlive this object.
+     */
+    explicit AddressSpace(PhysicalMemoryManager& pmm);
+
+    AddressSpace(const AddressSpace&) = delete;
+    AddressSpace& operator=(const AddressSpace&) = delete;
 
     /**
-     * @brief Page Directory Entry (PDE)
-     *
-     * For more details, see:  Intel® 64 and IA-32 Architectures Software Developer Manuals, volume 3A
-     * Table 4-17. Format of an IA-32e Page-Directory Entry that Maps a 2-MByte Page
+     * @brief Map count new 2 MB pages at a free, contiguous virtual range.
+     * Panics when there is no free range or no physical memory.
      */
-    struct PageDirectoryEntry64 {
-        uint64_t present : 1; /**< Page table present in memory */
-        uint64_t rw : 1; /**< Read/write permission */
-        uint64_t user : 1; /**< User/supervisor permission */
-        uint64_t pwt : 1; /**< Page-level write-through */
-        uint64_t pcd : 1; /**< Page-level cache disable */
-        uint64_t accessed : 1; /**< Page table accessed */
-        uint64_t dirty : 1; /**< Dirty; indicates whether software has written to the 2-MByte page referenced by this entry */
-        uint64_t pageSize : 1; /**<  Page size; must be 1 */
-        uint64_t global : 1; /**< Global; if CR4.PGE = 1, determines whether the translation is global (see Section 4.10); ignored otherwise */
-        uint64_t ignored0 : 3; /**< Ignored bits */
-        uint64_t reserved0 : 9; /**< Reserved bits */
-        uint64_t frameAddr : 31; /**< 2MB aligned >> 21 */
-        uint64_t reserved1 : 11; /**< Reserved bits */
-        uint64_t nx : 1; /**< No-execute */
-    };
+    void* allocatePages(uint64_t count);
 
-    /**
-     * @brief Set up the recursive mapping; page tables and pages come from pmm.
-     */
-    void init(PhysicalMemoryManager& pmm);
-    uint64_t mapPages(uint64_t pageIndex, uint64_t numPages);
-    void* allocatePage(uint64_t numPages);
-    int freePage(const void* addr, uint64_t numPages);
+    /// Unmap pages from allocatePages and give their physical blocks back
+    void freePages(const void* base, uint64_t count);
 
     /**
      * @brief Map a 2 MB page to a given physical address (e.g. for MMIO).
@@ -47,17 +43,22 @@ namespace VirtualMemory {
      */
     void mapPhysical(const void* virtAddr, const void* physAddr);
 
-    /**
-     * @brief Remove a mapping made by mapPhysical. The physical memory is not freed.
-     */
+    /// Remove a mapping made by mapPhysical. The physical memory is not freed.
     void unmapPhysical(const void* virtAddr);
 
     /**
      * @brief Translate a virtual address by walking the page tables.
-     *
      * @return The physical address, or nullptr if it is not mapped.
      */
-    void* virtToPhys(const void* virtAddr);
+    void* virtToPhys(const void* virtAddr) const;
 
-}; // namespace VirtualMemory
-}; // namespace Memory
+private:
+    uint64_t* getOrCreatePdEntry(uintptr_t vAddr);
+    void clearPdEntry(uintptr_t vAddr, uint64_t* pdEntry);
+    void mapPages(uint64_t pageIndex, uint64_t count);
+    void unmapPages(uint64_t pageIndex, uint64_t count);
+
+    PhysicalMemoryManager& m_pmm;
+};
+
+} // namespace Memory

@@ -21,14 +21,15 @@ void worker()
     }
 }   // returning ends the thread
 
-auto *t = new Threading::Thread(worker);   // queued right away
+auto *t = new Threading::Thread(kernelSpace, worker);   // queued right away
 ...
 delete t;                                  // owner frees it (any state but running)
 ```
 
 - Each thread gets its own 2 MB stack page from the VMM, 16 byte aligned as
   the System V ABI requires; it is freed by the destructor.
-- `Thread(entry, false)` creates a thread without queueing it.
+- The `Memory::AddressSpace` passed in provides the stack page.
+- `Thread(space, entry, false)` creates a thread without queueing it.
 - Returning from the entry point calls `Scheduler::exit()`: the thread is
   taken out of the run queue and never runs again. The `Thread` object stays
   valid until its owner deletes it.

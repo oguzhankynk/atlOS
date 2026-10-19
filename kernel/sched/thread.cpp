@@ -29,8 +29,9 @@ static uint16_t s_taskIdCounter {};
 
 class ThreadImpl {
 public:
-    ThreadImpl(EntryPoint entry); // Constructor to initialize the thread
+    ThreadImpl(Memory::AddressSpace& addressSpace, EntryPoint entry); // Constructor to initialize the thread
     ~ThreadImpl(); // Gives the stack page back
+    Memory::AddressSpace& m_addressSpace; // Owner of the stack page
     TCB m_tcb {}; // Thread Control Block (TCB) to store thread context
     EntryPoint m_entry {}; // Entry point function for the thread
     char m_name[16] {}; // Thread name (for debugging purposes)
@@ -39,12 +40,13 @@ public:
     static void threadStartPoint(void* obj); // Static function to start the thread
 };
 
-ThreadImpl::ThreadImpl(EntryPoint entry)
-    : m_entry { entry }
+ThreadImpl::ThreadImpl(Memory::AddressSpace& addressSpace, EntryPoint entry)
+    : m_addressSpace(addressSpace)
+    , m_entry { entry }
 {
     // A page of its own keeps the stack 2 MB aligned (so the top is 16 byte
-    // aligned as the ABI needs) and out of the heap. allocatePage panics on OOM.
-    m_stack = static_cast<uint8_t*>(Memory::VirtualMemory::allocatePage(stackSize / Memory::pageSize2Mb));
+    // aligned as the ABI needs) and out of the heap. allocatePages panics on OOM.
+    m_stack = static_cast<uint8_t*>(m_addressSpace.allocatePages(stackSize / Memory::pageSize2Mb));
 
     snprintf(m_name, 16, "t%d", s_taskIdCounter++);
 
@@ -90,7 +92,7 @@ ThreadImpl::ThreadImpl(EntryPoint entry)
 
 ThreadImpl::~ThreadImpl()
 {
-    Memory::VirtualMemory::freePage(m_stack, stackSize / Memory::pageSize2Mb);
+    m_addressSpace.freePages(m_stack, stackSize / Memory::pageSize2Mb);
 }
 
 void ThreadImpl::threadStartPoint(void* obj)
@@ -111,8 +113,8 @@ void ThreadImpl::threadStartPoint(void* obj)
     Scheduler::exit();
 }
 
-Thread::Thread(EntryPoint entry, bool addToScheduler)
-    : m_impl { new ThreadImpl(entry) }
+Thread::Thread(Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler)
+    : m_impl { new ThreadImpl(addressSpace, entry) }
 {
     if (addToScheduler) {
         Scheduler::addTask(*this);

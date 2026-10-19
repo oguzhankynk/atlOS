@@ -296,7 +296,7 @@ static void testPmmKernel(PhysicalMemoryManager& pmm)
 // VMM
 // ------------------------------------------------------------
 
-static void testVmm(PhysicalMemoryManager& pmm)
+static void testVmm(PhysicalMemoryManager& pmm, AddressSpace& space)
 {
     group("VMM");
     uint64_t freeBefore = pmm.freeBlockCount();
@@ -304,7 +304,7 @@ static void testVmm(PhysicalMemoryManager& pmm)
     // Allocate, touch the first and last word of every page, free
     constexpr uint64_t n = 8;
     constexpr uint64_t words = pageSize2Mb / sizeof(uint64_t);
-    uint64_t* base = (uint64_t*)VirtualMemory::allocatePage(n);
+    uint64_t* base = (uint64_t*)space.allocatePages(n);
     CHECK((uintptr_t)base >= (uintptr_t)&kernel_virtual_end);
     CHECK(pmm.freeBlockCount() == freeBefore - n);
 
@@ -319,40 +319,40 @@ static void testVmm(PhysicalMemoryManager& pmm)
     }
     CHECK(intact);
 
-    VirtualMemory::freePage(base, n);
+    space.freePages(base, n);
     CHECK(pmm.freeBlockCount() == freeBefore);
 
     // The freed range is found again
-    void* again = VirtualMemory::allocatePage(n);
+    void* again = space.allocatePages(n);
     CHECK(again == base);
-    VirtualMemory::freePage(again, n);
+    space.freePages(again, n);
 
     // Translation: kernel image, low identity map, unmapped
     uintptr_t kernelVirt = (uintptr_t)&run;
-    CHECK((uintptr_t)virtToPhysAddr((void*)kernelVirt) == kernelVirt - KERNEL_VIRTUAL_LOAD_OFFSET);
-    CHECK(virtToPhysAddr((void*)0x123456) == (void*)0x123456);
-    CHECK(virtToPhysAddr((void*)0x0000700000000000ULL) == nullptr);
+    CHECK((uintptr_t)space.virtToPhys((void*)kernelVirt) == kernelVirt - KERNEL_VIRTUAL_LOAD_OFFSET);
+    CHECK(space.virtToPhys((void*)0x123456) == (void*)0x123456);
+    CHECK(space.virtToPhys((void*)0x0000700000000000ULL) == nullptr);
 
     // Map a second view of a heap page. The alias lives in PDPT[511],
     // which has no PD yet, so this also creates and frees a PD.
-    uint64_t* page = (uint64_t*)VirtualMemory::allocatePage(1);
-    uintptr_t phys = (uintptr_t)virtToPhysAddr(page);
+    uint64_t* page = (uint64_t*)space.allocatePages(1);
+    uintptr_t phys = (uintptr_t)space.virtToPhys(page);
     CHECK(phys != 0 && aboveKernel((void*)phys));
-    CHECK((uintptr_t)virtToPhysAddr(page + 3) == phys + 3 * sizeof(uint64_t));
+    CHECK((uintptr_t)space.virtToPhys(page + 3) == phys + 3 * sizeof(uint64_t));
 
     uint64_t* alias = (uint64_t*)0xFFFFFFFFF0000000ULL;
-    CHECK(virtToPhysAddr(alias) == nullptr);
-    map((void*)phys, alias);
-    CHECK((uintptr_t)virtToPhysAddr(alias) == phys);
+    CHECK(space.virtToPhys(alias) == nullptr);
+    space.mapPhysical(alias, (void*)phys);
+    CHECK((uintptr_t)space.virtToPhys(alias) == phys);
 
     page[3] = 0x1122334455667788ULL;
     CHECK(alias[3] == 0x1122334455667788ULL);
 
-    unmap(alias);
-    CHECK(virtToPhysAddr(alias) == nullptr);
+    space.unmapPhysical(alias);
+    CHECK(space.virtToPhys(alias) == nullptr);
     CHECK(page[3] == 0x1122334455667788ULL);
 
-    VirtualMemory::freePage(page, 1);
+    space.freePages(page, 1);
 
     // Includes the PD frame pool created for the alias
     CHECK(pmm.freeBlockCount() == freeBefore);
@@ -622,11 +622,11 @@ static bool waitForExit(Threading::Thread& thread, uint64_t maxMs)
     return thread.getTCB().state == Threading::ThreadState::Terminated;
 }
 
-static void testThreadStack()
+static void testThreadStack(AddressSpace& space)
 {
     group("Thread stack");
 
-    Threading::Thread* t = new Threading::Thread(counterA, false);
+    Threading::Thread* t = new Threading::Thread(space, counterA, false);
 
     // threadStartPoint is entered by "ret", so rsp must look like right after a call
     uintptr_t sp = t->getTCB().regs.rsp;
@@ -634,18 +634,18 @@ static void testThreadStack()
 
     // The stack is a page of its own, given back when the thread is deleted
     uintptr_t page = sp & ~(uintptr_t)(pageSize2Mb - 1);
-    CHECK(virtToPhysAddr((void*)page) != nullptr);
+    CHECK(space.virtToPhys((void*)page) != nullptr);
     delete t;
-    CHECK(virtToPhysAddr((void*)page) == nullptr);
+    CHECK(space.virtToPhys((void*)page) == nullptr);
 }
 
-static void testRoundRobin()
+static void testRoundRobin(AddressSpace& space)
 {
     group("Scheduler round robin");
     uint32_t tasksBefore = Scheduler::taskCount();
 
-    Threading::Thread* a = new Threading::Thread(counterA);
-    Threading::Thread* b = new Threading::Thread(counterB);
+    Threading::Thread* a = new Threading::Thread(space, counterA);
+    Threading::Thread* b = new Threading::Thread(space, counterB);
     CHECK(Scheduler::taskCount() == tasksBefore + 2);
 
     // Queue is [boot, A, B]: each yield from here runs A and B once
@@ -675,7 +675,7 @@ static void sleeper()
     s_sleptMs = Scheduler::ticks() - t0;
 }
 
-static void testSleep()
+static void testSleep(AddressSpace& space)
 {
     group("Scheduler sleep");
 
@@ -687,7 +687,7 @@ static void testSleep()
     CHECK(waited < 120);
 
     // A sleeping thread is skipped until its time is up
-    Threading::Thread* t = new Threading::Thread(sleeper);
+    Threading::Thread* t = new Threading::Thread(space, sleeper);
     CHECK(waitForExit(*t, 1000));
     CHECK(s_sleptMs >= 50);
     CHECK(s_sleptMs < 150);
@@ -703,11 +703,11 @@ static void blocker()
     s_blockStage = 2;
 }
 
-static void testBlock()
+static void testBlock(AddressSpace& space)
 {
     group("Scheduler block");
 
-    Threading::Thread* t = new Threading::Thread(blocker);
+    Threading::Thread* t = new Threading::Thread(space, blocker);
     for (int i = 0; i < 5; i++)
         Scheduler::yield();
 
@@ -728,12 +728,12 @@ static void neverRuns()
     s_ran = true;
 }
 
-static void testRemove()
+static void testRemove(AddressSpace& space)
 {
     group("Scheduler remove");
 
     // Deleting a queued thread before it ran takes it out of the queue
-    Threading::Thread* t = new Threading::Thread(neverRuns);
+    Threading::Thread* t = new Threading::Thread(space, neverRuns);
     uint32_t tasks = Scheduler::taskCount();
     delete t;
     CHECK(Scheduler::taskCount() == tasks - 1);
@@ -743,7 +743,7 @@ static void testRemove()
     CHECK(!s_ran);
 }
 
-int run(PhysicalMemoryManager& pmm)
+int run(PhysicalMemoryManager& pmm, AddressSpace& space)
 {
     printf("[SELFTEST] start\n");
 
@@ -751,17 +751,17 @@ int run(PhysicalMemoryManager& pmm)
     testPmmFrames();
     testPmmMultiboot();
     testPmmKernel(pmm);
-    testVmm(pmm);
+    testVmm(pmm, space);
     testHeap();
     testInterrupts();
     testUninitialized();
     testPitWithFakeController();
     testCpu();
-    testThreadStack();
-    testRoundRobin();
-    testSleep();
-    testBlock();
-    testRemove();
+    testThreadStack(space);
+    testRoundRobin(space);
+    testSleep(space);
+    testBlock(space);
+    testRemove(space);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;

@@ -64,10 +64,11 @@ The kernel is clean: new warnings should be fixed, not suppressed. Code inside
 
 Agreed direction, introduced subsystem by subsystem. Done: the interrupt
 controller and timer (`Drivers::PIC`, `Drivers::PIT` behind
-`InterruptController` / `TickSource`) and the physical memory manager
-(`Memory::PhysicalMemoryManager`), all built by `kernelMain` in
-`Cxx::Uninitialized` storage. Still to do: VMM, heap, scheduler and threads,
-console/logger, which use namespaces with file scope state today.
+`InterruptController` / `TickSource`), the physical memory manager
+(`Memory::PhysicalMemoryManager`) and the kernel address space
+(`Memory::AddressSpace`), all built by `kernelMain` in `Cxx::Uninitialized`
+storage. Still to do: heap, scheduler and threads, console/logger, which use
+namespaces with file scope state today.
 
 - **No singletons.** Each subsystem is a class that owns its state
   (`PhysicalMemoryManager`, `AddressSpace`, `Heap`, `Scheduler`, drivers);

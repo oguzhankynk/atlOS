@@ -10,6 +10,7 @@
 #pragma once
 
 namespace Memory {
+class AddressSpace;
 class PhysicalMemoryManager;
 }
 
@@ -19,10 +20,11 @@ namespace SelfTest {
  *
  * @param pmm The kernel's physical memory manager, used for leak checks around
  *            the VMM, heap and thread tests.
+ * @param kernelSpace The kernel's address space (VMM tests, thread stacks).
  *
  * @return Number of failed checks.
  */
-int run(Memory::PhysicalMemoryManager& pmm);
+int run(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace);
 
 /**
  * @brief Exit QEMU through the isa-debug-exit device (iobase 0xf4).

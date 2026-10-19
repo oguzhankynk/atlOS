@@ -20,6 +20,10 @@
 
 #include <stdint.h>
 
+namespace Memory {
+class AddressSpace;
+}
+
 namespace Threading {
 enum class ThreadState {
     Running,
@@ -54,7 +58,11 @@ using EntryPoint = void (*)(void);
 
 class Thread {
 public:
-    Thread(EntryPoint entry, bool addToScheduler = true);
+    /**
+     * @param addressSpace Where the thread's 2 MB stack page is allocated; must
+     *                     outlive the thread.
+     */
+    Thread(Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler = true);
 
     Thread(const Thread&) = delete;
 

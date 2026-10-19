@@ -21,10 +21,4 @@ void printLayout();
  */
 void populateFromMultiboot(PhysicalMemoryManager& pmm, uintptr_t mbInfoAddr);
 
-void* virtToPhysAddr(void* virtualaddr);
-
-void map(void* physicalAddr, void* virtualAddr);
-
-void unmap(void* virtualaddr);
-
 } // namespace Memory

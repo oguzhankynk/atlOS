@@ -1,7 +1,27 @@
+// Hooks that connect liballoc (third party) to the kernel's address space.
+
+#include <core/panic.hpp>
+#include <mm/heap.hpp>
 #include <mm/liballoc/liballoc_1_1.h>
-#include <mm/memory.hpp>
 #include <mm/vmm.hpp>
 
+// Bound by kernelMain, see Memory::setHeapAddressSpace
+static Memory::AddressSpace* s_heapAddressSpace {};
+
+void Memory::setHeapAddressSpace(AddressSpace& space)
+{
+    s_heapAddressSpace = &space;
+}
+
+static Memory::AddressSpace& heapAddressSpace()
+{
+    if (!s_heapAddressSpace)
+        kernelPanic("kmalloc before Memory::setHeapAddressSpace");
+    return *s_heapAddressSpace;
+}
+
+// The scheduler is cooperative and interrupt handlers do not allocate, so
+// liballoc needs no lock.
 int liballoc_lock()
 {
     return 0;
@@ -12,27 +32,19 @@ int liballoc_unlock()
     return 0;
 }
 
-/** This is the hook into the local system which allocates pages. It
- * accepts an integer parameter which is the number of pages
- * required.  The page size was set up in the liballoc_init function.
- *
- * \return NULL if the pages were not allocated.
- * \return A pointer to the allocated memory.
+/** Allocate num_pages pages (of the page size set up in liballoc_init).
+ * \return NULL if the pages were not allocated (the address space panics instead).
  */
-void *liballoc_alloc(size_t num_pages)
+void* liballoc_alloc(size_t num_pages)
 {
-    return Memory::VirtualMemory::allocatePage(num_pages);
+    return heapAddressSpace().allocatePages(num_pages);
 }
 
-/** This frees previously allocated memory. The void* parameter passed
- * to the function is the exact same value returned from a previous
- * liballoc_alloc call.
- *
- * The integer value is the number of pages to free.
- *
+/** Free pages returned by liballoc_alloc.
  * \return 0 if the memory was successfully freed.
  */
-extern int liballoc_free(void *addr, size_t num_pages)
+int liballoc_free(void* addr, size_t num_pages)
 {
-    return Memory::VirtualMemory::freePage(addr, (uint64_t)num_pages);
+    heapAddressSpace().freePages(addr, (uint64_t)num_pages);
+    return 0;
 }

@@ -5,7 +5,6 @@
 
 #include <mm/constants.hpp>
 #include <mm/pmm.hpp>
-#include <mm/vmm.hpp>
 
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/idt/handlers.hpp>
@@ -111,33 +110,6 @@ void populateFromMultiboot(PhysicalMemoryManager& pmm, uintptr_t mbInfoAddr)
 
     // GRUB may place the multiboot info outside the kernel image
     pmm.reserveRegion((void*)mbInfoAddr, totalSize);
-}
-
-/**
- * @brief Converts a virtual address to a physical address.
- *
- * @param virtualaddr The virtual address to be converted.
- * @return void* The corresponding physical address, or nullptr if the address is not present.
- */
-void* virtToPhysAddr(void* virtualaddr)
-{
-    return VirtualMemory::virtToPhys(virtualaddr);
-}
-
-/**
- * @brief Map a 2 MB page at virtualaddr to physicaladdr. Both must be 2 MB aligned.
- */
-void map(void* physicaladdr, void* virtualaddr)
-{
-    VirtualMemory::mapPhysical(virtualaddr, physicaladdr);
-}
-
-/**
- * @brief Remove the 2 MB page containing virtualaddr. The physical memory is not freed.
- */
-void unmap(void* virtualaddr)
-{
-    VirtualMemory::unmapPhysical(virtualaddr);
 }
 
 } // namespace Memory

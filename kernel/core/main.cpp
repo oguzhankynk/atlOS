@@ -61,6 +61,7 @@ extern void threadTaskB();
 // explicitly below, in dependency order, and handed to their users by
 // reference; nothing else reaches them through a global.
 static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
+static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
 
@@ -109,7 +110,10 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Memory::printLayout();
     Memory::PhysicalMemoryManager& pmm = s_pmm.construct(s_pmmBitmap, sizeof(s_pmmBitmap));
     Memory::populateFromMultiboot(pmm, mbInfo);
-    Memory::VirtualMemory::init(pmm);
+    Memory::AddressSpace& kernelSpace = s_kernelSpace.construct(pmm);
+
+    // kmalloc gets its pages from the kernel address space (liballoc hooks)
+    Memory::setHeapAddressSpace(kernelSpace);
 
     DeviceManager::init();
 
@@ -125,7 +129,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Scheduler::init(pit);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm);
+    int failed = SelfTest::run(pmm, kernelSpace);
     SelfTest::exitQemu(failed == 0 ? 0 : 1);
 
     // Only reached when QEMU has no isa-debug-exit device
@@ -135,8 +139,8 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 #endif
 
     printf("Creating threads...\n");
-    Threading::Thread t1(threadTaskA);
-    Threading::Thread t2(threadTaskB);
+    Threading::Thread t1(kernelSpace, threadTaskA);
+    Threading::Thread t2(kernelSpace, threadTaskB);
 
     printf("Threads running...\n");
     while (1) {

@@ -35,7 +35,7 @@ serial log is written to `build/selftest/selftest.log`.
 | PMM frames (isolated) | alignment, uniqueness, reuse, double free, pools give blocks back, the pool limit |
 | PMM from a multiboot memory map | `populateFromMultiboot` on a fake multiboot2 info: rounding, kernel reservation |
 | PMM (kernel instance) | the real manager hands out blocks and frames above the kernel, no leak |
-| VMM | allocate/write/free, range reuse, `virtToPhysAddr`, `map`/`unmap` alias in a new page directory, no leak |
+| VMM | allocate/write/free, range reuse, `virtToPhys`, `mapPhysical`/`unmapPhysical` alias in a new page directory, no leak |
 | Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
 | Uninitialized | `Cxx::Uninitialized<T>` constructs once, on demand, with the given arguments |
