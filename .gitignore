@@ -1,4 +1,4 @@
-﻿libc/build
+libc/build
 kernel/build
 sysroot/
 VirtualDisk/disk.img
