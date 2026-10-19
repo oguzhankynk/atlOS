@@ -15,6 +15,7 @@ target_compile_options(k PRIVATE
     -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic
     -fno-unwind-tables -fno-asynchronous-unwind-tables
     -mcmodel=large -mno-red-zone
+    ${ATLOS_NO_SIMD_FLAGS}
 )
 
 set_target_properties(k PROPERTIES
@@ -27,6 +28,8 @@ target_compile_definitions(k PRIVATE
     __x86_64__
     __is_libk
     __is_libc
+    # %f/%e/%g need floating point, i.e. SSE on x86_64; they print the letter instead
+    PRINTF_DISABLE_SUPPORT_FLOAT
 )
 
 # C headers for everyone, the C++ wrappers (<cstdint>, <new>, ...) only for users

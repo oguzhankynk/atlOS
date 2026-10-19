@@ -19,7 +19,7 @@ target_compile_options(kernel_flags INTERFACE
     -Wno-sign-compare -Wno-implicit-fallthrough
     -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic
     -fno-unwind-tables -fno-asynchronous-unwind-tables
-    -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+    -mcmodel=large -mno-red-zone ${ATLOS_NO_SIMD_FLAGS}
     $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>
 )
 
@@ -73,12 +73,21 @@ add_dependencies(atlOS.kernel crts)
 target_link_options(atlOS.kernel PRIVATE
     -T${ARCHDIR}/linker.ld
     -nostdlib -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit
-    -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+    -mcmodel=large -mno-red-zone ${ATLOS_NO_SIMD_FLAGS}
     -z max-page-size=0x1000
     "-Wl,--defsym,KERNEL_PHYSICAL_START=${KERNEL_PHYSICAL_START}"
     "-Wl,--defsym,KERNEL_VIRTUAL_LOAD_OFFSET=${KERNEL_VIRTUAL_LOAD_OFFSET}"
 )
 set_target_properties(atlOS.kernel PROPERTIES LINK_DEPENDS ${ARCHDIR}/linker.ld)
+
+# Fail the build if any SIMD instruction made it into the image (see ATLOS_NO_SIMD_FLAGS)
+add_custom_command(TARGET atlOS.kernel POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+        -DOBJDUMP=${CMAKE_OBJDUMP}
+        -DIMAGE=$<TARGET_FILE:atlOS.kernel>
+        -P ${CMAKE_SOURCE_DIR}/cmake/check-no-simd.cmake
+    VERBATIM
+)
 
 # ------------------------------------------------------------
 # Link order: crti crtbegin boot <objects> <libs> crtend crtn

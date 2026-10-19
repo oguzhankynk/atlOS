@@ -66,5 +66,9 @@ initialized yet, so key presses only reach the default handler).
   (`Memory::PhysicalMemory`, `Scheduler`, `Threading`, `PIC`, ...).
 - `libc/` is the freestanding C library (`libk`) that the kernel links; its
   public headers are in `libc/include`.
-- Kernel code is built without exceptions, RTTI, SSE or the red zone
-  (`kernel/CMakeLists.txt`).
+- Kernel code is built without exceptions, RTTI or the red zone.
+- **No SIMD:** the kernel and libc are built with `-mno-mmx -mno-sse -mno-sse2`
+  (`ATLOS_NO_SIMD_FLAGS`). Boot does not enable SSE and neither the context
+  switch nor the ISRs save SIMD state, so the build fails if the linked image
+  contains an MMX/SSE/AVX instruction (`cmake/check-no-simd.cmake`). For the
+  same reason `printf` has no `%f`/`%e`/`%g`.

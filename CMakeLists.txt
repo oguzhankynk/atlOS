@@ -9,6 +9,11 @@ endif()
 # Run the in-kernel self tests instead of the demo threads (preset "selftest")
 option(ATLOS_SELFTEST "Build the kernel in self test mode" OFF)
 
+# No MMX/SSE/AVX anywhere in the kernel image (kernel and libc): boot does not
+# enable SSE in CR4, and neither the context switch nor the ISRs save SIMD state.
+# kernel/CMakeLists.txt checks the linked image for SIMD instructions.
+set(ATLOS_NO_SIMD_FLAGS -mno-mmx -mno-sse -mno-sse2)
+
 add_subdirectory(libc)
 add_subdirectory(kernel)
 
