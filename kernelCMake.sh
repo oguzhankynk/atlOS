@@ -48,14 +48,6 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "Running Make Install..."
-make install
-
-if [ $? -ne 0 ]; then
-  echo "Make install failed. Exiting..."
-  exit 1
-fi
-
 echo "Compilation completed successfully."
 
 cd $SCRIPT_DIR

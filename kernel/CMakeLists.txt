@@ -46,31 +46,20 @@ endif()
 set(ARCHDIR ${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64)
 
 file(GLOB_RECURSE KERNEL_FILES
-#   ${ARCHDIR}/**/*.c 
-#   ${ARCHDIR}/**/*.cpp
-#   ${ARCHDIR}/IDT/ISR.S
-#   ${ARCHDIR}/cpu/context.S
-#   src/**/*.c 
-#   src/**/*.cpp
-    src/banner/*.cpp
-    src/BIOS/*.cpp
-    src/cxx/*.cpp
-    src/Device/*.cpp
-    src/Drivers/*.cpp
-    src/FileSystem/*.cpp
-    src/hardware/*.cpp 
-    src/Interfaces/*.cpp
-    src/kernel/*.cpp
-    src/Memory/*.cpp
-    src/Scheduler/*.cpp
-    src/sync/*.cpp
-    src/sys/*.cpp
-    src/tty/*.cpp
-    src/Thread/*.cpp
-    src/tests/*.cpp
-    ${ARCHDIR}/GDT/gdt.cpp
-    ${ARCHDIR}/IDT/idt.cpp
-    ${ARCHDIR}/IDT/ISR.S
+    core/*.cpp
+    cxx/*.cpp
+    dev/*.cpp
+    drivers/*.cpp
+    firmware/*.cpp
+    fs/*.cpp
+    mm/*.cpp
+    sched/*.cpp
+    sync/*.cpp
+    tests/*.cpp
+    ${ARCHDIR}/gdt/*.cpp
+    ${ARCHDIR}/idt/*.cpp
+    ${ARCHDIR}/idt/isr.S
+    ${ARCHDIR}/io/*.cpp
     ${ARCHDIR}/cpu/context.S
 )
 
@@ -79,7 +68,7 @@ message(STATUS "Found kernel objects: ${KERNEL_FILES} ")
 
 # Add include directories for the project
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${SYSROOT}/usr/include
     ${SYSROOT}/usr/include/cpp
 )
@@ -163,9 +152,3 @@ add_custom_command(
     COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/atlOS.kernel ${SYSROOT}/boot
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
-
-# Install header files from include/kernel/public to SYSROOT/usr/include/public
-install( DIRECTORY include/kernel DESTINATION ${SYSROOT}/usr/include )
-
-# Install header files from include/common to SYSROOT/usr/include/common
-install(DIRECTORY include/common DESTINATION ${SYSROOT}/usr/include)

@@ -18,8 +18,8 @@
  *
  */
 #include <stdio.h>
-#include <arch/x86_4/cpu/cpu.hpp>
-#include <arch/x86_4/cpu/cpuid.h>
+#include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/cpuid.hpp>
 
 static void printCPUFeatures(const CPUFeatures *features);
 static void printProcessorType(const ProcessorType *processor);

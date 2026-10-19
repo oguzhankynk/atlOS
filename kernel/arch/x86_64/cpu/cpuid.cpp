@@ -17,7 +17,7 @@
  *
  *
  */
-#include <arch/x86_4/cpu/cpuid.h>
+#include <arch/x86_64/cpu/cpuid.hpp>
 
 void cpuid(unsigned int value, unsigned int *eax, unsigned int *ebx, unsigned int *ecx, unsigned int *edx)
 {
