@@ -3,7 +3,7 @@
  * @author Oguzhan KAYNAK
  * @brief Declaration of kernel panic situations function.
  *
- * This file contains the `kernel_panic` function, which is responsible for handling critical errors
+ * This file contains the `kernelPanic` function, which is responsible for handling critical errors
  * that may occur in the kernel and halting the system gracefully while displaying warnings.
  *
  * Copyright © 2024 Oguzhan KAYNAK
@@ -33,8 +33,8 @@ extern "C"
      * @param str Message to be displayed in case of a kernel panic.
      * @return void
      */
-    void kernel_panic(const char *str);
-    void kernel_panic_assert(bool condition);
+    void kernelPanic(const char *str);
+    void kernelPanicAssert(bool condition);
 
 #if defined(__cplusplus)
 } /* extern "C" */

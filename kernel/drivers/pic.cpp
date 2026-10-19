@@ -26,19 +26,19 @@ namespace PIC
 {
 
     // I/O port addresses for the master and slave PICs
-    static constexpr uint16_t MASTER_COMMAND_PORT = 0x20;
-    static constexpr uint16_t MASTER_DATA_PORT = 0x21;
-    static constexpr uint16_t SLAVE_COMMAND_PORT = 0xA0;
-    static constexpr uint16_t SLAVE_DATA_PORT = 0xA1;
+    static constexpr uint16_t masterCommandPort = 0x20;
+    static constexpr uint16_t masterDataPort = 0x21;
+    static constexpr uint16_t slaveCommandPort = 0xA0;
+    static constexpr uint16_t slaveDataPort = 0xA1;
 
     /**
      * @brief Sends a command to the master PIC.
      *
      * @param command
      */
-    static void send_master_command(uint8_t command)
+    static void sendMasterCommand(uint8_t command)
     {
-        IOPort::outportb(MASTER_COMMAND_PORT, command);
+        IOPort::outportb(masterCommandPort, command);
     }
 
     /**
@@ -46,9 +46,9 @@ namespace PIC
      *
      * @param command
      */
-    static void send_slave_command(uint8_t command)
+    static void sendSlaveCommand(uint8_t command)
     {
-        IOPort::outportb(SLAVE_COMMAND_PORT, command);
+        IOPort::outportb(slaveCommandPort, command);
     }
 
     /**
@@ -56,9 +56,9 @@ namespace PIC
      *
      * @param data
      */
-    static void write_master_data(uint8_t data)
+    static void writeMasterData(uint8_t data)
     {
-        IOPort::outportb(MASTER_DATA_PORT, data);
+        IOPort::outportb(masterDataPort, data);
     }
 
     /**
@@ -66,9 +66,9 @@ namespace PIC
      *
      * @param data
      */
-    static void write_slave_data(uint8_t data)
+    static void writeSlaveData(uint8_t data)
     {
-        IOPort::outportb(SLAVE_DATA_PORT, data);
+        IOPort::outportb(slaveDataPort, data);
     }
 
     /**
@@ -77,46 +77,46 @@ namespace PIC
      * This function initializes the master and slave PICs with the desired settings.
      * It performs the initial configuration of the PICs for use in the system.
      */
-    void Init()
+    void init()
     {
-        // IOPort::DisableInterrupts();
+        // IOPort::disableInterrupts();
 
         // Initialization command words (ICW) for master and slave PICs
-        uint8_t master_icw1 = 0x11; // ICW1: Start initialization, edge triggered, cascade mode
-        uint8_t slave_icw1 = 0x11;  // ICW1: Start initialization, edge triggered, cascade mode
+        uint8_t masterIcw1 = 0x11; // ICW1: Start initialization, edge triggered, cascade mode
+        uint8_t slaveIcw1 = 0x11;  // ICW1: Start initialization, edge triggered, cascade mode
 
         // ICW2: Base interrupt vector offset for master and slave
-        uint8_t master_icw2 = 0x20; // Base interrupt vector offset for master (0x20)
-        uint8_t slave_icw2 = 0x28;  // Base interrupt vector offset for slave (0x28)
+        uint8_t masterIcw2 = 0x20; // Base interrupt vector offset for master (0x20)
+        uint8_t slaveIcw2 = 0x28;  // Base interrupt vector offset for slave (0x28)
 
         // ICW3: Master to slave connection details
-        uint8_t master_icw3 = 0x04; // Master PIC connected to slave at IRQ2
-        uint8_t slave_icw3 = 0x02;  // Slave PIC connected to master at IRQ2
+        uint8_t masterIcw3 = 0x04; // Master PIC connected to slave at IRQ2
+        uint8_t slaveIcw3 = 0x02;  // Slave PIC connected to master at IRQ2
 
         // ICW4: Normal EOI, 8086/88 mode
         uint8_t icw4 = 0x01; // Normal EOI, 8086 mode
 
         // Send initialization command words to master and slave PICs
-        IOPort::outportb(MASTER_COMMAND_PORT, master_icw1);
-        IOPort::outportb(SLAVE_COMMAND_PORT, slave_icw1);
+        IOPort::outportb(masterCommandPort, masterIcw1);
+        IOPort::outportb(slaveCommandPort, slaveIcw1);
 
-        IOPort::outportb(MASTER_DATA_PORT, master_icw2);
-        IOPort::outportb(SLAVE_DATA_PORT, slave_icw2);
+        IOPort::outportb(masterDataPort, masterIcw2);
+        IOPort::outportb(slaveDataPort, slaveIcw2);
 
-        IOPort::outportb(MASTER_DATA_PORT, master_icw3);
-        IOPort::outportb(SLAVE_DATA_PORT, slave_icw3);
+        IOPort::outportb(masterDataPort, masterIcw3);
+        IOPort::outportb(slaveDataPort, slaveIcw3);
 
-        IOPort::outportb(MASTER_DATA_PORT, icw4);
-        IOPort::outportb(SLAVE_DATA_PORT, icw4);
+        IOPort::outportb(masterDataPort, icw4);
+        IOPort::outportb(slaveDataPort, icw4);
 
         // Mask all interrupts on master and slave PICs initially
-        IOPort::outportb(MASTER_DATA_PORT, 0xFF); // Mask all interrupts
-        IOPort::outportb(SLAVE_DATA_PORT, 0xFF);  // Mask all interrupts
+        IOPort::outportb(masterDataPort, 0xFF); // Mask all interrupts
+        IOPort::outportb(slaveDataPort, 0xFF);  // Mask all interrupts
 
-        IOPort::outportb(MASTER_DATA_PORT, ~(0x2)); // Mask all interrupts
-        IOPort::outportb(SLAVE_DATA_PORT, ~(0x2));  // Mask all interrupts
+        IOPort::outportb(masterDataPort, ~(0x2)); // Mask all interrupts
+        IOPort::outportb(slaveDataPort, ~(0x2));  // Mask all interrupts
 
-        IOPort::EnableInterrupts();
+        IOPort::enableInterrupts();
     }
 
     /**
@@ -124,17 +124,17 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) that has been serviced.
      */
-    void send_eoi(IRQ irq)
+    void sendEoi(IRQ irq)
     {
 
         if (static_cast<uint8_t>(irq) >= 8)
         {
             // Send EOI to master PIC
-            IOPort::outportb(SLAVE_COMMAND_PORT, 0x20);
+            IOPort::outportb(slaveCommandPort, 0x20);
         }
 
         // Send EOI to slave PIC
-        IOPort::outportb(MASTER_COMMAND_PORT, 0x20);
+        IOPort::outportb(masterCommandPort, 0x20);
     }
 
     /**
@@ -142,14 +142,14 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) to mask.
      */
-    void mask_master_irq(IRQ irq)
+    void maskMasterIrq(IRQ irq)
     {
         // Read current mask
-        uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
+        uint8_t mask = IOPort::inportb(masterDataPort);
         // Set the bit for the specified IRQ to mask it
         mask |= (1 << static_cast<uint8_t>(irq));
         // Write updated mask
-        IOPort::outportb(MASTER_DATA_PORT, mask);
+        IOPort::outportb(masterDataPort, mask);
     }
 
     /**
@@ -157,14 +157,14 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) to mask.
      */
-    void mask_slave_irq(IRQ irq)
+    void maskSlaveIrq(IRQ irq)
     {
         // Read the current interrupt mask
-        uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
+        uint8_t mask = IOPort::inportb(slaveDataPort);
         // Mask the specified IRQ by setting the appropriate bit
         mask |= (1 << static_cast<uint8_t>(irq));
         // Write the updated mask back to the slave PIC
-        IOPort::outportb(SLAVE_DATA_PORT, mask);
+        IOPort::outportb(slaveDataPort, mask);
     }
 
     /**
@@ -172,14 +172,14 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) to unmask.
      */
-    void unmask_master_irq(IRQ irq)
+    void unmaskMasterIrq(IRQ irq)
     {
         // Read the current interrupt mask
-        uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
+        uint8_t mask = IOPort::inportb(masterDataPort);
         // Unmask the specified IRQ by clearing the appropriate bit
         mask &= ~(1 << static_cast<uint8_t>(irq));
         // Write the updated mask back to the master PIC
-        IOPort::outportb(MASTER_DATA_PORT, mask);
+        IOPort::outportb(masterDataPort, mask);
     }
 
     /**
@@ -187,14 +187,14 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) to unmask.
      */
-    void unmask_slave_irq(IRQ irq)
+    void unmaskSlaveIrq(IRQ irq)
     {
         // Read the current interrupt mask
-        uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
+        uint8_t mask = IOPort::inportb(slaveDataPort);
         // Unmask the specified IRQ by clearing the appropriate bit
         mask &= ~(1 << static_cast<uint8_t>(irq));
         // Write the updated mask back to the slave PIC
-        IOPort::outportb(SLAVE_DATA_PORT, mask);
+        IOPort::outportb(slaveDataPort, mask);
     }
 
     /**
@@ -202,21 +202,21 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) to disable.
      */
-    void irq_disable(IRQ irq)
+    void irqDisable(IRQ irq)
     {
         if (static_cast<uint8_t>(irq) < 8)
         {
             // IRQ is in the range of the master PIC
-            uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
+            uint8_t mask = IOPort::inportb(masterDataPort);
             mask |= (1 << static_cast<uint8_t>(irq)); // Set the bit to mask the IRQ
-            IOPort::outportb(MASTER_DATA_PORT, mask);
+            IOPort::outportb(masterDataPort, mask);
         }
         else
         {
             // IRQ is in the range of the slave PIC
-            uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
+            uint8_t mask = IOPort::inportb(slaveDataPort);
             mask |= (1 << (static_cast<uint8_t>(irq) - 8)); // Set the bit to mask the IRQ
-            IOPort::outportb(SLAVE_DATA_PORT, mask);
+            IOPort::outportb(slaveDataPort, mask);
         }
     }
 
@@ -225,21 +225,21 @@ namespace PIC
      *
      * @param irq Interrupt request number (IRQ) to enable.
      */
-    void irq_enable(IRQ irq)
+    void irqEnable(IRQ irq)
     {
         if (static_cast<uint8_t>(irq) < 8)
         {
             // IRQ is in the range of the master PIC
-            uint8_t mask = IOPort::inportb(MASTER_DATA_PORT);
+            uint8_t mask = IOPort::inportb(masterDataPort);
             mask &= ~(1 << static_cast<uint8_t>(irq)); // Clear the bit to unmask the IRQ
-            IOPort::outportb(MASTER_DATA_PORT, mask);
+            IOPort::outportb(masterDataPort, mask);
         }
         else
         {
             // IRQ is in the range of the slave PIC
-            uint8_t mask = IOPort::inportb(SLAVE_DATA_PORT);
+            uint8_t mask = IOPort::inportb(slaveDataPort);
             mask &= ~(1 << (static_cast<uint8_t>(irq) - 8)); // Clear the bit to unmask the IRQ
-            IOPort::outportb(SLAVE_DATA_PORT, mask);
+            IOPort::outportb(slaveDataPort, mask);
         }
     }
 
@@ -252,8 +252,8 @@ namespace PIC
      *
      * @return true if the handler was successfully added, false otherwise.
      */
-    bool add_irq_handler(IRQ irq, void (*handler)(void *), void *arg)
+    bool addIrqHandler(IRQ irq, void (*handler)(void *), void *arg)
     {
-        return Handlers::AddInterruptHandler(static_cast<uint32_t>(irq) + 32, handler, arg);
+        return Handlers::addInterruptHandler(static_cast<uint32_t>(irq) + 32, handler, arg);
     }
 }; // namespace PIC

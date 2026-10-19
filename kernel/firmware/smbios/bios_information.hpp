@@ -31,18 +31,18 @@ public:
     BIOSInformation() = default;
 
     /// @brief Constructor that initializes the object and scans the BIOS information.
-    /// @param p_start Pointer to the start address of the BIOS structure.
-    BIOSInformation(void *p_start)
+    /// @param pStart Pointer to the start address of the BIOS structure.
+    BIOSInformation(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     };
 
     /// @brief Scans the BIOS information structure.
-    /// @param p_start Pointer to the start address of the BIOS structure.
+    /// @param pStart Pointer to the start address of the BIOS structure.
     /// @return Pointer to the end address of the BIOS structure.
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
@@ -52,7 +52,7 @@ public:
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, StringCount);
+        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
@@ -179,7 +179,7 @@ public:
         printf("System BIOS Minor Release: %u\n", getSystemBiosMinorRelease());
         printf("Embedded Controller Firmware Major Release: %u\n", getEmbeddedControllerFirmwareMajorRelease());
         printf("Embedded Controller Firmware Minor Release: %u\n", getEmbeddedControllerFirmwareMinorRelease());
-        for (size_t i = 0; i < StringCount; ++i)
+        for (size_t i = 0; i < stringCount; ++i)
         {
             printf("[%d]:%s ", i, m_strings[i]);
         }
@@ -195,8 +195,8 @@ private:
        versionString;
        releaseDateString;
    */
-    static constexpr uint8_t StringCount = 3; ///< Maximum number of strings to extract.
-    const char *m_strings[StringCount]{};     ///< Array to store extracted strings.
+    static constexpr uint8_t stringCount = 3; ///< Maximum number of strings to extract.
+    const char *m_strings[stringCount]{};     ///< Array to store extracted strings.
 
     /// @brief Returns the address of the type field in the BIOS structure.
     uint8_t *getTypeAddr() const

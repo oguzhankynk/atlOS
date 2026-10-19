@@ -34,21 +34,21 @@ public:
 
     /**
      * @brief Constructor for SystemEnclosureChassis class.
-     * @param p_start Pointer to the start of the structure.
+     * @param pStart Pointer to the start of the structure.
      */
-    SystemEnclosureChassis(void *p_start)
+    SystemEnclosureChassis(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     }
 
     /**
      * @brief Scan function to read the System Enclosure or Chassis Information structure.
-     * @param p_start Pointer to the start of the structure.
+     * @param pStart Pointer to the start of the structure.
      * @return Pointer to the end address of the SystemEnclosureChassis
      */
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
@@ -58,7 +58,7 @@ public:
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, StringCount);
+        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
@@ -209,7 +209,7 @@ public:
         }
         printf("\n");
         printf("SKU Number: %u\n", getSkuNumber());
-        for (size_t i = 0; i < StringCount; ++i)
+        for (size_t i = 0; i < stringCount; ++i)
         {
             printf("[%d]:%s ", i, m_strings[i]);
         }
@@ -228,8 +228,8 @@ private:
        AssetTagNumberString;
        SKUNumberString;
    */
-    static constexpr uint8_t StringCount = 5; ///< Maximum number of strings to extract.
-    const char *m_strings[StringCount]{};     ///< Array to store extracted strings.
+    static constexpr uint8_t stringCount = 5; ///< Maximum number of strings to extract.
+    const char *m_strings[stringCount]{};     ///< Array to store extracted strings.
 
     /// @brief Get the address of the Type field in the System Enclosure or Chassis Information structure.
     uint8_t *getTypeAddr() const { return (uint8_t *)(static_cast<uint8_t *>(m_pStart) + 0x00); }

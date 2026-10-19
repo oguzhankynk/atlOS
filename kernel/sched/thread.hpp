@@ -25,11 +25,11 @@ namespace Threading
 {
     enum class ThreadState
     {
-        RUNNING,
-        READY,
-        BLOCKED,  // Waits for Scheduler::unblock
-        SLEEPING, // Waits until TCB::wakeTick
-        TERMINATED
+        Running,
+        Ready,
+        Blocked,  // Waits for Scheduler::unblock
+        Sleeping, // Waits until TCB::wakeTick
+        Terminated
     };
 
     struct Registers
@@ -50,7 +50,7 @@ namespace Threading
     {
         Registers regs; // Must stay first, switchTask takes &regs
         ThreadState state;
-        uint64_t wakeTick; // Scheduler::ticks() value to leave SLEEPING at
+        uint64_t wakeTick; // Scheduler::ticks() value to leave Sleeping at
     };
 
     class ThreadImpl;

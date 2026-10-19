@@ -20,6 +20,6 @@
 
 namespace DeviceManager
 {
-    void Init();
+    void init();
 }
 #endif /* F45679A5_2CF6_4EB6_86EE_3EF874186AC8 */

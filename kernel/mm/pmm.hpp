@@ -26,31 +26,31 @@ namespace Memory
     namespace PhysicalMemory
     {
 
-        void Init();
-        void AddMemoryRegion(const void *base_address, uint64_t size);
-        void RemoveMemoryRegion(const void *base_address, uint64_t size);
-        void *AllocateBlock(uint64_t num_blocks);
-        void FreeBlocks(const void *addr, uint64_t num_blocks);
-        uint64_t GetMaxBlockSize();
+        void init();
+        void addMemoryRegion(const void *baseAddress, uint64_t size);
+        void removeMemoryRegion(const void *baseAddress, uint64_t size);
+        void *allocateBlock(uint64_t numBlocks);
+        void freeBlocks(const void *addr, uint64_t numBlocks);
+        uint64_t getMaxBlockSize();
 
         /**
          * @brief Number of free 2 MB blocks.
          */
-        uint64_t GetFreeBlockCount();
+        uint64_t getFreeBlockCount();
 
         /**
          * @brief Allocate a single 4 KB physical frame (e.g. for a page table).
          *
          * @return Physical address of the frame, or nullptr if out of memory.
          */
-        void *AllocateFrame();
+        void *allocateFrame();
 
         /**
-         * @brief Free a frame returned by AllocateFrame.
+         * @brief Free a frame returned by allocateFrame.
          *
          * @param addr Physical address of the frame.
          */
-        void FreeFrame(const void *addr);
+        void freeFrame(const void *addr);
 
     }; // namespace PhysicalMemory
 }; // namespace Memory

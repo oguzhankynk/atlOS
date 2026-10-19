@@ -28,18 +28,18 @@ class ProcessorInformation : public BIOSStructureCommon
 {
 public:
     ProcessorInformation() = default;
-    ProcessorInformation(void *p_start)
+    ProcessorInformation(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     }
 
     /// @brief Scans the Processor Information structure starting from the given address.
-    /// @param p_start Pointer to the start address of the Processor Information structure.
+    /// @param pStart Pointer to the start address of the Processor Information structure.
     /// @return Pointer to the end address of the structure.
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
 
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
@@ -49,7 +49,7 @@ public:
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, StringCount);
+        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
@@ -163,7 +163,7 @@ public:
         printf("Thread Count: %u\n", getThreadCount());
         printf("Processor Characteristics: %u\n", getProcessorCharacteristics());
         printf("Processor Family 2: %u\n", getProcessorFamily2());
-        for (size_t i = 0; i < StringCount; ++i)
+        for (size_t i = 0; i < stringCount; ++i)
         {
             printf("[%d]:%s ", i, m_strings[i]);
         }
@@ -182,8 +182,8 @@ private:
         Asset Tag String;
         Part Number String;
     */
-    static constexpr uint8_t StringCount = 6; ///< Number of string fields.
-    const char *m_strings[StringCount]{};     ///< Array to store string fields.
+    static constexpr uint8_t stringCount = 6; ///< Number of string fields.
+    const char *m_strings[stringCount]{};     ///< Array to store string fields.
 
     // Private methods to find addresses of structure fields
 

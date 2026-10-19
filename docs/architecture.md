@@ -14,13 +14,13 @@
 3. **`kernelMain`** (`kernel/core/main.cpp`):
    1. VGA text terminal, then COM1 serial; `printf` goes to serial from here on
    2. banner, global C++ constructors (`cxx::callConstructors`)
-   3. `IDT::Init` (exception and IRQ vectors)
+   3. `IDT::init` (exception and IRQ vectors)
    4. checks the multiboot2 magic
-   5. `Memory::Init`: PMM, recursive mapping, free memory from the multiboot
+   5. `Memory::init`: PMM, recursive mapping, free memory from the multiboot
       memory map, reserves the kernel image (see [memory.md](memory.md))
-   6. `DeviceManager::Init` (currently empty)
-   7. `PIC::Init` (8259 remapped to vectors 0x20/0x28, enables interrupts)
-   8. `Scheduler::Init` (boot flow becomes task 0, PIT at 1 ms)
+   6. `DeviceManager::init` (currently empty)
+   7. `PIC::init` (8259 remapped to vectors 0x20/0x28, enables interrupts)
+   8. `Scheduler::init` (boot flow becomes task 0, PIT at 1 ms)
    9. self tests (`ATLOS_SELFTEST` builds) or the demo threads A/B
 
 The linker script (`kernel/arch/x86_64/linker.ld`) places the boot sections
@@ -42,16 +42,16 @@ at their physical address and everything else at
 ```
 CPU → IDT vector → INT_<n> stub (arch/x86_64/idt/isr.S)
         push err_code (dummy 0 if the CPU does not push one), vector, rax..r15
-        → int_handler(frame)            (arch/x86_64/idt/idt.cpp)
+        → intHandler(frame)            (arch/x86_64/idt/idt.cpp)
             exceptions 0..31: print the register dump and halt
-            other vectors:   Handlers::InterruptHandler(vector)
+            other vectors:   Handlers::interruptHandler(vector)
                                → EOI to the PIC for IRQs 32..47
                                → registered handler(arg)
         ← pop registers, drop vector/err_code, iretq
 ```
 
-Handlers are registered with `PIC::add_irq_handler(irq, fn, arg)` or
-`Handlers::AddInterruptHandler(vector, fn, arg)`. IRQ handlers run on the
+Handlers are registered with `PIC::addIrqHandler(irq, fn, arg)` or
+`Handlers::addInterruptHandler(vector, fn, arg)`. IRQ handlers run on the
 stack of whatever thread was interrupted; they must not call into the
 scheduler or the heap.
 

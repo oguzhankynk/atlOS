@@ -40,15 +40,15 @@ delete t;                                  // owner frees it (any state but runn
 | Call | Effect |
 |---|---|
 | `yield()` | run the next runnable thread (round robin); returns at once if there is none |
-| `sleep(ms)` | `SLEEPING` for at least `ms` ms |
-| `block()` / `unblock(tcb)` | `BLOCKED` until another thread (or an IRQ handler) calls `unblock` |
+| `sleep(ms)` | `Sleeping` for at least `ms` ms |
+| `block()` / `unblock(tcb)` | `Blocked` until another thread (or an IRQ handler) calls `unblock` |
 | `exit()` | end the current thread |
 | `current()` | TCB of the running thread |
-| `ticks()` | milliseconds since `Scheduler::Init` |
+| `ticks()` | milliseconds since `Scheduler::init` |
 | `taskCount()` | number of queued tasks, including the boot flow |
 
-Thread states: `READY` and `RUNNING` are runnable; `SLEEPING`, `BLOCKED` and
-`TERMINATED` are skipped.
+Thread states: `Ready` and `Running` are runnable; `Sleeping`, `Blocked` and
+`Terminated` are skipped.
 
 ## How it works
 

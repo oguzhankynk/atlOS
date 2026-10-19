@@ -26,7 +26,7 @@
 
 namespace Threading
 {
-    static uint16_t s_TaskIdCounter{};
+    static uint16_t s_taskIdCounter{};
 
     class ThreadImpl
     {
@@ -36,7 +36,7 @@ namespace Threading
         TCB m_tcb{};                                                // Thread Control Block (TCB) to store thread context
         EntryPoint m_entry{};                                       // Entry point function for the thread
         char m_name[16]{};                                          // Thread name (for debugging purposes)
-        static constexpr size_t STACK_SIZE = Memory::PAGE_SIZE_2MB; // Stack size for the thread
+        static constexpr size_t stackSize = Memory::pageSize2Mb; // Stack size for the thread
         uint8_t *m_stack{};                                         // Stack for the thread, its own 2 MB page
         static void threadStartPoint(void *obj);                    // Static function to start the thread
     };
@@ -46,15 +46,15 @@ namespace Threading
     {
         // A page of its own keeps the stack 2 MB aligned (so the top is 16 byte
         // aligned as the ABI needs) and out of the heap. allocatePage panics on OOM.
-        m_stack = static_cast<uint8_t *>(Memory::VirtualMemory::allocatePage(STACK_SIZE / Memory::PAGE_SIZE_2MB));
+        m_stack = static_cast<uint8_t *>(Memory::VirtualMemory::allocatePage(stackSize / Memory::pageSize2Mb));
 
-        snprintf(m_name, 16, "t%d", s_TaskIdCounter++);
+        snprintf(m_name, 16, "t%d", s_taskIdCounter++);
 
           // Set up the stack
-        memset(m_stack, 0x00, STACK_SIZE);
+        memset(m_stack, 0x00, stackSize);
 
         // Set up the TCB (Thread Control Block)
-        m_tcb.state = ThreadState::READY;
+        m_tcb.state = ThreadState::Ready;
         m_tcb.regs.rax = 0;
         m_tcb.regs.rbx = 0;
         m_tcb.regs.rcx = 0;
@@ -72,7 +72,7 @@ namespace Threading
 
         // Pointer to the stack
         //  The stack grows downwards, so we need to set the stack pointer to the top of the stack
-        uint8_t *sp = m_stack + STACK_SIZE;
+        uint8_t *sp = m_stack + stackSize;
 
         auto push = [](uint8_t *&sp, auto value)
         {
@@ -91,7 +91,7 @@ namespace Threading
 
     ThreadImpl::~ThreadImpl()
     {
-        Memory::VirtualMemory::freePage(m_stack, STACK_SIZE / Memory::PAGE_SIZE_2MB);
+        Memory::VirtualMemory::freePage(m_stack, stackSize / Memory::pageSize2Mb);
     }
 
     void ThreadImpl::threadStartPoint(void *obj)
@@ -100,8 +100,8 @@ namespace Threading
         auto *thread = static_cast<ThreadImpl *>(obj);
         printf("Thread %s is running.\n", thread->m_name);
 
-        // Set the thread state to RUNNING
-        thread->m_tcb.state = ThreadState::RUNNING;
+        // Set the thread state to Running
+        thread->m_tcb.state = ThreadState::Running;
 
         // Call the entry point function
         thread->m_entry();

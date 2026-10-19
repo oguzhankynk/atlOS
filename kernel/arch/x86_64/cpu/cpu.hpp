@@ -142,7 +142,7 @@ struct CacheList
 };
 
 /// @brief Represents CPU information.
-struct CPU_Info
+struct CPUInfo
 {
     char cpu[32];                ///< CPU model information (32 characters).
     uint32_t maksimumIndex;      ///< Maximum index.
@@ -155,7 +155,7 @@ struct CPU_Info
 /// @brief Enumeration for segment selectors.
 enum class SegmentSelect : uint16_t
 {
-    Segment_NULL = 0x00, ///< Null segment selector.
+    SegmentNull = 0x00, ///< Null segment selector.
 
     KERNELCODE = 0x08, ///< Kernel code segment selector.
 
@@ -169,7 +169,7 @@ enum class SegmentSelect : uint16_t
 };
 
 /// @brief Structure representing the state of x86_64 registers at exception/interrupt time.
-struct X86_64ExceptionInfo
+struct InterruptFrame
 {
     // General-purpose registers (64-bit)
     uint64_t r15;
@@ -201,12 +201,12 @@ struct X86_64ExceptionInfo
 } __attribute__((packed));
 
 /// @brief Initializes the CPU information structure.
-/// @param cpu_info Pointer to the CPU_Info structure to be initialized.
-void InitializeCPUInfo(CPU_Info *cpu_info);
+/// @param cpuInfo Pointer to the CPUInfo structure to be initialized.
+void initializeCpuInfo(CPUInfo *cpuInfo);
 
 /// @brief Prints the CPU information.
-/// @param cpu_info Pointer to the CPU_Info structure containing CPU information to be printed.
-void printCPUInfo(const CPU_Info *cpu_info);
+/// @param cpuInfo Pointer to the CPUInfo structure containing CPU information to be printed.
+void printCPUInfo(const CPUInfo *cpuInfo);
 
 #endif // __ASSEMBLER__
 #endif /* A046BEC9_DED9_4255_85EE_5065946448E0 */

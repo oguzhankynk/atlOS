@@ -31,18 +31,18 @@ public:
     PhysicalMemoryArray() = default;
 
     /// @brief Constructor that initializes by scanning the given address.
-    /// @param p_start Start address of the structure.
-    PhysicalMemoryArray(void *p_start)
+    /// @param pStart Start address of the structure.
+    PhysicalMemoryArray(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     }
 
     /// @brief Scans the structure starting from the given address.
-    /// @param p_start Start address of the structure.
+    /// @param pStart Start address of the structure.
     /// @return End address of the scanned structure.
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();

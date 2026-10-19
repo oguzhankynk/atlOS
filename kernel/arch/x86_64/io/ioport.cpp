@@ -74,7 +74,7 @@ namespace IOPort
      * @brief Enable Interrupts
      *
      */
-    void EnableInterrupts(void)
+    void enableInterrupts(void)
     {
         asm volatile("sti");
     }
@@ -83,7 +83,7 @@ namespace IOPort
      * @brief Disable Interrupts
      *
      */
-    void DisableInterrupts(void)
+    void disableInterrupts(void)
     {
         asm volatile("cli");
     }

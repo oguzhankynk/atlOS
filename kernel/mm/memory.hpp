@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-struct multiboot_info;
-typedef struct multiboot_info multiboot_info_t;
 
 namespace Memory
 {
@@ -14,11 +12,11 @@ namespace Memory
      * @param memHigh
      * @param physicalAllocStart
      */
-    void Init(uintptr_t mbInfoAddr);
+    void init(uintptr_t mbInfoAddr);
 
-    void *VirtToPhysAddr(void *virtualaddr);
+    void *virtToPhysAddr(void *virtualaddr);
 
-    void map(void *PhysicalAddr, void *VirtualAddr);
+    void map(void *physicalAddr, void *virtualAddr);
 
     void unmap(void *virtualaddr);
 

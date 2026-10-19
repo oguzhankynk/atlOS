@@ -23,7 +23,7 @@
 #include <firmware/bios/bios.hpp>
 #include <firmware/bios/bios_p.hpp>
 
-void BIOSInit()
+void biosInit()
 {
     BIOS bios;
     // bios.printEntryPoint();

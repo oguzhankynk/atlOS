@@ -26,7 +26,7 @@
  * @brief A function pointer type for exception handling functions.
  *
  */
-typedef void (*interrupt_handle_function)(void *);
+typedef void (*InterruptHandlerFunction)(void *);
 
 namespace Handlers
 {
@@ -35,25 +35,25 @@ namespace Handlers
      * @brief Initializes the Handler
      *
      */
-    void Init();
+    void init();
 
     /**
      * @brief Registers an Interrupt handler for a specific exception number.
      *
-     * @param exception_no The Interrupt number to register the handler for.
+     * @param exceptionNo The Interrupt number to register the handler for.
      * @param function The function to be called when the specified exception occurs.
-     * @param Arg The argument to be passed to the registered handler function
+     * @param arg The argument to be passed to the registered handler function
      * @return true if the Interrupt handler was successfully registered
      * @return false otherwise
      */
-    bool AddInterruptHandler(uint32_t exception_no, interrupt_handle_function function, void *Arg);
+    bool addInterruptHandler(uint32_t exceptionNo, InterruptHandlerFunction function, void *arg);
 
     /**
      * @brief Call the Interrupt Handler function
      *
-     * @param exception_no
+     * @param exceptionNo
      */
-    void InterruptHandler(uint32_t exception_no);
+    void interruptHandler(uint32_t exceptionNo);
 
 }; // namespace Handlers
 

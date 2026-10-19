@@ -20,7 +20,7 @@
 
 #include <string.h>
 
-Device::Device(const char *name)
+Device::Device(const char *name) noexcept
 {
     strncpy(m_name, name, sizeof(m_name));
 }

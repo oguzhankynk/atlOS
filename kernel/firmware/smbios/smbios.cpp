@@ -69,23 +69,23 @@ SMBIOS::SMBIOS()
 
    // printEntryPoint();
 
-   void *pBIOSInformationEnd = m_BIOSInformation.Scan((void*)(uintptr_t)m_SMBIOSEntryPoint.structureTableAddress);
+   void *pBIOSInformationEnd = m_BIOSInformation.scan((void*)(uintptr_t)m_SMBIOSEntryPoint.structureTableAddress);
 
-   void *pSystemInformationEnd = m_SystemInformation.Scan(pBIOSInformationEnd);
+   void *pSystemInformationEnd = m_SystemInformation.scan(pBIOSInformationEnd);
 
-   void *pSystemEnclosureChassisEnd = m_SystemEnclosureChassis.Scan(pSystemInformationEnd);
+   void *pSystemEnclosureChassisEnd = m_SystemEnclosureChassis.scan(pSystemInformationEnd);
 
-   void *pProcessorInformationEnd = m_ProcessorInformation.Scan(pSystemEnclosureChassisEnd);
+   void *pProcessorInformationEnd = m_ProcessorInformation.scan(pSystemEnclosureChassisEnd);
 
-   void *pPhysicalMemoryArrayEnd = m_PhysicalMemoryArray.Scan(pProcessorInformationEnd);
+   void *pPhysicalMemoryArrayEnd = m_PhysicalMemoryArray.scan(pProcessorInformationEnd);
 
-   void *pMemoryDeviceEnd = m_MemoryDevice.Scan(pPhysicalMemoryArrayEnd);
+   void *pMemoryDeviceEnd = m_MemoryDevice.scan(pPhysicalMemoryArrayEnd);
 
-   void *pMemoryArrayMappedAddressEnd = m_MemoryArrayMappedAddress.Scan(pMemoryDeviceEnd);
+   void *pMemoryArrayMappedAddressEnd = m_MemoryArrayMappedAddress.scan(pMemoryDeviceEnd);
 
-   void *pSystemBootInformationEnd = m_SystemBootInformation.Scan(pMemoryArrayMappedAddressEnd);
+   void *pSystemBootInformationEnd = m_SystemBootInformation.scan(pMemoryArrayMappedAddressEnd);
 
-   void *pEndOfTableEnd = m_EndOfTable.Scan(pSystemBootInformationEnd);
+   void *pEndOfTableEnd = m_EndOfTable.scan(pSystemBootInformationEnd);
 }
 
 void SMBIOS::printEntryPoint() const

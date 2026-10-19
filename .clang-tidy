@@ -1,0 +1,57 @@
+# clang-tidy configuration for atlOS, see docs/style.md.
+# Naming follows the WebKit style: https://webkit.org/code-style-guidelines/
+Checks: >
+  -*,
+  readability-identifier-naming
+
+# Only kernel headers. libc keeps the standard C names; kernel/mm/liballoc
+# (third party) and kernel/arch/x86_64/boot (multiboot spec headers) have their
+# own .clang-tidy without naming rules.
+HeaderFilterRegex: '.*/kernel/.*'
+
+CheckOptions:
+  # Types and namespaces: PascalCase
+  - { key: readability-identifier-naming.NamespaceCase, value: CamelCase }
+  - { key: readability-identifier-naming.ClassCase, value: CamelCase }
+  - { key: readability-identifier-naming.StructCase, value: CamelCase }
+  - { key: readability-identifier-naming.UnionCase, value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase, value: CamelCase }
+  - { key: readability-identifier-naming.TypedefCase, value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase, value: CamelCase }
+  - { key: readability-identifier-naming.TemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase, value: CamelCase }
+  - { key: readability-identifier-naming.ScopedEnumConstantCase, value: CamelCase }
+
+  # Functions and variables: camelCase
+  - { key: readability-identifier-naming.FunctionCase, value: camelBack }
+  - { key: readability-identifier-naming.MethodCase, value: camelBack }
+  - { key: readability-identifier-naming.VariableCase, value: camelBack }
+  - { key: readability-identifier-naming.ParameterCase, value: camelBack }
+  - { key: readability-identifier-naming.MemberCase, value: camelBack }
+  - { key: readability-identifier-naming.ConstexprVariableCase, value: camelBack }
+
+  # Class data members m_, static variables s_
+  - { key: readability-identifier-naming.PrivateMemberPrefix, value: m_ }
+  - { key: readability-identifier-naming.ProtectedMemberPrefix, value: m_ }
+  - { key: readability-identifier-naming.ClassMemberPrefix, value: s_ }
+  # Public members of classes keep m_ (WebKit), plain struct fields have no prefix
+  - { key: readability-identifier-naming.PublicMemberIgnoredRegexp, value: '^m_[a-z][a-zA-Z0-9]*$' }
+  - { key: readability-identifier-naming.StaticVariablePrefix, value: s_ }
+  # Namespace scope variables (clang-tidy does not tell static from extern here)
+  - { key: readability-identifier-naming.GlobalVariableCase, value: camelBack }
+  - { key: readability-identifier-naming.GlobalVariablePrefix, value: s_ }
+
+  # Macros stay UPPER_CASE
+  - { key: readability-identifier-naming.MacroDefinitionCase, value: UPPER_CASE }
+
+  # Reserved / ABI / linker names (__cxa_*, __ctors_start, _text_start, ...)
+  - { key: readability-identifier-naming.FunctionIgnoredRegexp, value: '^_.*' }
+  - { key: readability-identifier-naming.VariableIgnoredRegexp, value: '^_.*' }
+  # ... and names shared with assembly (boot.S) or the linker script
+  - { key: readability-identifier-naming.GlobalVariableIgnoredRegexp, value: '^(_.*|gdt_ptr|pml4|(high|low)_pdpt|(high|low)_page_directory_table|kernel_(physical|virtual)_(start|end))$' }
+  - { key: readability-identifier-naming.NamespaceIgnoredRegexp, value: '^_.*' }
+  - { key: readability-identifier-naming.TypedefIgnoredRegexp, value: '^_.*' }
+  - { key: readability-identifier-naming.MacroDefinitionIgnoredRegexp, value: '^_.*' }
+
+  # POSIX open() flags keep their standard names
+  - { key: readability-identifier-naming.ConstexprVariableIgnoredRegexp, value: '^O_[A-Z]+$' }

@@ -2,7 +2,7 @@
 
 The kernel has built-in tests in `kernel/tests/selftest.cpp`. A kernel built
 with `ATLOS_SELFTEST=ON` (the `selftest` preset) runs them right after
-`Scheduler::Init` instead of the demo threads, prints the results on the
+`Scheduler::init` instead of the demo threads, prints the results on the
 serial port and exits QEMU through the `isa-debug-exit` device.
 
 ## Running
@@ -33,7 +33,7 @@ serial log is written to `build-selftest/selftest.log`.
 |---|---|
 | PMM frames | alignment, no overlap with the kernel, uniqueness, reuse, double free, pools give blocks back |
 | PMM blocks | every free block can be allocated, then `nullptr`; double free; contiguous allocation; no leak |
-| VMM | allocate/write/free, range reuse, `VirtToPhysAddr`, `map`/`unmap` alias in a new page directory, no leak |
+| VMM | allocate/write/free, range reuse, `virtToPhysAddr`, `map`/`unmap` alias in a new page directory, no leak |
 | Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
 | CPU | CPUID: max leaf, vendor string, SSE2/FXSR present, cache list bounded |
@@ -50,6 +50,6 @@ static void TestSomething()
 }
 ```
 
-Add the function to `SelfTest::Run()`. Tests run in the boot flow with
+Add the function to `SelfTest::run()`. Tests run in the boot flow with
 interrupts enabled; a test that creates threads should wait for them to exit
 (see `waitForExit`) and delete them before returning.

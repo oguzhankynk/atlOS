@@ -36,7 +36,7 @@ namespace Scheduler
      * @brief Register the boot flow as the first task and start the 1 ms tick.
      * Needs the PIC to be initialized.
      */
-    void Init();
+    void init();
 
     void addTask(Threading::Thread &thread);
 
@@ -62,7 +62,7 @@ namespace Scheduler
     void block();
 
     /**
-     * @brief Make a BLOCKED thread runnable again. Other states are left alone.
+     * @brief Make a Blocked thread runnable again. Other states are left alone.
      */
     void unblock(Threading::TCB &tcb);
 

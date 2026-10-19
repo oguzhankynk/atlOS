@@ -37,27 +37,27 @@ namespace Memory
         
 
         void init();
-        uint64_t mapPages(uint64_t page_index, uint64_t num_pages);
-        void *allocatePage(uint64_t num_pages);
-        int freePage(const void *addr, uint64_t num_pages);
+        uint64_t mapPages(uint64_t pageIndex, uint64_t numPages);
+        void *allocatePage(uint64_t numPages);
+        int freePage(const void *addr, uint64_t numPages);
 
         /**
          * @brief Map a 2 MB page to a given physical address (e.g. for MMIO).
          * The physical memory is not taken from or returned to the PMM.
          */
-        void mapPhysical(const void *virt_addr, const void *phys_addr);
+        void mapPhysical(const void *virtAddr, const void *physAddr);
 
         /**
          * @brief Remove a mapping made by mapPhysical. The physical memory is not freed.
          */
-        void unmapPhysical(const void *virt_addr);
+        void unmapPhysical(const void *virtAddr);
 
         /**
          * @brief Translate a virtual address by walking the page tables.
          *
          * @return The physical address, or nullptr if it is not mapped.
          */
-        void *virtToPhys(const void *virt_addr);
+        void *virtToPhys(const void *virtAddr);
 
     }; // namespace VirtualMemory
 }; // namespace Memory

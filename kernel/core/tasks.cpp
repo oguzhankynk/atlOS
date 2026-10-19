@@ -3,16 +3,16 @@
 
 void threadTaskA() {
     while (true) {
-        SerialPort::write_serial('A');
-        SerialPort::write_serial('\n');
+        SerialPort::writeSerial('A');
+        SerialPort::writeSerial('\n');
         for(volatile int i=0; i<5000000; i++);
         Scheduler::yield(); 
     }
 }
 void threadTaskB() {
     while (true) {
-        SerialPort::write_serial('B');
-        SerialPort::write_serial('\n');
+        SerialPort::writeSerial('B');
+        SerialPort::writeSerial('\n');
         for(volatile int i=0; i<5000000; i++);
         Scheduler::yield();
     }

@@ -11,16 +11,16 @@ namespace Scheduler
     using Threading::TCB;
     using Threading::ThreadState;
 
-    static constexpr uint32_t MAX_TASKS = 16;
-    static constexpr uint32_t TICK_PERIOD_NS = 1000000; // 1 ms
+    static constexpr uint32_t maxTasks = 16;
+    static constexpr uint32_t tickPeriodNs = 1000000; // 1 ms
 
     // Context of the boot flow (kernelMain). It has no Thread object, but it
     // must own a TCB so that the first switchTask has somewhere to save it.
-    static TCB bootTCB{};
+    static TCB s_bootTcb{};
 
-    static TCB *readyQueue[MAX_TASKS];
-    static uint32_t threadCount = 0;
-    static uint32_t currentThreadIndex = 0;
+    static TCB *s_readyQueue[maxTasks];
+    static uint32_t s_threadCount = 0;
+    static uint32_t s_currentThreadIndex = 0;
 
     // Only written by the timer interrupt; an aligned 64-bit store is atomic
     static volatile uint64_t s_ticks = 0;
@@ -32,47 +32,47 @@ namespace Scheduler
 
     static bool isRunnable(const TCB *tcb)
     {
-        return tcb->state == ThreadState::READY || tcb->state == ThreadState::RUNNING;
+        return tcb->state == ThreadState::Ready || tcb->state == ThreadState::Running;
     }
 
     static void wakeSleepers()
     {
         uint64_t now = s_ticks;
-        for (uint32_t i = 0; i < threadCount; i++)
+        for (uint32_t i = 0; i < s_threadCount; i++)
         {
-            if (readyQueue[i]->state == ThreadState::SLEEPING && now >= readyQueue[i]->wakeTick)
-                readyQueue[i]->state = ThreadState::READY;
+            if (s_readyQueue[i]->state == ThreadState::Sleeping && now >= s_readyQueue[i]->wakeTick)
+                s_readyQueue[i]->state = ThreadState::Ready;
         }
     }
 
     static void removeAt(uint32_t index)
     {
-        for (uint32_t i = index; i + 1 < threadCount; i++)
-            readyQueue[i] = readyQueue[i + 1];
+        for (uint32_t i = index; i + 1 < s_threadCount; i++)
+            s_readyQueue[i] = s_readyQueue[i + 1];
 
-        threadCount--;
+        s_threadCount--;
     }
 
     static void switchTo(uint32_t nextIndex)
     {
-        TCB *from = readyQueue[currentThreadIndex];
-        TCB *to = readyQueue[nextIndex];
+        TCB *from = s_readyQueue[s_currentThreadIndex];
+        TCB *to = s_readyQueue[nextIndex];
 
         // An exited thread leaves the queue here. Its stack is still in use
         // until switchTask is done, the owner frees it later.
-        if (from->state == ThreadState::TERMINATED)
+        if (from->state == ThreadState::Terminated)
         {
-            removeAt(currentThreadIndex);
-            if (nextIndex > currentThreadIndex)
+            removeAt(s_currentThreadIndex);
+            if (nextIndex > s_currentThreadIndex)
                 nextIndex--;
         }
-        else if (from->state == ThreadState::RUNNING)
+        else if (from->state == ThreadState::Running)
         {
-            from->state = ThreadState::READY;
+            from->state = ThreadState::Ready;
         }
 
-        to->state = ThreadState::RUNNING;
-        currentThreadIndex = nextIndex;
+        to->state = ThreadState::Running;
+        s_currentThreadIndex = nextIndex;
 
         switchTask(&from->regs, &to->regs);
     }
@@ -86,38 +86,38 @@ namespace Scheduler
         {
             wakeSleepers();
 
-            for (uint32_t k = 1; k < threadCount; k++)
+            for (uint32_t k = 1; k < s_threadCount; k++)
             {
-                uint32_t index = (currentThreadIndex + k) % threadCount;
-                if (isRunnable(readyQueue[index]))
+                uint32_t index = (s_currentThreadIndex + k) % s_threadCount;
+                if (isRunnable(s_readyQueue[index]))
                 {
                     switchTo(index);
                     return;
                 }
             }
 
-            if (isRunnable(readyQueue[currentThreadIndex]))
+            if (isRunnable(s_readyQueue[s_currentThreadIndex]))
                 return;
 
             asm volatile("sti; hlt");
         }
     }
 
-    void Init()
+    void init()
     {
-        bootTCB.state = ThreadState::RUNNING;
-        readyQueue[0] = &bootTCB;
-        threadCount = 1;
-        currentThreadIndex = 0;
+        s_bootTcb.state = ThreadState::Running;
+        s_readyQueue[0] = &s_bootTcb;
+        s_threadCount = 1;
+        s_currentThreadIndex = 0;
 
-        PIT::init(TICK_PERIOD_NS, onTick);
+        PIT::init(tickPeriodNs, onTick);
     }
 
     void addTask(Threading::Thread &thread)
     {
-        if (threadCount < MAX_TASKS)
+        if (s_threadCount < maxTasks)
         {
-            readyQueue[threadCount++] = &thread.getTCB();
+            s_readyQueue[s_threadCount++] = &thread.getTCB();
         }
         else
         {
@@ -129,17 +129,17 @@ namespace Scheduler
     {
         TCB *tcb = &thread.getTCB();
 
-        for (uint32_t i = 0; i < threadCount; i++)
+        for (uint32_t i = 0; i < s_threadCount; i++)
         {
-            if (readyQueue[i] != tcb)
+            if (s_readyQueue[i] != tcb)
                 continue;
 
-            if (i == currentThreadIndex)
-                kernel_panic("Scheduler: a thread can not remove itself");
+            if (i == s_currentThreadIndex)
+                kernelPanic("Scheduler: a thread can not remove itself");
 
             removeAt(i);
-            if (i < currentThreadIndex)
-                currentThreadIndex--;
+            if (i < s_currentThreadIndex)
+                s_currentThreadIndex--;
             return;
         }
     }
@@ -157,34 +157,34 @@ namespace Scheduler
             return;
         }
 
-        TCB *self = readyQueue[currentThreadIndex];
+        TCB *self = s_readyQueue[s_currentThreadIndex];
         self->wakeTick = s_ticks + ms;
-        self->state = ThreadState::SLEEPING;
+        self->state = ThreadState::Sleeping;
         schedule();
     }
 
     void block()
     {
-        readyQueue[currentThreadIndex]->state = ThreadState::BLOCKED;
+        s_readyQueue[s_currentThreadIndex]->state = ThreadState::Blocked;
         schedule();
     }
 
     void unblock(TCB &tcb)
     {
-        if (tcb.state == ThreadState::BLOCKED)
-            tcb.state = ThreadState::READY;
+        if (tcb.state == ThreadState::Blocked)
+            tcb.state = ThreadState::Ready;
     }
 
     void exit()
     {
-        if (readyQueue[currentThreadIndex] == &bootTCB)
-            kernel_panic("Scheduler: the boot flow can not exit");
+        if (s_readyQueue[s_currentThreadIndex] == &s_bootTcb)
+            kernelPanic("Scheduler: the boot flow can not exit");
 
-        readyQueue[currentThreadIndex]->state = ThreadState::TERMINATED;
+        s_readyQueue[s_currentThreadIndex]->state = ThreadState::Terminated;
         schedule();
 
         // A terminated thread is never picked again
-        kernel_panic("Scheduler: exited thread was resumed");
+        kernelPanic("Scheduler: exited thread was resumed");
         while (true)
         {
         }
@@ -192,7 +192,7 @@ namespace Scheduler
 
     TCB &current()
     {
-        return *readyQueue[currentThreadIndex];
+        return *s_readyQueue[s_currentThreadIndex];
     }
 
     uint64_t ticks()
@@ -202,6 +202,6 @@ namespace Scheduler
 
     uint32_t taskCount()
     {
-        return threadCount;
+        return s_threadCount;
     }
 }

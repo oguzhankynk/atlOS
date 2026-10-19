@@ -20,7 +20,7 @@
 #ifndef C23ED70C_3462_4E77_B98A_58F7DBC3FFFE
 #define C23ED70C_3462_4E77_B98A_58F7DBC3FFFE
 
-namespace cxx
+namespace Cxx
 {
     /**
      * @brief Initialize all global/static C++ constructors.

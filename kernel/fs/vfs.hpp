@@ -29,12 +29,12 @@ namespace FileSystem
 	{
 
 		File *open(const char *filename);
-		ssize_t read(File *File, void *buffer, size_t size);
-		ssize_t write(File *File, const void *buffer, size_t size);
-		int close(File *File);
+		ssize_t read(File *file, void *buffer, size_t size);
+		ssize_t write(File *file, const void *buffer, size_t size);
+		int close(File *file);
 		int remove(const char *filename);
 
-		bool AddFileSystem(IFileSystem &fs);
+		bool addFileSystem(IFileSystem &fs);
 
 	} // namespace VFS
 } // namespace FileSystem

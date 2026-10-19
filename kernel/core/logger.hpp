@@ -46,7 +46,7 @@ enum class LogFlag
  *
  * @note This function uses variadic arguments to support formatted messages.
  */
-static inline void LOG_MSG(LogFlag flag, const char *format, ...)
+static inline void logMsg(LogFlag flag, const char *format, ...)
 {
     if (flag == LogFlag::NoLog)
     {

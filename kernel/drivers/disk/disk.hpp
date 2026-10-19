@@ -39,16 +39,16 @@ public:
      * @param lba The Logical Block Address (LBA) of the sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      */
-    virtual void read_sector(uint32_t lba, uint8_t *buffer) const = 0;
+    virtual void readSector(uint32_t lba, uint8_t *buffer) const = 0;
 
     /**
      * @brief Reads multiple sectors from the disk into the buffer.
      *
-     * @param lba_start The starting LBA of the first sector to read.
+     * @param lbaStart The starting LBA of the first sector to read.
      * @param buffer Pointer to the buffer where the data will be stored.
      * @param size The size of data to read in bytes.
      */
-    virtual void read(uint32_t lba_start, uint8_t *buffer, size_t size) const = 0;
+    virtual void read(uint32_t lbaStart, uint8_t *buffer, size_t size) const = 0;
 
     /**
      * @brief Writes a single sector to the disk from the buffer.
@@ -56,16 +56,16 @@ public:
      * @param lba The Logical Block Address (LBA) of the sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      */
-    virtual void write_sector(uint32_t lba, const uint8_t *buffer) const = 0;
+    virtual void writeSector(uint32_t lba, const uint8_t *buffer) const = 0;
 
     /**
      * @brief Writes multiple sectors to the disk from the buffer.
      *
-     * @param lba_start The starting LBA of the first sector to write.
+     * @param lbaStart The starting LBA of the first sector to write.
      * @param buffer Pointer to the buffer containing the data to write.
      * @param size The size of data to write in bytes.
      */
-    virtual void write(uint32_t lba_start, const uint8_t *buffer, size_t size) const = 0;
+    virtual void write(uint32_t lbaStart, const uint8_t *buffer, size_t size) const = 0;
 };
 
 #endif /* BD59F1FB_C457_438E_825E_35E2E4AB50BA */

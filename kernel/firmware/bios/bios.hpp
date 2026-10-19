@@ -26,7 +26,7 @@ extern "C"
 
     /// @brief Initializes the BIOS and retrieves BIOS information.
     /// @param
-    void BIOSInit();
+    void biosInit();
 
 #if defined(__cplusplus)
 } /* extern "C" */

@@ -61,27 +61,27 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 {
 
     // Initialize vga terminal
-    terminal_initialize();
+    terminalInitialize();
 
-    // Set the write handler to vga terminal_write for early debugging output
-    set_write_handler(terminal_write);
+    // Set the write handler to vga terminalWrite for early debugging output
+    set_write_handler(terminalWrite);
 
     // Initialize serial port
-    int stat_serial_init = SerialPort::Init();
+    int statSerialInit = SerialPort::init();
 
-    printf("stat_serial_init: %d \n", stat_serial_init);
+    printf("stat_serial_init: %d \n", statSerialInit);
 
-    // Set the write handler to SerialPort::write_serial for later debugging output
-    set_write_handler(SerialPort::write_serial);
+    // Set the write handler to SerialPort::writeSerial for later debugging output
+    set_write_handler(SerialPort::writeSerial);
 
     // Print the banner
     atlOSBanner();
 
     // Call global constructors
-    cxx::callConstructors();
+    Cxx::callConstructors();
 
     // Initialize IDT
-    IDT::Init();
+    IDT::init();
 
     // Validate multiboot information
     if (mbMagic != MULTIBOOT2_BOOTLOADER_MAGIC)
@@ -95,18 +95,18 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     }
 
     // Initialize memory management (pmm and vmm)
-    Memory::Init(mbInfo);
+    Memory::init(mbInfo);
 
-    DeviceManager::Init();
+    DeviceManager::init();
 
     // The scheduler tick comes from the PIT through the 8259 PIC (there is no
     // APIC driver yet). Init also enables interrupts.
-    PIC::Init();
-    Scheduler::Init();
+    PIC::init();
+    Scheduler::init();
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::Run();
-    SelfTest::ExitQemu(failed == 0 ? 0 : 1);
+    int failed = SelfTest::run();
+    SelfTest::exitQemu(failed == 0 ? 0 : 1);
 
     // Only reached when QEMU has no isa-debug-exit device
     while (1)

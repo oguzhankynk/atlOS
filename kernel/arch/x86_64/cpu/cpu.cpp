@@ -26,33 +26,33 @@ static void printCPUFeatures(const CPUFeatures *features);
 static void printProcessorType(const ProcessorType *processor);
 static void printCacheInfo(const CacheList *cacheList);
 
-static void cpuid_00h_command(uint32_t *p_maximumIndex, char *p_CPUstr);
-static void cpuid_01h_command(ProcessorType *p_ProcessorType, CPUFeatures *p_CPUFeatures);
-static void cpuid_04h_command(CacheList *p_CacheList);
+static void cpuid00hCommand(uint32_t *pMaximumIndex, char *cpuString);
+static void cpuid01hCommand(ProcessorType *pProcessorType, CPUFeatures *pCpuFeatures);
+static void cpuid04hCommand(CacheList *pCacheList);
 
-void InitializeCPUInfo(CPU_Info *cpu_info)
+void initializeCpuInfo(CPUInfo *cpuInfo)
 {
 	// Fields a leaf does not fill (e.g. the topology) stay zero
-	memset(cpu_info, 0, sizeof(*cpu_info));
+	memset(cpuInfo, 0, sizeof(*cpuInfo));
 
-	cpuid_00h_command(&cpu_info->maksimumIndex, cpu_info->cpu);
+	cpuid00hCommand(&cpuInfo->maksimumIndex, cpuInfo->cpu);
 
-	if (cpu_info->maksimumIndex >= 0x01)
-		cpuid_01h_command(&cpu_info->processorType, &cpu_info->CPUFeaturesInfo);
+	if (cpuInfo->maksimumIndex >= 0x01)
+		cpuid01hCommand(&cpuInfo->processorType, &cpuInfo->CPUFeaturesInfo);
 
 	// Above the highest supported leaf CPUID returns unrelated data
-	if (cpu_info->maksimumIndex >= 0x04)
-		cpuid_04h_command(&cpu_info->cacheList);
+	if (cpuInfo->maksimumIndex >= 0x04)
+		cpuid04hCommand(&cpuInfo->cacheList);
 }
 
-void printCPUInfo(const CPU_Info *cpu_info)
+void printCPUInfo(const CPUInfo *cpuInfo)
 {
-	printf("CPU: %s\n", cpu_info->cpu);
-	printf("Maksimum Index: %u\n", cpu_info->maksimumIndex);
-	printCPUFeatures(&cpu_info->CPUFeaturesInfo);
+	printf("CPU: %s\n", cpuInfo->cpu);
+	printf("Maksimum Index: %u\n", cpuInfo->maksimumIndex);
+	printCPUFeatures(&cpuInfo->CPUFeaturesInfo);
 	printf("\n");
-	printProcessorType(&cpu_info->processorType);
-	printCacheInfo(&cpu_info->cacheList);
+	printProcessorType(&cpuInfo->processorType);
+	printCacheInfo(&cpuInfo->cacheList);
 }
 
 /// @brief Prints the CPU features.
@@ -141,9 +141,9 @@ static void printProcessorType(const ProcessorType *processor)
 
 /// @brief Prints the cache information.
 /// @param cacheList: A pointer to the cache information to print.
-static void printCacheInfo(const CacheList *p_CacheList)
+static void printCacheInfo(const CacheList *pCacheList)
 {
-	const char *CacheTypeStrs[] =
+	const char *cacheTypeStrs[] =
 		{
 			"Null",
 			"D-Cache",
@@ -151,149 +151,149 @@ static void printCacheInfo(const CacheList *p_CacheList)
 			"Unified",
 		};
 
-	for (int i = 0; i < p_CacheList->cacheCount; i++)
+	for (int i = 0; i < pCacheList->cacheCount; i++)
 	{
-		const CacheInfo *p_CacheInfo = &p_CacheList->cacheInfo[i];
+		const CacheInfo *pCacheInfo = &pCacheList->cacheInfo[i];
 
 		printf("Cache [%d]: \n", i);
 		printf("cacheType: %u -> %s cacheLevel: %u self: %u \n",
-			   p_CacheInfo->cacheType, CacheTypeStrs[p_CacheInfo->cacheType],
-			   p_CacheInfo->cacheLevel, p_CacheInfo->selfInitializing);
+			   pCacheInfo->cacheType, cacheTypeStrs[pCacheInfo->cacheType],
+			   pCacheInfo->cacheLevel, pCacheInfo->selfInitializing);
 
 		printf("fully: %u LogicalCore: %u Cores: %u\n",
-			   p_CacheInfo->fullyAssociative, p_CacheInfo->LogicalCore,
-			   p_CacheInfo->PhysicalCore);
+			   pCacheInfo->fullyAssociative, pCacheInfo->LogicalCore,
+			   pCacheInfo->PhysicalCore);
 
 		printf("LineSize: %u Partitions: %u associativity: %u\n",
-			   p_CacheInfo->coherencyLineSize, p_CacheInfo->physicalLinePartitions,
-			   p_CacheInfo->associativity);
+			   pCacheInfo->coherencyLineSize, pCacheInfo->physicalLinePartitions,
+			   pCacheInfo->associativity);
 
-		printf("numberOfSets: %u \n", p_CacheInfo->numberOfSets);
+		printf("numberOfSets: %u \n", pCacheInfo->numberOfSets);
 
 		printf("writeBackInvalidate: %u cacheInclusiveness: %u complexCacheIndexing:%u \n",
-			   p_CacheInfo->writeBackInvalidate, p_CacheInfo->cacheInclusiveness, p_CacheInfo->complexCacheIndexing);
+			   pCacheInfo->writeBackInvalidate, pCacheInfo->cacheInclusiveness, pCacheInfo->complexCacheIndexing);
 
 		printf("\n");
 	}
 }
 
 /// @brief Executes the CPUID command with EAX=0x00 and stores the maximum index and CPU string.
-/// @param p_maximumIndex: A pointer to store the maximum index.
-/// @param p_CPUstr: A pointer to store the CPU string.
-static void cpuid_00h_command(uint32_t *p_maximumIndex, char *p_CPUstr)
+/// @param pMaximumIndex: A pointer to store the maximum index.
+/// @param cpuString: A pointer to store the CPU string.
+static void cpuid00hCommand(uint32_t *pMaximumIndex, char *cpuString)
 {
 	unsigned int eax, ebx, ecx, edx;
 	cpuid(0x00, &eax, &ebx, &ecx, &edx);
 
-	sprintf(p_CPUstr, "%c%c%c%c", ebx, (ebx >> 8), (ebx >> 16), (ebx >> 24));
-	sprintf(p_CPUstr + 4, "%c%c%c%c", edx, (edx >> 8), (edx >> 16), (edx >> 24));
-	sprintf(p_CPUstr + 8, "%c%c%c%c", ecx, (ecx >> 8), (ecx >> 16), (ecx >> 24));
+	sprintf(cpuString, "%c%c%c%c", ebx, (ebx >> 8), (ebx >> 16), (ebx >> 24));
+	sprintf(cpuString + 4, "%c%c%c%c", edx, (edx >> 8), (edx >> 16), (edx >> 24));
+	sprintf(cpuString + 8, "%c%c%c%c", ecx, (ecx >> 8), (ecx >> 16), (ecx >> 24));
 
-	*p_maximumIndex = eax;
+	*pMaximumIndex = eax;
 }
 
 /// @brief Executes the CPUID command with EAX=0x01 and retrieves processor type and CPU features.
-/// @param p_ProcessorType Pointer to a ProcessorType structure where the processor type information will be stored.
-/// @param p_CPUFeatures Pointer to a CPUFeatures structure where the CPU feature information will be stored.
-static void cpuid_01h_command(ProcessorType *p_ProcessorType, CPUFeatures *p_CPUFeatures)
+/// @param pProcessorType Pointer to a ProcessorType structure where the processor type information will be stored.
+/// @param pCpuFeatures Pointer to a CPUFeatures structure where the CPU feature information will be stored.
+static void cpuid01hCommand(ProcessorType *pProcessorType, CPUFeatures *pCpuFeatures)
 
 {
 	unsigned int eax, ebx, ecx, edx;
 	cpuid(0x01, &eax, &ebx, &ecx, &edx);
 
-	p_ProcessorType->stepping = eax & 0xF;
-	p_ProcessorType->model = (eax >> 4) & 0xF;
-	p_ProcessorType->family = (eax >> 8) & 0xF;
-	p_ProcessorType->processorType = (eax >> 12) & 0x3;
-	p_ProcessorType->reserved = (eax >> 14) & 0x3;
-	p_ProcessorType->extendedModel = (eax >> 16) & 0xF;
-	p_ProcessorType->extendedFamily = (eax >> 20) & 0xFF;
+	pProcessorType->stepping = eax & 0xF;
+	pProcessorType->model = (eax >> 4) & 0xF;
+	pProcessorType->family = (eax >> 8) & 0xF;
+	pProcessorType->processorType = (eax >> 12) & 0x3;
+	pProcessorType->reserved = (eax >> 14) & 0x3;
+	pProcessorType->extendedModel = (eax >> 16) & 0xF;
+	pProcessorType->extendedFamily = (eax >> 20) & 0xFF;
 
-	p_CPUFeatures->SSE3 = (ecx & (1 << 0)) != 0;
-	p_CPUFeatures->PCLMULQDQ = (ecx & (1 << 1)) != 0;
-	p_CPUFeatures->DTES64 = (ecx & (1 << 2)) != 0;
-	p_CPUFeatures->MONITOR = (ecx & (1 << 3)) != 0;
-	p_CPUFeatures->DS_CPL = (ecx & (1 << 4)) != 0;
-	p_CPUFeatures->VMX = (ecx & (1 << 5)) != 0;
-	p_CPUFeatures->SMX = (ecx & (1 << 6)) != 0;
-	p_CPUFeatures->EIST = (ecx & (1 << 7)) != 0;
-	p_CPUFeatures->TM2 = (ecx & (1 << 8)) != 0;
-	p_CPUFeatures->SSSE3 = (ecx & (1 << 9)) != 0;
-	p_CPUFeatures->CNXT_ID = (ecx & (1 << 10)) != 0;
-	p_CPUFeatures->SDBG = (ecx & (1 << 11)) != 0;
-	p_CPUFeatures->FMA = (ecx & (1 << 12)) != 0;
-	p_CPUFeatures->CMPXCHG16B = (ecx & (1 << 13)) != 0;
-	p_CPUFeatures->xTPR_Update_Control = (ecx & (1 << 14)) != 0;
-	p_CPUFeatures->PDCM = (ecx & (1 << 15)) != 0;
-	p_CPUFeatures->Reserved1 = (ecx & (1 << 16)) != 0;
-	p_CPUFeatures->PCID = (ecx & (1 << 17)) != 0;
-	p_CPUFeatures->DCA = (ecx & (1 << 18)) != 0;
-	p_CPUFeatures->SSE4_1 = (ecx & (1 << 19)) != 0;
-	p_CPUFeatures->SSE4_2 = (ecx & (1 << 20)) != 0;
-	p_CPUFeatures->x2APIC = (ecx & (1 << 21)) != 0;
-	p_CPUFeatures->MOVBE = (ecx & (1 << 22)) != 0;
-	p_CPUFeatures->POPCNT = (ecx & (1 << 23)) != 0;
-	p_CPUFeatures->TSC_Deadline = (ecx & (1 << 24)) != 0;
-	p_CPUFeatures->AESNI = (ecx & (1 << 25)) != 0;
-	p_CPUFeatures->XSAVE = (ecx & (1 << 26)) != 0;
-	p_CPUFeatures->OSXSAVE = (ecx & (1 << 27)) != 0;
-	p_CPUFeatures->AVX = (ecx & (1 << 28)) != 0;
-	p_CPUFeatures->F16C = (ecx & (1 << 29)) != 0;
-	p_CPUFeatures->RDRAND = (ecx & (1 << 30)) != 0;
-	p_CPUFeatures->Not_Used = (ecx & (1 << 31)) != 0;
+	pCpuFeatures->SSE3 = (ecx & (1 << 0)) != 0;
+	pCpuFeatures->PCLMULQDQ = (ecx & (1 << 1)) != 0;
+	pCpuFeatures->DTES64 = (ecx & (1 << 2)) != 0;
+	pCpuFeatures->MONITOR = (ecx & (1 << 3)) != 0;
+	pCpuFeatures->DS_CPL = (ecx & (1 << 4)) != 0;
+	pCpuFeatures->VMX = (ecx & (1 << 5)) != 0;
+	pCpuFeatures->SMX = (ecx & (1 << 6)) != 0;
+	pCpuFeatures->EIST = (ecx & (1 << 7)) != 0;
+	pCpuFeatures->TM2 = (ecx & (1 << 8)) != 0;
+	pCpuFeatures->SSSE3 = (ecx & (1 << 9)) != 0;
+	pCpuFeatures->CNXT_ID = (ecx & (1 << 10)) != 0;
+	pCpuFeatures->SDBG = (ecx & (1 << 11)) != 0;
+	pCpuFeatures->FMA = (ecx & (1 << 12)) != 0;
+	pCpuFeatures->CMPXCHG16B = (ecx & (1 << 13)) != 0;
+	pCpuFeatures->xTPR_Update_Control = (ecx & (1 << 14)) != 0;
+	pCpuFeatures->PDCM = (ecx & (1 << 15)) != 0;
+	pCpuFeatures->Reserved1 = (ecx & (1 << 16)) != 0;
+	pCpuFeatures->PCID = (ecx & (1 << 17)) != 0;
+	pCpuFeatures->DCA = (ecx & (1 << 18)) != 0;
+	pCpuFeatures->SSE4_1 = (ecx & (1 << 19)) != 0;
+	pCpuFeatures->SSE4_2 = (ecx & (1 << 20)) != 0;
+	pCpuFeatures->x2APIC = (ecx & (1 << 21)) != 0;
+	pCpuFeatures->MOVBE = (ecx & (1 << 22)) != 0;
+	pCpuFeatures->POPCNT = (ecx & (1 << 23)) != 0;
+	pCpuFeatures->TSC_Deadline = (ecx & (1 << 24)) != 0;
+	pCpuFeatures->AESNI = (ecx & (1 << 25)) != 0;
+	pCpuFeatures->XSAVE = (ecx & (1 << 26)) != 0;
+	pCpuFeatures->OSXSAVE = (ecx & (1 << 27)) != 0;
+	pCpuFeatures->AVX = (ecx & (1 << 28)) != 0;
+	pCpuFeatures->F16C = (ecx & (1 << 29)) != 0;
+	pCpuFeatures->RDRAND = (ecx & (1 << 30)) != 0;
+	pCpuFeatures->Not_Used = (ecx & (1 << 31)) != 0;
 
-	p_CPUFeatures->FPU = (edx & (1 << 0)) != 0;
-	p_CPUFeatures->VME = (edx & (1 << 1)) != 0;
-	p_CPUFeatures->DE = (edx & (1 << 2)) != 0;
-	p_CPUFeatures->PSE = (edx & (1 << 3)) != 0;
-	p_CPUFeatures->TSC = (edx & (1 << 4)) != 0;
-	p_CPUFeatures->MSR = (edx & (1 << 5)) != 0;
-	p_CPUFeatures->PAE = (edx & (1 << 6)) != 0;
-	p_CPUFeatures->MCE = (edx & (1 << 7)) != 0;
-	p_CPUFeatures->CX8 = (edx & (1 << 8)) != 0;
-	p_CPUFeatures->APIC = (edx & (1 << 9)) != 0;
-	p_CPUFeatures->Reserved2 = (edx & (1 << 10)) != 0;
-	p_CPUFeatures->SEP = (edx & (1 << 11)) != 0;
-	p_CPUFeatures->MTRR = (edx & (1 << 12)) != 0;
-	p_CPUFeatures->PGE = (edx & (1 << 13)) != 0;
-	p_CPUFeatures->MCA = (edx & (1 << 14)) != 0;
-	p_CPUFeatures->CMOV = (edx & (1 << 15)) != 0;
-	p_CPUFeatures->PAT = (edx & (1 << 16)) != 0;
-	p_CPUFeatures->PSE_36 = (edx & (1 << 17)) != 0;
-	p_CPUFeatures->PSN = (edx & (1 << 18)) != 0;
-	p_CPUFeatures->CLFSH = (edx & (1 << 19)) != 0;
-	p_CPUFeatures->Reserved3 = (edx & (1 << 20)) != 0;
-	p_CPUFeatures->DS = (edx & (1 << 21)) != 0;
-	p_CPUFeatures->ACPI = (edx & (1 << 22)) != 0;
-	p_CPUFeatures->MMX = (edx & (1 << 23)) != 0;
-	p_CPUFeatures->FXSR = (edx & (1 << 24)) != 0;
-	p_CPUFeatures->SSE = (edx & (1 << 25)) != 0;
-	p_CPUFeatures->SSE2 = (edx & (1 << 26)) != 0;
-	p_CPUFeatures->SS = (edx & (1 << 27)) != 0;
-	p_CPUFeatures->HTT = (edx & (1 << 28)) != 0;
-	p_CPUFeatures->TM = (edx & (1 << 29)) != 0;
-	p_CPUFeatures->Reserved4 = (edx & (1 << 30)) != 0;
-	p_CPUFeatures->PBE = (edx & (1 << 31)) != 0;
+	pCpuFeatures->FPU = (edx & (1 << 0)) != 0;
+	pCpuFeatures->VME = (edx & (1 << 1)) != 0;
+	pCpuFeatures->DE = (edx & (1 << 2)) != 0;
+	pCpuFeatures->PSE = (edx & (1 << 3)) != 0;
+	pCpuFeatures->TSC = (edx & (1 << 4)) != 0;
+	pCpuFeatures->MSR = (edx & (1 << 5)) != 0;
+	pCpuFeatures->PAE = (edx & (1 << 6)) != 0;
+	pCpuFeatures->MCE = (edx & (1 << 7)) != 0;
+	pCpuFeatures->CX8 = (edx & (1 << 8)) != 0;
+	pCpuFeatures->APIC = (edx & (1 << 9)) != 0;
+	pCpuFeatures->Reserved2 = (edx & (1 << 10)) != 0;
+	pCpuFeatures->SEP = (edx & (1 << 11)) != 0;
+	pCpuFeatures->MTRR = (edx & (1 << 12)) != 0;
+	pCpuFeatures->PGE = (edx & (1 << 13)) != 0;
+	pCpuFeatures->MCA = (edx & (1 << 14)) != 0;
+	pCpuFeatures->CMOV = (edx & (1 << 15)) != 0;
+	pCpuFeatures->PAT = (edx & (1 << 16)) != 0;
+	pCpuFeatures->PSE_36 = (edx & (1 << 17)) != 0;
+	pCpuFeatures->PSN = (edx & (1 << 18)) != 0;
+	pCpuFeatures->CLFSH = (edx & (1 << 19)) != 0;
+	pCpuFeatures->Reserved3 = (edx & (1 << 20)) != 0;
+	pCpuFeatures->DS = (edx & (1 << 21)) != 0;
+	pCpuFeatures->ACPI = (edx & (1 << 22)) != 0;
+	pCpuFeatures->MMX = (edx & (1 << 23)) != 0;
+	pCpuFeatures->FXSR = (edx & (1 << 24)) != 0;
+	pCpuFeatures->SSE = (edx & (1 << 25)) != 0;
+	pCpuFeatures->SSE2 = (edx & (1 << 26)) != 0;
+	pCpuFeatures->SS = (edx & (1 << 27)) != 0;
+	pCpuFeatures->HTT = (edx & (1 << 28)) != 0;
+	pCpuFeatures->TM = (edx & (1 << 29)) != 0;
+	pCpuFeatures->Reserved4 = (edx & (1 << 30)) != 0;
+	pCpuFeatures->PBE = (edx & (1 << 31)) != 0;
 }
 
 /// @brief Executes the CPUID command with EAX=0x04 and stores the cache list.
-/// @param p_CacheList: A pointer to store the cache list.
-static void cpuid_04h_command(CacheList *p_CacheList)
+/// @param pCacheList: A pointer to store the cache list.
+static void cpuid04hCommand(CacheList *pCacheList)
 {
-	p_CacheList->cacheCount = 0;
+	pCacheList->cacheCount = 0;
 
-	constexpr uint8_t MAX_CACHES = sizeof(p_CacheList->cacheInfo) / sizeof(p_CacheList->cacheInfo[0]);
+	constexpr uint8_t maxCaches = sizeof(pCacheList->cacheInfo) / sizeof(pCacheList->cacheInfo[0]);
 
-	while (p_CacheList->cacheCount < MAX_CACHES)
+	while (pCacheList->cacheCount < maxCaches)
 	{
-		CacheInfo *p_CacheInfo = &p_CacheList->cacheInfo[p_CacheList->cacheCount];
+		CacheInfo *pCacheInfo = &pCacheList->cacheInfo[pCacheList->cacheCount];
 
 		unsigned int eax, ebx, ecx, edx;
 
 		__asm__ __volatile__(
 			"cpuid;" // cpuid komutunu çağır
 			: "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-			: "0"(0x04), "2"(p_CacheList->cacheCount));
+			: "0"(0x04), "2"(pCacheList->cacheCount));
 
 		if ((eax & 0x1f) == 0)
 		{
@@ -301,24 +301,24 @@ static void cpuid_04h_command(CacheList *p_CacheList)
 			break;
 		}
 
-		p_CacheInfo->cacheType = eax & 0x1F;
-		if (p_CacheInfo->cacheType > 3)
+		pCacheInfo->cacheType = eax & 0x1F;
+		if (pCacheInfo->cacheType > 3)
 		{
-			p_CacheInfo->cacheType = 0;
+			pCacheInfo->cacheType = 0;
 		}
-		p_CacheInfo->cacheLevel = (eax >> 5) & 0x7;
-		p_CacheInfo->selfInitializing = (eax >> 8) & 0x1;
-		p_CacheInfo->fullyAssociative = (eax >> 9) & 0x1;
-		p_CacheInfo->LogicalCore = ((eax >> 14) & 0xFFF) + 1;
-		p_CacheInfo->PhysicalCore = ((eax >> 26) & 0x3F) + 1;
-		p_CacheInfo->coherencyLineSize = (ebx & 0xFFF) + 1;
-		p_CacheInfo->physicalLinePartitions = ((ebx >> 12) & 0x3FF) + 1;
-		p_CacheInfo->associativity = ((ebx >> 22) & 0x3FF) + 1;
-		p_CacheInfo->numberOfSets = ecx + 1;
-		p_CacheInfo->writeBackInvalidate = (edx >> 0) & 0x1;
-		p_CacheInfo->cacheInclusiveness = (edx >> 1) & 0x1;
-		p_CacheInfo->complexCacheIndexing = (edx >> 2) & 0x1;
+		pCacheInfo->cacheLevel = (eax >> 5) & 0x7;
+		pCacheInfo->selfInitializing = (eax >> 8) & 0x1;
+		pCacheInfo->fullyAssociative = (eax >> 9) & 0x1;
+		pCacheInfo->LogicalCore = ((eax >> 14) & 0xFFF) + 1;
+		pCacheInfo->PhysicalCore = ((eax >> 26) & 0x3F) + 1;
+		pCacheInfo->coherencyLineSize = (ebx & 0xFFF) + 1;
+		pCacheInfo->physicalLinePartitions = ((ebx >> 12) & 0x3FF) + 1;
+		pCacheInfo->associativity = ((ebx >> 22) & 0x3FF) + 1;
+		pCacheInfo->numberOfSets = ecx + 1;
+		pCacheInfo->writeBackInvalidate = (edx >> 0) & 0x1;
+		pCacheInfo->cacheInclusiveness = (edx >> 1) & 0x1;
+		pCacheInfo->complexCacheIndexing = (edx >> 2) & 0x1;
 
-		p_CacheList->cacheCount++;
+		pCacheList->cacheCount++;
 	}
 }

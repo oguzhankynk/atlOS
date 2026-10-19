@@ -295,7 +295,7 @@ namespace IDT
 
     typedef void (*FUNC)();
 
-    static FUNC InterruptTable[IDT::IDT_TABLE_LEN] = {
+    static FUNC s_interruptTable[IDT::idtTableLen] = {
         INT(0), INT(1), INT(2), INT(3), INT(4), INT(5), INT(6), INT(7),
         INT(8), INT_RESERVED(9), INT(10), INT(11), INT(12), INT(13), INT(14), INT_RESERVED(15),
         INT(16), INT(17), INT(18), INT(19), INT(20), INT(21), INT_RESERVED(22), INT_RESERVED(23),
@@ -334,46 +334,46 @@ namespace IDT
      * @brief Array holding the IDT entries
      *
      */
-    static IDTEntry idt[IDT_TABLE_LEN];
+    static IDTEntry s_idt[idtTableLen];
 
     /**
      * @brief IDTR
      *
      */
-    static IDTR idtr;
+    static IDTR s_idtr;
 
-    static void setEntry(int index, void *handler, uint16_t selector, uint8_t type_attr);
+    static void setEntry(int index, void *handler, uint16_t selector, uint8_t typeAttr);
 
     /**
      * @brief Initializes the IDT.
      *
      */
-    void Init()
+    void init()
     {
-        Handlers::Init();
+        Handlers::init();
 
         int i = 0;
 
         for (; i < 32; i++)
         {
-            setEntry(i, (void *)InterruptTable[i],
+            setEntry(i, (void *)s_interruptTable[i],
                      (uint16_t)SegmentSelect::KERNELCODE,
-                     IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GATE_TRAP);
+                     IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateTrap);
         }
 
-        for (; i < IDT::IDT_TABLE_LEN; i++)
+        for (; i < IDT::idtTableLen; i++)
         {
-            setEntry(i, (void *)InterruptTable[i],
+            setEntry(i, (void *)s_interruptTable[i],
                      (uint16_t)SegmentSelect::KERNELCODE,
-                     IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GATE_INT);
+                     IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateInt);
         }
 
         // Set the IDTR structure
-        idtr.limit = sizeof(idt) - 1;
-        idtr.base = reinterpret_cast<uintptr_t>(&idt);
+        s_idtr.limit = sizeof(s_idt) - 1;
+        s_idtr.base = reinterpret_cast<uintptr_t>(&s_idt);
 
         // Load the IDT using the `lidt` assembly instruction
-        __asm__ volatile("lidt %0" : : "m"(idtr));
+        __asm__ volatile("lidt %0" : : "m"(s_idtr));
     }
 
     /**
@@ -382,133 +382,133 @@ namespace IDT
      * @param index The index of the IDT entry to set.
      * @param handler The address of the interrupt handler.
      * @param selector The code segment selector.
-     * @param type_attr The type and attributes of the entry.
+     * @param typeAttr The type and attributes of the entry.
      *
      * Configures an entry in the IDT with the provided handler address, code segment
      * selector, and type attributes.
      */
-    static void setEntry(int index, void *handler, uint16_t selector, uint8_t type_attr)
+    static void setEntry(int index, void *handler, uint16_t selector, uint8_t typeAttr)
     {
         // Configure the IDT entry
-        idt[index].isrLow = (uintptr_t)handler & 0xFFFF;
-        idt[index].kernelCs = selector;
-        idt[index].ist = 0 & 0x7;
-        idt[index].attributes = type_attr;
-        idt[index].isrMid = ((uintptr_t)handler >> 16) & 0xFFFF;
-        idt[index].isrHigh = ((uintptr_t)handler >> 32) & 0xFFFFFFFF;
-        idt[index].reserved = 0;
+        s_idt[index].isrLow = (uintptr_t)handler & 0xFFFF;
+        s_idt[index].kernelCs = selector;
+        s_idt[index].ist = 0 & 0x7;
+        s_idt[index].attributes = typeAttr;
+        s_idt[index].isrMid = ((uintptr_t)handler >> 16) & 0xFFFF;
+        s_idt[index].isrHigh = ((uintptr_t)handler >> 32) & 0xFFFFFFFF;
+        s_idt[index].reserved = 0;
     }
 
     /**
      * @brief Exception handler
      * @param regs The status of registers at exception time
      */
-    extern "C" void int_handler(const X86_64ExceptionInfo &regs)
+    extern "C" void intHandler(const InterruptFrame &regs)
     {
-        const char *int_str;
+        const char *intStr;
 
         switch (static_cast<ExternalInterrupts>(regs.int_no))
         {
         case ExternalInterrupts::DivideError:
-            int_str = "DivideError";
+            intStr = "DivideError";
             break;
 
         case ExternalInterrupts::DebugException:
-            int_str = "DebugException";
+            intStr = "DebugException";
             break;
 
         case ExternalInterrupts::NMIInterrupt:
-            int_str = "NMIInterrupt";
+            intStr = "NMIInterrupt";
             break;
 
         case ExternalInterrupts::Breakpoint:
-            int_str = "Breakpoint";
+            intStr = "Breakpoint";
             break;
 
         case ExternalInterrupts::Overflow:
-            int_str = "Overflow";
+            intStr = "Overflow";
             break;
 
         case ExternalInterrupts::BOUNDRangeExceeded:
-            int_str = "BOUNDRangeExceeded";
+            intStr = "BOUNDRangeExceeded";
             break;
 
         case ExternalInterrupts::InvalidOpcode:
-            int_str = "InvalidOpcode";
+            intStr = "InvalidOpcode";
             break;
 
         case ExternalInterrupts::DeviceNotAvailable:
-            int_str = "DeviceNotAvailable";
+            intStr = "DeviceNotAvailable";
             break;
 
         case ExternalInterrupts::DoubleFault:
-            int_str = "DoubleFault";
+            intStr = "DoubleFault";
             break;
 
         case ExternalInterrupts::CoprocessorSegmentOverrun:
-            int_str = "CoprocessorSegmentOverrun";
+            intStr = "CoprocessorSegmentOverrun";
             break;
 
-        case ExternalInterrupts::reserved:
-            int_str = "reserved";
+        case ExternalInterrupts::Reserved:
+            intStr = "reserved";
             break;
 
         case ExternalInterrupts::InvalidTSS:
-            int_str = "InvalidTSS";
+            intStr = "InvalidTSS";
             break;
 
         case ExternalInterrupts::SegmentNotPresent:
-            int_str = "SegmentNotPresent";
+            intStr = "SegmentNotPresent";
             break;
 
         case ExternalInterrupts::StackSegmentFault:
-            int_str = "StackSegmentFault";
+            intStr = "StackSegmentFault";
             break;
 
         case ExternalInterrupts::GeneralProtection:
-            int_str = "GeneralProtection";
+            intStr = "GeneralProtection";
             break;
 
         case ExternalInterrupts::PageFault:
-            int_str = "PageFault";
+            intStr = "PageFault";
             break;
 
         case ExternalInterrupts::IntelReserved:
-            int_str = "IntelReserved";
+            intStr = "IntelReserved";
             break;
 
-        case ExternalInterrupts::x87_FPU_FloatingPointError:
-            int_str = "x87_FPU_FloatingPointError";
+        case ExternalInterrupts::X87FpuFloatingPointError:
+            intStr = "x87_FPU_FloatingPointError";
             break;
 
         case ExternalInterrupts::AlignmentCheck:
-            int_str = "AlignmentCheck";
+            intStr = "AlignmentCheck";
             break;
 
         case ExternalInterrupts::MachineCheck:
-            int_str = "MachineCheck";
+            intStr = "MachineCheck";
             break;
 
-        case ExternalInterrupts::SIMD_FloatingPointException:
-            int_str = "SIMD_FloatingPointException";
+        case ExternalInterrupts::SimdFloatingPointException:
+            intStr = "SIMD_FloatingPointException";
             break;
 
         case ExternalInterrupts::VirtualizationException:
-            int_str = "VirtualizationException";
+            intStr = "VirtualizationException";
             break;
 
         case ExternalInterrupts::ControlProtectionException:
-            int_str = "ControlProtectionException";
+            intStr = "ControlProtectionException";
             break;
 
         default:
-            int_str = "OtherException";
-            Handlers::InterruptHandler(regs.int_no);
+            intStr = "OtherException";
+            Handlers::interruptHandler(regs.int_no);
             return;
         }
 
         printf("==== EXCEPTION/INTERRUPT INFO ====\n");
-        printf("INT_NO  = 0x%lx %s\n", regs.int_no, int_str);
+        printf("INT_NO  = 0x%lx %s\n", regs.int_no, intStr);
         printf("ERR_CODE= 0x%lx\n", regs.err_code);
 
         printf("\n--- General Purpose Registers ---\n");

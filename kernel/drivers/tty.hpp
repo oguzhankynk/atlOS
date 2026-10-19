@@ -30,20 +30,20 @@ extern "C"
 
     /// @brief Initializes the terminal.
     /// @param
-    void terminal_initialize(void);
+    void terminalInitialize(void);
 
     /// @brief Writes a single character to the terminal.
     /// @param c The character to write.
-    void terminal_putchar(char c);
+    void terminalPutchar(char c);
 
     /// @brief Writes a buffer of characters to the terminal.
     /// @param data Pointer to the buffer containing the characters to write.
     /// @param size Number of characters to write from the buffer.
-    void terminal_write(const char *data, size_t size);
+    void terminalWrite(const char *data, size_t size);
 
     /// @brief Writes a null-terminated string to the terminal.
     /// @param data Pointer to the null-terminated string to write.
-    void terminal_writestring(const char *data);
+    void terminalWritestring(const char *data);
 
 #if defined(__cplusplus)
 } /* extern "C" */

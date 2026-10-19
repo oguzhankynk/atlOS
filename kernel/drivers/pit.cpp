@@ -28,27 +28,27 @@ namespace PIT
     /**
      * @brief Base frequency of the PIT
      */
-    static constexpr auto PIT_BASE_FREQUENCY = 1193182ULL;
+    static constexpr auto pitBaseFrequency = 1193182ULL;
 
     /**
      * @brief I/O port for channel 0
      */
-    static constexpr uint16_t PIT_CHANNEL_0 = 0x40;
+    static constexpr uint16_t pitChannel0 = 0x40;
 
     /**
      * @brief I/O port for channel 1
      */
-    static constexpr uint16_t PIT_CHANNEL_1 = 0x40;
+    static constexpr uint16_t pitChannel1 = 0x40;
 
     /**
      * @brief I/O port for channel 2
      */
-    static constexpr uint16_t PIT_CHANNEL_2 = 0x40;
+    static constexpr uint16_t pitChannel2 = 0x40;
 
     /**
      * @brief Command port for the PIT
      */
-    static constexpr uint16_t PIT_COMMAND_PORT = 0x43;
+    static constexpr uint16_t pitCommandPort = 0x43;
 
     /**
      * @brief Select channel
@@ -119,14 +119,14 @@ namespace PIT
     /**
      * @brief Initializes the PIT8253/8254 with the desired settings.
      *
-     * @param period_ns The desired period in nanoseconds.
+     * @param periodNs The desired period in nanoseconds.
      * @param handler A function pointer to the interrupt handler that will be called when the timer triggers.
      * @param args Optional arguments to be passed to the handler function.
      */
-    void init(uint32_t period_ns, void (*handler)(void *), void *args)
+    void init(uint32_t periodNs, void (*handler)(void *), void *args)
     {
 
-        uint32_t divisor = (PIT_BASE_FREQUENCY * period_ns) / 1000000000;
+        uint32_t divisor = (pitBaseFrequency * periodNs) / 1000000000;
 
         // Control Word ayarla (Channel 0, Lobyte/Hibyte, Square Wave, Binary)
         PITControlWord cmd{
@@ -135,23 +135,23 @@ namespace PIT
             PITOperatingMode::Mode3,
             PITBCDMode::Binary};
 
-        printf("PIT: Setting period to %u ns, divisor: %u, cmd:%u \n", period_ns, divisor, cmd.toByte());
+        printf("PIT: Setting period to %u ns, divisor: %u, cmd:%u \n", periodNs, divisor, cmd.toByte());
 
         // Send control word to the PIT
-        IOPort::outportb(PIT_COMMAND_PORT, cmd.toByte());
+        IOPort::outportb(pitCommandPort, cmd.toByte());
 
         // Send divisor to the PIT
-        IOPort::outportb(PIT_CHANNEL_0, static_cast<uint8_t>(divisor & 0xFF));        // Lobyte
-        IOPort::outportb(PIT_CHANNEL_0, static_cast<uint8_t>((divisor >> 8) & 0xFF)); // Hibyte
+        IOPort::outportb(pitChannel0, static_cast<uint8_t>(divisor & 0xFF));        // Lobyte
+        IOPort::outportb(pitChannel0, static_cast<uint8_t>((divisor >> 8) & 0xFF)); // Hibyte
 
-        bool irq_register_stat = PIC::add_irq_handler(PIC::IRQ::Timer, handler, args);
-        if (irq_register_stat == false)
+        bool irqRegisterStat = PIC::addIrqHandler(PIC::IRQ::Timer, handler, args);
+        if (irqRegisterStat == false)
         {
-            printf("PIT: add_irq_handler error \n");
+            printf("PIT: addIrqHandler error \n");
             return;
         }
 
-        PIC::irq_enable(PIC::IRQ::Timer); // Enable PIT interrupt
+        PIC::irqEnable(PIC::IRQ::Timer); // Enable PIT interrupt
     }
 
 } // namespace PIT

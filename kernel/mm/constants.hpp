@@ -9,25 +9,25 @@ namespace Memory
      * @brief Size of a single memory page.
      *
      */
-    constexpr uint32_t PAGE_SIZE_2MB = 2 * 1024 * 1024;
+    constexpr uint32_t pageSize2Mb = 2 * 1024 * 1024;
 
     /**
      * @brief Size of a physical frame used for page tables.
      *
      */
-    constexpr uint32_t FRAME_SIZE_4KB = 4 * 1024;
+    constexpr uint32_t frameSize4Kb = 4 * 1024;
 
     /**
      * @brief Number of entries per page directory.
      */
-    constexpr uint32_t PAGE_DIR_SIZE = 1024;
+    constexpr uint32_t pageDirSize = 1024;
 
     /**
      * @brief Number of entries per page table.
      */
-    constexpr uint32_t PAGE_TABLE_SIZE = 1024;
+    constexpr uint32_t pageTableSize = 1024;
 
-    constexpr uint32_t KERNEL_LOAD_ADDR = (uint32_t)0xC0000000;
+    constexpr uint32_t kernelLoadAddr = (uint32_t)0xC0000000;
 
     extern "C"
     {
@@ -92,11 +92,11 @@ namespace Memory
      */
     extern "C" uint32_t kernel_physical_end;
 
-    static size_t ROUND_UP_TO_PAGE_SIZE(size_t size)
+    static size_t roundUpToPageSize(size_t size)
     {
         // If size is already a multiple of PAGE_SIZE_2MB, return it as is
         // Otherwise, round up to the next multiple of 4096
-        return (size % PAGE_SIZE_2MB == 0) ? size : ((size / PAGE_SIZE_2MB) + 1) * PAGE_SIZE_2MB;
+        return (size % pageSize2Mb == 0) ? size : ((size / pageSize2Mb) + 1) * pageSize2Mb;
     }
 };
 

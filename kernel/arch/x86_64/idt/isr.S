@@ -1,5 +1,5 @@
 .section .text
-.extern int_handler    /* C/C++ exception handler symbol */
+.extern intHandler    /* C/C++ exception handler symbol */
 
 /* 
  * INT_DEFINITION NO HANDLER
@@ -79,24 +79,24 @@ INT_\NO:
 .altmacro
     .set i, 0
     .rept 9
-        INT_DEFINITION %i int_handler
+        INT_DEFINITION %i intHandler
         .set i, i + 1
     .endr
 
     .set i, 10
     .rept 5
-        INT_DEFINITION %i int_handler
+        INT_DEFINITION %i intHandler
         .set i, i + 1
     .endr
 
     .set i, 16
     .rept 6
-        INT_DEFINITION %i int_handler
+        INT_DEFINITION %i intHandler
         .set i, i + 1
     .endr
 
     .set i, 32
     .rept 224
-        INT_DEFINITION %i int_handler
+        INT_DEFINITION %i intHandler
         .set i, i + 1
     .endr

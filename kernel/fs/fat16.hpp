@@ -141,7 +141,7 @@ namespace FileSystem
 
 		enum class Attributes : uint8_t
 		{
-			READ_ONLY = (1 << 0), /// Prevents programs from overwriting or deleting the entry.
+			ReadOnly = (1 << 0), /// Prevents programs from overwriting or deleting the entry.
 			HIDDEN = (1 << 1),	  ///  Hides the file in normal directory listings, though it can be overridden by users.
 			SYSTEM = (1 << 2),	  /// Marks files/directories as critical, discouraging modification.
 			VOLUME = (1 << 3),	  /// Indicates a directory entry for a volume label, not a file, pointing to cluster 0

@@ -34,28 +34,28 @@ namespace FileSystem
 			IFileSystem *fs{};
 		};
 
-		static constexpr uint16_t MAX_FILE_SYSTEM = 5;
+		static constexpr uint16_t maxFileSystem = 5;
 
-		static FileSystemInfo *fileSystems[MAX_FILE_SYSTEM]{};
+		static FileSystemInfo *s_fileSystems[maxFileSystem]{};
 
-		bool AddFileSystem(IFileSystem &fs)
+		bool addFileSystem(IFileSystem &fs)
 		{
 			int fsIndex = 0;
 
-			for (fsIndex = 0; fsIndex < MAX_FILE_SYSTEM; fsIndex++)
+			for (fsIndex = 0; fsIndex < maxFileSystem; fsIndex++)
 			{
-				if (fileSystems[fsIndex] == nullptr)
+				if (s_fileSystems[fsIndex] == nullptr)
 				{
 					break;
 				}
 			}
 
-			if (fsIndex == MAX_FILE_SYSTEM)
+			if (fsIndex == maxFileSystem)
 			{
 				return false;
 			}
 
-			auto &newFs = fileSystems[fsIndex];
+			auto &newFs = s_fileSystems[fsIndex];
 
 			newFs = new FileSystemInfo;
 

@@ -31,18 +31,18 @@ public:
     SystemBootInformation() = default;
 
     /// @brief Constructor that takes a pointer to the start of the structure.
-    /// @param p_start Pointer to the start of the structure.
-    SystemBootInformation(void *p_start)
+    /// @param pStart Pointer to the start of the structure.
+    SystemBootInformation(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     }
 
     /// @brief Scans the System Boot Information table.
-    /// @param p_start Pointer to the start of the structure.
+    /// @param pStart Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();

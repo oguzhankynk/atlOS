@@ -114,17 +114,17 @@ namespace IDT
         DeviceNotAvailable,
         DoubleFault,
         CoprocessorSegmentOverrun,
-        reserved,
+        Reserved,
         InvalidTSS,
         SegmentNotPresent,
         StackSegmentFault,
         GeneralProtection,
         PageFault,
         IntelReserved,
-        x87_FPU_FloatingPointError,
+        X87FpuFloatingPointError,
         AlignmentCheck,
         MachineCheck,
-        SIMD_FloatingPointException,
+        SimdFloatingPointException,
         VirtualizationException,
         ControlProtectionException
     };
@@ -134,9 +134,9 @@ namespace IDT
     {
         enum TypeAttr : uint8_t
         {
-            GATE_TASK = 0x5,
-            GATE_INT = 0xE,  // 64-bit interrupt gate
-            GATE_TRAP = 0xF, // 64-bit trap gate
+            GateTask = 0x5,
+            GateInt = 0xE,  // 64-bit interrupt gate
+            GateTrap = 0xF, // 64-bit trap gate
 
             RING0 = 0x00,
             RING1 = 0x20,
@@ -163,13 +163,13 @@ namespace IDT
         uint64_t base;  ///< Base address of the IDT
     } __attribute__((packed));
 
-    static constexpr uint32_t IDT_TABLE_LEN = 256;
+    static constexpr uint32_t idtTableLen = 256;
 
     /**
      * @brief Initializes the IDT.
      *
      */
-    void Init();
+    void init();
 
 }; // namespace IDT
 

@@ -21,7 +21,7 @@
 
 #include <mm/constants.hpp>
 
-namespace cxx
+namespace Cxx
 {
     /**
      * @brief Initialize all global/static C++ constructors.

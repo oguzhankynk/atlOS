@@ -53,56 +53,56 @@ namespace PIC
      * This function initializes the master and slave PICs with the desired settings.
      * It performs the initial configuration of the PICs for use in the system.
      */
-    void Init();
+    void init();
 
     /**
      * @brief Sends an end-of-interrupt (EOI) signal to the PIC.
      *
      * @param irq Interrupt request number (IRQ) that has been serviced.
      */
-    void send_eoi(IRQ irq);
+    void sendEoi(IRQ irq);
 
     /**
      * @brief Masks a specific interrupt request (IRQ) on the master PIC.
      *
      * @param irq Interrupt request number (IRQ) to mask.
      */
-    void mask_master_irq(IRQ irq);
+    void maskMasterIrq(IRQ irq);
 
     /**
      * @brief Masks a specific interrupt request (IRQ) on the slave PIC.
      *
      * @param irq Interrupt request number (IRQ) to mask.
      */
-    void mask_slave_irq(IRQ irq);
+    void maskSlaveIrq(IRQ irq);
 
     /**
      * @brief Unmasks a specific interrupt request (IRQ) on the master PIC.
      *
      * @param irq Interrupt request number (IRQ) to unmask.
      */
-    void unmask_master_irq(IRQ irq);
+    void unmaskMasterIrq(IRQ irq);
 
     /**
      * @brief Unmasks a specific interrupt request (IRQ) on the slave PIC.
      *
      * @param irq Interrupt request number (IRQ) to unmask.
      */
-    void unmask_slave_irq(IRQ irq);
+    void unmaskSlaveIrq(IRQ irq);
 
     /**
      * @brief Disables a specific interrupt request (IRQ).
      *
      * @param irq Interrupt request number (IRQ) to disable.
      */
-    void irq_disable(IRQ irq);
+    void irqDisable(IRQ irq);
 
     /**
      * @brief Enables a specific interrupt request (IRQ).
      *
      * @param irq Interrupt request number (IRQ) to enable.
      */
-    void irq_enable(IRQ irq);
+    void irqEnable(IRQ irq);
 
     /**
      * @brief Adds an interrupt request (IRQ) handler.
@@ -113,7 +113,7 @@ namespace PIC
      *
      * @return true if the handler was successfully added, false otherwise.
      */
-    bool add_irq_handler(IRQ irq, void (*handler)(void *), void *arg = nullptr);
+    bool addIrqHandler(IRQ irq, void (*handler)(void *), void *arg = nullptr);
 
 }; // namespace PIC
 

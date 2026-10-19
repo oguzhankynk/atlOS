@@ -43,9 +43,9 @@
 
 namespace DeviceManager
 {
-    static constexpr size_t NUMBER_OF_MAX_DEVICE = 10;
+    static constexpr size_t numberOfMaxDevice = 10;
 
-    static Device *deviceList[NUMBER_OF_MAX_DEVICE]{};
+    static Device *s_deviceList[numberOfMaxDevice]{};
 
     struct PartitionEntry
     {
@@ -81,12 +81,12 @@ namespace DeviceManager
     {
         ATA *ataDevice = new ATA("/dev/ata0");
 
-        kernel_panic_assert(ataDevice != nullptr);
+        kernelPanicAssert(ataDevice != nullptr);
 
         uint8_t sectorData[512]{};
 
         //! read boot sector
-        ataDevice->read_sector(0, (uint8_t *)sectorData);
+        ataDevice->readSector(0, (uint8_t *)sectorData);
 
         if (sectorData[510] == 0x55 && sectorData[511] == 0xAA)
         {
@@ -109,11 +109,11 @@ namespace DeviceManager
                         snprintf(deviceName, 32, "/dev/ata0p%d", validPartition);
 
                         ATA *newPartition = new ATA(deviceName);
-                        kernel_panic_assert(newPartition != nullptr);
+                        kernelPanicAssert(newPartition != nullptr);
 
                         uint8_t partitionSectorData[512]{};
 
-                        newPartition->read_sector(part.lba_first_sector, partitionSectorData);
+                        newPartition->readSector(part.lba_first_sector, partitionSectorData);
 
                         if (partitionSectorData[0] == 0xEB || partitionSectorData[0] == 0xE9)
                         {
@@ -121,7 +121,7 @@ namespace DeviceManager
 
                             auto *fat16 = new FileSystem::FAT16::FAT16FileSystem(*newPartition,
                                                                                  part.lba_first_sector);
-                            auto ret = FileSystem::VFS::AddFileSystem(*fat16);
+                            auto ret = FileSystem::VFS::addFileSystem(*fat16);
 
                             break;
                         }
@@ -148,11 +148,11 @@ namespace DeviceManager
         }
     }
 
-    void Init()
+    void init()
     {
-        // PIC::Init(); not used anymore in favor of APIC
+        // PIC::init(); not used anymore in favor of APIC
 
-        // Keyboard::Init();
+        // Keyboard::init();
 
 
         //detectATADevices();

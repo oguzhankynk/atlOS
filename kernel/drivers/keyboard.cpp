@@ -13,276 +13,276 @@ namespace Keyboard
      */
     enum KEYCODE
     {
-        NULL_KEY = 0,
+        NullKey = 0,
 
         // MAKE Codes
-        A_MAKE = 0x1E,
-        B_MAKE = 0x30,
-        C_MAKE = 0x2E,
-        D_MAKE = 0x20,
-        E_MAKE = 0x12,
-        F_MAKE = 0x21,
-        G_MAKE = 0x22,
-        H_MAKE = 0x23,
-        I_MAKE = 0x17,
-        J_MAKE = 0x24,
-        K_MAKE = 0x25,
-        L_MAKE = 0x26,
-        M_MAKE = 0x32,
-        N_MAKE = 0x31,
-        O_MAKE = 0x18,
-        P_MAKE = 0x19,
-        Q_MAKE = 0x10,
-        R_MAKE = 0x13,
-        S_MAKE = 0x1F,
-        T_MAKE = 0x14,
-        U_MAKE = 0x16,
-        V_MAKE = 0x2F,
-        W_MAKE = 0x11,
-        X_MAKE = 0x2D,
-        Y_MAKE = 0x15,
-        Z_MAKE = 0x2C,
+        AMake = 0x1E,
+        BMake = 0x30,
+        CMake = 0x2E,
+        DMake = 0x20,
+        EMake = 0x12,
+        FMake = 0x21,
+        GMake = 0x22,
+        HMake = 0x23,
+        IMake = 0x17,
+        JMake = 0x24,
+        KMake = 0x25,
+        LMake = 0x26,
+        MMake = 0x32,
+        NMake = 0x31,
+        OMake = 0x18,
+        PMake = 0x19,
+        QMake = 0x10,
+        RMake = 0x13,
+        SMake = 0x1F,
+        TMake = 0x14,
+        UMake = 0x16,
+        VMake = 0x2F,
+        WMake = 0x11,
+        XMake = 0x2D,
+        YMake = 0x15,
+        ZMake = 0x2C,
         // Break Codes
-        A_BREAK = 0x9E,
-        B_BREAK = 0xB0,
-        C_BREAK = 0xAE,
-        D_BREAK = 0xA0,
-        E_BREAK = 0x92,
-        F_BREAK = 0xA1,
-        G_BREAK = 0xA2,
-        H_BREAK = 0xA3,
-        I_BREAK = 0x97,
-        J_BREAK = 0xA4,
-        K_BREAK = 0xA5,
-        L_BREAK = 0xA6,
-        M_BREAK = 0xB2,
-        N_BREAK = 0xB1,
-        O_BREAK = 0x98,
-        P_BREAK = 0x99,
-        Q_BREAK = 0x90,
-        R_BREAK = 0x93,
-        S_BREAK = 0x9F,
-        T_BREAK = 0x94,
-        U_BREAK = 0x96,
-        V_BREAK = 0xAF,
-        W_BREAK = 0x91,
-        X_BREAK = 0xAD,
-        Y_BREAK = 0x95,
-        Z_BREAK = 0xAC,
+        ABreak = 0x9E,
+        BBreak = 0xB0,
+        CBreak = 0xAE,
+        DBreak = 0xA0,
+        EBreak = 0x92,
+        FBreak = 0xA1,
+        GBreak = 0xA2,
+        HBreak = 0xA3,
+        IBreak = 0x97,
+        JBreak = 0xA4,
+        KBreak = 0xA5,
+        LBreak = 0xA6,
+        MBreak = 0xB2,
+        NBreak = 0xB1,
+        OBreak = 0x98,
+        PBreak = 0x99,
+        QBreak = 0x90,
+        RBreak = 0x93,
+        SBreak = 0x9F,
+        TBreak = 0x94,
+        UBreak = 0x96,
+        VBreak = 0xAF,
+        WBreak = 0x91,
+        XBreak = 0xAD,
+        YBreak = 0x95,
+        ZBreak = 0xAC,
 
         // Make Codes for Numbers
-        ZERO_MAKE = 0x0B,
-        ONE_MAKE = 0x02,
-        TWO_MAKE = 0x03,
-        THREE_MAKE = 0x04,
-        FOUR_MAKE = 0x05,
-        FIVE_MAKE = 0x06,
-        SIX_MAKE = 0x07,
-        SEVEN_MAKE = 0x08,
-        EIGHT_MAKE = 0x09,
-        NINE_MAKE = 0x0A,
+        ZeroMake = 0x0B,
+        OneMake = 0x02,
+        TwoMake = 0x03,
+        ThreeMake = 0x04,
+        FourMake = 0x05,
+        FiveMake = 0x06,
+        SixMake = 0x07,
+        SevenMake = 0x08,
+        EightMake = 0x09,
+        NineMake = 0x0A,
 
         // Break Codes for Numbers
-        ZERO_BREAK = 0x8B,
-        ONE_BREAK = 0x82,
-        TWO_BREAK = 0x83,
-        THREE_BREAK = 0x84,
-        FOUR_BREAK = 0x85,
-        FIVE_BREAK = 0x86,
-        SIX_BREAK = 0x87,
-        SEVEN_BREAK = 0x88,
-        EIGHT_BREAK = 0x89,
-        NINE_BREAK = 0x8A,
+        ZeroBreak = 0x8B,
+        OneBreak = 0x82,
+        TwoBreak = 0x83,
+        ThreeBreak = 0x84,
+        FourBreak = 0x85,
+        FiveBreak = 0x86,
+        SixBreak = 0x87,
+        SevenBreak = 0x88,
+        EightBreak = 0x89,
+        NineBreak = 0x8A,
 
         // Make Codes for Special Characters
-        ESC_MAKE = 0x01,
-        TAB_MAKE = 0x0F,
-        CAPS_LOCK_MAKE = 0x3A,
-        LEFT_SHIFT_MAKE = 0x2A,
-        RIGHT_SHIFT_MAKE = 0x36,
-        LEFT_CTRL_MAKE = 0x1D,
-        LEFT_ALT_MAKE = 0x38,
-        SPACE_MAKE = 0x39,
-        ENTER_MAKE = 0x1C,
-        BACKSPACE_MAKE = 0x0E,
-        DELETE_MAKE = 0x53,
-        LEFT_ARROW_MAKE = 0x4B,
-        RIGHT_ARROW_MAKE = 0x4D,
-        UP_ARROW_MAKE = 0x48,
-        DOWN_ARROW_MAKE = 0x50,
-        F1_MAKE = 0x3B,
-        F2_MAKE = 0x3C,
-        F3_MAKE = 0x3D,
-        F4_MAKE = 0x3E,
-        F5_MAKE = 0x3F,
-        F6_MAKE = 0x40,
-        F7_MAKE = 0x41,
-        F8_MAKE = 0x42,
-        F9_MAKE = 0x43,
-        F10_MAKE = 0x44,
-        F11_MAKE = 0x57,
-        F12_MAKE = 0x58,
+        EscMake = 0x01,
+        TabMake = 0x0F,
+        CapsLockMake = 0x3A,
+        LeftShiftMake = 0x2A,
+        RightShiftMake = 0x36,
+        LeftCtrlMake = 0x1D,
+        LeftAltMake = 0x38,
+        SpaceMake = 0x39,
+        EnterMake = 0x1C,
+        BackspaceMake = 0x0E,
+        DeleteMake = 0x53,
+        LeftArrowMake = 0x4B,
+        RightArrowMake = 0x4D,
+        UpArrowMake = 0x48,
+        DownArrowMake = 0x50,
+        F1Make = 0x3B,
+        F2Make = 0x3C,
+        F3Make = 0x3D,
+        F4Make = 0x3E,
+        F5Make = 0x3F,
+        F6Make = 0x40,
+        F7Make = 0x41,
+        F8Make = 0x42,
+        F9Make = 0x43,
+        F10Make = 0x44,
+        F11Make = 0x57,
+        F12Make = 0x58,
 
         // Break Codes for Special Characters
-        ESC_BREAK = 0x81,
-        TAB_BREAK = 0x8F,
-        CAPS_LOCK_BREAK = 0xBA,
-        LEFT_SHIFT_BREAK = 0xAA,
-        RIGHT_SHIFT_BREAK = 0xB6,
-        LEFT_CTRL_BREAK = 0x9D,
-        LEFT_ALT_BREAK = 0xB8,
-        SPACE_BREAK = 0xB9,
-        ENTER_BREAK = 0x9C,
-        BACKSPACE_BREAK = 0x8E,
-        DELETE_BREAK = 0xD3,
-        LEFT_ARROW_BREAK = 0xCB,
-        RIGHT_ARROW_BREAK = 0xCD,
-        UP_ARROW_BREAK = 0xC8,
-        DOWN_ARROW_BREAK = 0xD0,
-        F1_BREAK = 0xBB,
-        F2_BREAK = 0xBC,
-        F3_BREAK = 0xBD,
-        F4_BREAK = 0xBE,
-        F5_BREAK = 0xBF,
-        F6_BREAK = 0xC0,
-        F7_BREAK = 0xC1,
-        F8_BREAK = 0xC2,
-        F9_BREAK = 0xC3,
-        F10_BREAK = 0xC4,
-        F11_BREAK = 0xD7,
-        F12_BREAK = 0xD8
+        EscBreak = 0x81,
+        TabBreak = 0x8F,
+        CapsLockBreak = 0xBA,
+        LeftShiftBreak = 0xAA,
+        RightShiftBreak = 0xB6,
+        LeftCtrlBreak = 0x9D,
+        LeftAltBreak = 0xB8,
+        SpaceBreak = 0xB9,
+        EnterBreak = 0x9C,
+        BackspaceBreak = 0x8E,
+        DeleteBreak = 0xD3,
+        LeftArrowBreak = 0xCB,
+        RightArrowBreak = 0xCD,
+        UpArrowBreak = 0xC8,
+        DownArrowBreak = 0xD0,
+        F1Break = 0xBB,
+        F2Break = 0xBC,
+        F3Break = 0xBD,
+        F4Break = 0xBE,
+        F5Break = 0xBF,
+        F6Break = 0xC0,
+        F7Break = 0xC1,
+        F8Break = 0xC2,
+        F9Break = 0xC3,
+        F10Break = 0xC4,
+        F11Break = 0xD7,
+        F12Break = 0xD8
 
     };
 
     struct KeyboardBuffer
     {
-        static constexpr uint16_t BUFFER_SIZE = 256;
-        int8_t buffer[BUFFER_SIZE]{};
+        static constexpr uint16_t bufferSize = 256;
+        int8_t buffer[bufferSize]{};
         uint16_t w_index{};
         uint16_t r_index{};
 
-        bool IsFull();
-        void Append(int8_t key);
+        bool isFull();
+        void append(int8_t key);
         int8_t getKey();
     };
 
-    static uint8_t ToASCII(uint8_t key);
-    static void keyboard_irq(void *Arg);
-    static void read_key();
+    static uint8_t toAscii(uint8_t key);
+    static void keyboardIrq(void *arg);
+    static void readKey();
 
-    static KeyboardBuffer key_buffer;
+    static KeyboardBuffer s_keyBuffer;
 
-    void Init()
+    void init()
     {
-        bool irq_register_stat = PIC::add_irq_handler(PIC::IRQ::Keyboard, keyboard_irq, (void *)nullptr);
+        bool irqRegisterStat = PIC::addIrqHandler(PIC::IRQ::Keyboard, keyboardIrq, (void *)nullptr);
 
-        if (irq_register_stat == false)
+        if (irqRegisterStat == false)
         {
-            printf("Keyboard: add_irq_handler error \n");
+            printf("Keyboard: addIrqHandler error \n");
             return;
         }
 
-        PIC::irq_enable(PIC::IRQ::Keyboard); // Enable Keyboard interrupt
+        PIC::irqEnable(PIC::IRQ::Keyboard); // Enable Keyboard interrupt
     }
 
-    int8_t GetKey()
+    int8_t getKey()
     {
-        return key_buffer.getKey();
+        return s_keyBuffer.getKey();
     }
 
-    static void keyboard_irq(void *Arg)
+    static void keyboardIrq(void *arg)
     {
-        key_buffer.Append(ToASCII(IOPort::inportb(0x60)));
+        s_keyBuffer.append(toAscii(IOPort::inportb(0x60)));
     }
 
-    static uint8_t ToASCII(uint8_t key)
+    static uint8_t toAscii(uint8_t key)
     {
         switch (key)
         {
         // Letters
-        case A_MAKE:
+        case AMake:
             return 'a';
-        case B_MAKE:
+        case BMake:
             return 'b';
-        case C_MAKE:
+        case CMake:
             return 'c';
-        case D_MAKE:
+        case DMake:
             return 'd';
-        case E_MAKE:
+        case EMake:
             return 'e';
-        case F_MAKE:
+        case FMake:
             return 'f';
-        case G_MAKE:
+        case GMake:
             return 'g';
-        case H_MAKE:
+        case HMake:
             return 'h';
-        case I_MAKE:
+        case IMake:
             return 'i';
-        case J_MAKE:
+        case JMake:
             return 'j';
-        case K_MAKE:
+        case KMake:
             return 'k';
-        case L_MAKE:
+        case LMake:
             return 'l';
-        case M_MAKE:
+        case MMake:
             return 'm';
-        case N_MAKE:
+        case NMake:
             return 'n';
-        case O_MAKE:
+        case OMake:
             return 'o';
-        case P_MAKE:
+        case PMake:
             return 'p';
-        case Q_MAKE:
+        case QMake:
             return 'q';
-        case R_MAKE:
+        case RMake:
             return 'r';
-        case S_MAKE:
+        case SMake:
             return 's';
-        case T_MAKE:
+        case TMake:
             return 't';
-        case U_MAKE:
+        case UMake:
             return 'u';
-        case V_MAKE:
+        case VMake:
             return 'v';
-        case W_MAKE:
+        case WMake:
             return 'w';
-        case X_MAKE:
+        case XMake:
             return 'x';
-        case Y_MAKE:
+        case YMake:
             return 'y';
-        case Z_MAKE:
+        case ZMake:
             return 'z';
 
         // Numbers
-        case ZERO_MAKE:
+        case ZeroMake:
             return '0';
-        case ONE_MAKE:
+        case OneMake:
             return '1';
-        case TWO_MAKE:
+        case TwoMake:
             return '2';
-        case THREE_MAKE:
+        case ThreeMake:
             return '3';
-        case FOUR_MAKE:
+        case FourMake:
             return '4';
-        case FIVE_MAKE:
+        case FiveMake:
             return '5';
-        case SIX_MAKE:
+        case SixMake:
             return '6';
-        case SEVEN_MAKE:
+        case SevenMake:
             return '7';
-        case EIGHT_MAKE:
+        case EightMake:
             return '8';
-        case NINE_MAKE:
+        case NineMake:
             return '9';
 
         // Special Characters
-        case SPACE_MAKE:
+        case SpaceMake:
             return ' ';
-        case ENTER_MAKE:
+        case EnterMake:
             return '\n';
-        case TAB_MAKE:
+        case TabMake:
             return '\t';
-        case ESC_MAKE:
+        case EscMake:
             return 27; // ASCII for ESC
 
         // Other special characters could be added similarly
@@ -291,20 +291,20 @@ namespace Keyboard
         }
     }
 
-    bool KeyboardBuffer::IsFull()
+    bool KeyboardBuffer::isFull()
     {
-        return w_index == (r_index + BUFFER_SIZE - 1) % BUFFER_SIZE;
+        return w_index == (r_index + bufferSize - 1) % bufferSize;
     }
 
-    void KeyboardBuffer::Append(int8_t key)
+    void KeyboardBuffer::append(int8_t key)
     {
         if (key == 0)
             return;
 
-        if (!IsFull())
+        if (!isFull())
         {
             buffer[w_index] = key;
-            w_index = (w_index + 1) % BUFFER_SIZE;
+            w_index = (w_index + 1) % bufferSize;
         }
     }
 
@@ -315,7 +315,7 @@ namespace Keyboard
         if (w_index != r_index)
         {
             c = buffer[r_index];
-            r_index = (r_index + 1) % BUFFER_SIZE;
+            r_index = (r_index + 1) % bufferSize;
         }
 
         return c;

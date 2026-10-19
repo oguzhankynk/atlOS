@@ -51,9 +51,9 @@ namespace FileSystem
 
         virtual bool mount() = 0;
         virtual File *open(const char *filename) = 0;
-        virtual ssize_t read(File *File, void *buffer, size_t size) = 0;
-        virtual ssize_t write(File *File, const void *buffer, size_t size) = 0;
-        virtual int close(File *File) = 0;
+        virtual ssize_t read(File *file, void *buffer, size_t size) = 0;
+        virtual ssize_t write(File *file, const void *buffer, size_t size) = 0;
+        virtual int close(File *file) = 0;
         virtual int remove(const char *filename) = 0;
         virtual void printFilelist() = 0;
         virtual const Disk &getDisk() const

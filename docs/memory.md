@@ -5,22 +5,22 @@ Three layers, all in `kernel/mm/`:
 ```
 kmalloc / kfree            heap.hpp      liballoc 1.1, 2 MB pages from the VMM
 allocatePage / map         vmm.cpp       2 MB pages, recursive page tables
-AllocateBlock / Frame      pmm.cpp       2 MB blocks, 4 KB frames for page tables
+allocateBlock / Frame      pmm.cpp       2 MB blocks, 4 KB frames for page tables
 ```
 
 ## Physical memory (`pmm.cpp`)
 
 - A bitmap with one bit per **2 MB block**, sized for up to 256 GB.
-- `Memory::Init` starts with everything used, frees the `AVAILABLE` regions of
+- `Memory::init` starts with everything used, frees the `AVAILABLE` regions of
   the multiboot memory map (rounded inwards to 2 MB), then reserves
   `0 .. kernel_physical_end` (low memory, boot page tables, kernel image) and
   the multiboot info structure.
-- `AllocateBlock(n)` returns `n` contiguous blocks or `nullptr`;
-  `FreeBlocks(addr, n)` rejects unaligned addresses and double frees.
-- `AllocateFrame()` / `FreeFrame()` hand out **4 KB frames** for page tables.
+- `allocateBlock(n)` returns `n` contiguous blocks or `nullptr`;
+  `freeBlocks(addr, n)` rejects unaligned addresses and double frees.
+- `allocateFrame()` / `freeFrame()` hand out **4 KB frames** for page tables.
   A frame pool splits one 2 MB block into 512 frames (up to 16 pools); a pool
   that becomes empty gives its block back.
-- `GetFreeBlockCount()` is used by the self tests to detect leaks.
+- `getFreeBlockCount()` is used by the self tests to detect leaks.
 
 ## Virtual memory (`vmm.cpp`)
 
@@ -45,7 +45,7 @@ AllocateBlock / Frame      pmm.cpp       2 MB blocks, 4 KB frames for page table
   once it is empty (the boot page directories are kept).
 - `Memory::map(phys, virt)` / `Memory::unmap(virt)` map a caller provided
   physical 2 MB page (e.g. for MMIO) without touching the PMM.
-- `Memory::VirtToPhysAddr(virt)` walks the tables (1 GB and 2 MB pages);
+- `Memory::virtToPhysAddr(virt)` walks the tables (1 GB and 2 MB pages);
   it returns `nullptr` for unmapped addresses.
 - Creating a new PDPT (a PML4 slot other than the kernel's) is not
   implemented and panics.

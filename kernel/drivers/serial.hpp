@@ -38,21 +38,21 @@ namespace SerialPort
      *
      * @return 0 on success, -1 on failure.
      */
-    int Init();
+    int init();
 
     /**
      * @brief Reads a byte from the serial port.
      *
      * @return The byte of data read from the serial port.
      */
-    char read_serial();
+    char readSerial();
 
     /**
      * @brief Writes a byte to the serial port.
      *
      * @param a The byte of data to send.
      */
-    void write_serial(char a);
+    void writeSerial(char a);
 
     /**
      * @brief Writes bytes to the serial port.
@@ -60,7 +60,7 @@ namespace SerialPort
      * @param data The bytes of data to send.
      * @param size The byte number of data
      */
-    void write_serial(const char *data, size_t size);
+    void writeSerial(const char *data, size_t size);
 
 } // namespace SerialPort
 

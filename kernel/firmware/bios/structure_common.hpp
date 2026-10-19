@@ -24,21 +24,21 @@ class BIOSStructureCommon
 {
 public:
     /// @brief Extract the strings that at end of BIOS structure definations
-    /// @param str_start String starting address of the BIOS structure
-    /// @param str_end End address of the BIOS structure
+    /// @param strStart String starting address of the BIOS structure
+    /// @param strEnd End address of the BIOS structure
     /// @param addresses array of strings that fill with extracted strings
-    /// @param MAX_STRINGS length of 'addresses' array
-    void extractStringAddress(const char *str_start, const char *str_end, const char *addresses[], unsigned int MAX_STRINGS)
+    /// @param maxStrings length of 'addresses' array
+    void extractStringAddress(const char *strStart, const char *strEnd, const char *addresses[], unsigned int maxStrings)
     {
         unsigned int count = 0;
-        while (*str_start != '\0' && count < MAX_STRINGS && str_start <= str_end)
+        while (*strStart != '\0' && count < maxStrings && strStart <= strEnd)
         {
-            addresses[count++] = str_start;
-            str_start += strlen(str_start) + 1; // Bir sonraki dizeye geç
+            addresses[count++] = strStart;
+            strStart += strlen(strStart) + 1; // Bir sonraki dizeye geç
         }
     }
 
-    virtual void *Scan(void *p_start) = 0;
+    virtual void *scan(void *pStart) = 0;
 
     virtual void print() const = 0;
 };

@@ -3,7 +3,7 @@
  * @author Oguzhan KAYNAK
  * @brief Handles kernel panic situations.
  *
- * This file contains the `kernel_panic` function, which is responsible for handling critical errors
+ * This file contains the `kernelPanic` function, which is responsible for handling critical errors
  * that may occur in the kernel and halting the system gracefully while displaying warnings.
  *
  * Copyright © 2024 Oguzhan KAYNAK
@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <core/panic.hpp>
 
-void kernel_panic(const char *str)
+void kernelPanic(const char *str)
 {
     printf("%s\n", str);
     while (1)
@@ -31,10 +31,10 @@ void kernel_panic(const char *str)
     }
 }
 
-void kernel_panic_assert(bool condition)
+void kernelPanicAssert(bool condition)
 {
     if (!condition)
     {
-        kernel_panic("ASSERTION-FAILED");
+        kernelPanic("ASSERTION-FAILED");
     }
 }

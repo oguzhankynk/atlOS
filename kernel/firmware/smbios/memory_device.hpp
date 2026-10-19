@@ -31,18 +31,18 @@ public:
     MemoryDevice() = default;
 
     /// @brief Constructor that initializes the Memory Device structure by scanning the given address.
-    /// @param p_start Start address of the Memory Device structure.
-    MemoryDevice(void *p_start)
+    /// @param pStart Start address of the Memory Device structure.
+    MemoryDevice(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     }
 
     /// @brief Scans the Memory Device structure starting from the given address.
-    /// @param p_start Start address of the Memory Device structure.
+    /// @param pStart Start address of the Memory Device structure.
     /// @return End address of the scanned Memory Device structure.
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
@@ -52,7 +52,7 @@ public:
 
         m_pEnd = ptr + end + 1;
 
-        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, StringCount);
+        extractStringAddress((const char *)ptr, (const char *)ptr + end, m_strings, stringCount);
 
         return m_pEnd;
     }
@@ -186,7 +186,7 @@ public:
         printf("Minimum Voltage: %u Maximum Voltage: %u Configured Voltage: %u \n",
                *getMinimumVoltageAddr(), *getMaximumVoltageAddr(), *getConfiguredVoltageAddr());
 
-        for (size_t i = 0; i < StringCount; ++i)
+        for (size_t i = 0; i < stringCount; ++i)
         {
             printf("[%d]:%s ", i, m_strings[i]);
         }
@@ -205,8 +205,8 @@ private:
         Asset Tag;
         Part Number;
     */
-    static constexpr uint8_t StringCount = 6; ///< Number of string fields.
-    const char *m_strings[StringCount]{};     ///< Array to store string fields.
+    static constexpr uint8_t stringCount = 6; ///< Number of string fields.
+    const char *m_strings[stringCount]{};     ///< Array to store string fields.
 
     // Private methods to get the addresses of different fields.
 

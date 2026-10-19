@@ -14,7 +14,7 @@
 namespace Memory
 {
 
-    static void print_segment_addresses()
+    static void printSegmentAddresses()
     {
         printf("=== Boot Segments ===\n");
         printf("_boottext: %p - %p, size: 0x%X\n", &_boottext_start, &_boottext_end, &_boottext_end - &_boottext_start);
@@ -40,10 +40,10 @@ namespace Memory
         printf("\n=== Kernel Start/End ===\n");
         printf("kernel_virtual_start: %p, kernel_virtual_end: %p, size: 0x%X\n", (uint64_t)&kernel_virtual_start, (uint64_t)&kernel_virtual_end, (uint64_t)&kernel_virtual_start - (uint64_t)&kernel_virtual_end);
 
-        auto virt_indx_start = PML4_ADDR_TO_ENTRY_INDEX((uint64_t)&kernel_virtual_start);
-        auto virt_indx_end = PML4_ADDR_TO_ENTRY_INDEX((uint64_t)&kernel_virtual_end);
-        printf("Kernel virtual start PML4 index: %llu\n", virt_indx_start);
-        printf("Kernel virtual end PML4 index: %llu\n", virt_indx_end);
+        auto virtIndxStart = PML4_ADDR_TO_ENTRY_INDEX((uint64_t)&kernel_virtual_start);
+        auto virtIndxEnd = PML4_ADDR_TO_ENTRY_INDEX((uint64_t)&kernel_virtual_end);
+        printf("Kernel virtual start PML4 index: %llu\n", virtIndxStart);
+        printf("Kernel virtual end PML4 index: %llu\n", virtIndxEnd);
 
         printf("\n=== Kernel Physical ===\n");
         printf("kernel_physical_start: %p, kernel_physical_end: %p, size: 0x%X\n", (uint64_t)&kernel_physical_start, (uint64_t)&kernel_physical_end, (uint64_t)&kernel_physical_end - (uint64_t)&kernel_physical_start);
@@ -55,11 +55,11 @@ namespace Memory
      * @param memHigh
      * @param physicalAllocStart
      */
-    void Init(uintptr_t mbInfoAddr)
+    void init(uintptr_t mbInfoAddr)
     {
-        print_segment_addresses();
+        printSegmentAddresses();
 
-        PhysicalMemory::Init();
+        PhysicalMemory::init();
         VirtualMemory::init();
 
         multiboot_tag *tag;
@@ -115,7 +115,7 @@ namespace Memory
                         uint64_t end = (entry->addr + entry->len) & ~(2 * 1024 * 1024 - 1);
                         if (end > base)
                         {
-                            PhysicalMemory::AddMemoryRegion((void *)base, end - base);
+                            PhysicalMemory::addMemoryRegion((void *)base, end - base);
                         }
                     }
                 }
@@ -125,10 +125,10 @@ namespace Memory
         // The firmware reports the memory holding the kernel as AVAILABLE. Reserve
         // everything below kernel_physical_end (low memory, boot page tables and
         // stack, kernel image) so the PMM never hands those frames out.
-        PhysicalMemory::RemoveMemoryRegion(nullptr, (uint64_t)&kernel_physical_end);
+        PhysicalMemory::removeMemoryRegion(nullptr, (uint64_t)&kernel_physical_end);
 
         // GRUB may place the multiboot info outside the kernel image
-        PhysicalMemory::RemoveMemoryRegion((void *)mbInfoAddr, totalSize);
+        PhysicalMemory::removeMemoryRegion((void *)mbInfoAddr, totalSize);
     }
 
     /**
@@ -137,7 +137,7 @@ namespace Memory
      * @param virtualaddr The virtual address to be converted.
      * @return void* The corresponding physical address, or nullptr if the address is not present.
      */
-    void *VirtToPhysAddr(void *virtualaddr)
+    void *virtToPhysAddr(void *virtualaddr)
     {
         return VirtualMemory::virtToPhys(virtualaddr);
     }

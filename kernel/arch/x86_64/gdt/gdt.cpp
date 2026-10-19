@@ -25,7 +25,7 @@ namespace GDT
      * @brief Global Descriptor Table (GDT) entries.
      *
      */
-    __attribute__((section(".bootdata"), aligned(0x1000))) static GDTEntry gdt_table[5] = {
+    __attribute__((section(".bootdata"), aligned(0x1000))) static GDTEntry s_gdtTable[5] = {
 
         {// 0: NULL
          0, 0, 0, 0, 0, 0
@@ -103,8 +103,8 @@ namespace GDT
          *
          */
         __attribute__((section(".bootdata"), used)) GDTR gdt_ptr = {
-            sizeof(gdt_table) - 1,
-            reinterpret_cast<uint64_t>(&gdt_table)};
+            sizeof(s_gdtTable) - 1,
+            reinterpret_cast<uint64_t>(&s_gdtTable)};
     }
 
     /**

@@ -31,18 +31,18 @@ public:
     MemoryArrayMappedAddress() = default;
 
     /// @brief Constructor that takes a pointer to the start of the structure.
-    /// @param p_start Pointer to the start of the structure.
-    MemoryArrayMappedAddress(void *p_start)
+    /// @param pStart Pointer to the start of the structure.
+    MemoryArrayMappedAddress(void *pStart)
     {
-        Scan(p_start);
+        scan(pStart);
     }
 
     /// @brief Scans the Memory Array Mapped Address table.
-    /// @param p_start Pointer to the start of the structure.
+    /// @param pStart Pointer to the start of the structure.
     /// @return Pointer to the end of the structure.
-    void *Scan(void *p_start) override
+    void *scan(void *pStart) override
     {
-        m_pStart = p_start;
+        m_pStart = pStart;
 
         int end = 1;
         uint8_t *ptr = (uint8_t *)m_pStart + getLength();
@@ -94,7 +94,7 @@ public:
     uint64_t getExtendedEndingAddress() const { return *getExtendedEndingAddressAddr(); }
 
     // Print function to display all values
-    void print() const
+    void print() const override
     {
         printf("Type: %u\n", getType());
         printf("Length: %u\n", getLength());
