@@ -101,7 +101,7 @@ namespace PhysicalMemory {
 
                 // If a series of sufficient length is found
                 if (consecutiveFree == numBlocks) {
-                    return startIndex;
+                    return static_cast<int64_t>(startIndex);
                 }
             } else {
                 if (consecutiveFree != 0)

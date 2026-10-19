@@ -2,7 +2,19 @@
 # Naming follows the WebKit style: https://webkit.org/code-style-guidelines/
 Checks: >
   -*,
-  readability-identifier-naming
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  readability-identifier-naming,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  -performance-no-int-to-ptr
+
+# Not enabled on purpose:
+#   bugprone-easily-swappable-parameters  too noisy for (addr, size)-style APIs
+#   bugprone-reserved-identifier          the C++ runtime must define __cxa_* etc.
+#   performance-no-int-to-ptr             page table code casts addresses by design
+#   modernize-*, cppcoreguidelines-*      fight raw pointers and casts a kernel needs
 
 # Only kernel headers. libc keeps the standard C names; kernel/mm/liballoc
 # (third party) and kernel/arch/x86_64/boot (multiboot spec headers) have their

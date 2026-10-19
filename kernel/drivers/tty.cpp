@@ -121,7 +121,7 @@ static void terminalScroll(void)
     for (unsigned int row = 0; row < s_vgaHeight - 1; row++) {
         for (unsigned int col = 0; col < s_vgaWidth; col++) {
             uint16_t entry = s_terminalBuffer[(row + 1) * s_vgaWidth + col];
-            char c = entry & 0x00FF;
+            char c = static_cast<char>(entry & 0x00FF);
             uint8_t color = entry >> 8;
 
             if (c == '\0')

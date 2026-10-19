@@ -109,17 +109,17 @@ void ATA::readSector(uint32_t lba, uint8_t* buffer) const
  */
 void ATA::read(uint32_t lbaStart, uint8_t* buffer, size_t size) const
 {
-    auto step = 0;
+    size_t step = 0;
 
     while (size >= 512) {
-        readSector(lbaStart + step, buffer + 512 * step);
+        readSector(static_cast<uint32_t>(lbaStart + step), buffer + 512 * step);
         step++;
         size -= 512;
     }
 
     if (size > 0) {
         uint8_t data[512] {};
-        readSector(lbaStart + step, data);
+        readSector(static_cast<uint32_t>(lbaStart + step), data);
         memcpy(buffer + 512 * step, data, size);
     }
 }
@@ -160,10 +160,10 @@ void ATA::writeSector(uint32_t lba, const uint8_t* buffer) const
  */
 void ATA::write(uint32_t lbaStart, const uint8_t* buffer, size_t size) const
 {
-    auto step = 0;
+    size_t step = 0;
 
     while (size >= 512) {
-        writeSector(lbaStart + step, buffer + 512 * step);
+        writeSector(static_cast<uint32_t>(lbaStart + step), buffer + 512 * step);
         step++;
         size -= 512;
     }
@@ -171,6 +171,6 @@ void ATA::write(uint32_t lbaStart, const uint8_t* buffer, size_t size) const
     if (size > 0) {
         uint8_t data[512] {};
         memcpy(data, buffer + 512 * step, size);
-        writeSector(lbaStart + step, data);
+        writeSector(static_cast<uint32_t>(lbaStart + step), data);
     }
 }

@@ -29,9 +29,10 @@ extern "C" {
  * @brief Kernel panic function.
  *
  * @param str Message to be displayed in case of a kernel panic.
- * @return void
+ * Never returns, which lets the compiler and clang-tidy know that code after
+ * a panic is unreachable.
  */
-void kernelPanic(const char* str);
+[[noreturn]] void kernelPanic(const char* str);
 void kernelPanicAssert(bool condition);
 
 #if defined(__cplusplus)

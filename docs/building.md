@@ -10,6 +10,7 @@
 | `grub-mkrescue` + `xorriso` | GRUB 2 | bootable ISO |
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
 | Doxygen | optional | API docs |
+| clang-format, clang-tidy | 14 or newer, optional | `format`, `format-check`, `tidy` |
 
 On Debian/Ubuntu:
 
@@ -76,6 +77,8 @@ x86_64-elf-g++ --version
 | `scripts/build.sh debug` | boot the ISO in QEMU halted, waiting for gdb on `localhost:1234`; serial on `telnet localhost 4321` |
 | `scripts/build.sh selftest` | build the self test kernel in `build-selftest/` and run it, see [testing.md](testing.md) |
 | `scripts/build.sh docs` | Doxygen API docs into `build/docs/html` |
+| `scripts/build.sh format` / `format-check` | clang-format the sources / check them, see [style.md](style.md) |
+| `scripts/build.sh tidy` | clang-tidy on the kernel sources |
 | `scripts/build.sh clean` | remove `build/` and `build-selftest/` |
 
 Commands can be chained: `scripts/build.sh clean all run`.

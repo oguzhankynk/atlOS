@@ -130,7 +130,7 @@ namespace FAT16 {
         memset(m_rootDirectoryBuffer, 0, m_rootDirectorySize);
 
         for (int i = 0; i < m_rootDirSectors; ++i) {
-            m_device.readSector(m_firstRootDirSector + i, m_rootDirectoryBuffer + (i * m_bytesPerSector));
+            m_device.readSector(m_firstRootDirSector + i, m_rootDirectoryBuffer + (static_cast<size_t>(i) * m_bytesPerSector));
         }
 
         m_dirEntry = reinterpret_cast<Directory*>(m_rootDirectoryBuffer);
@@ -191,7 +191,7 @@ namespace FAT16 {
             bool searchchFlag = true;
 
             for (int j = 0; j < 11; j++) {
-                if (dirEntry.fileName[j] != formattedName[j]) {
+                if (dirEntry.fileName[j] != static_cast<uint8_t>(formattedName[j])) {
                     searchchFlag = false;
                     break;
                 }
@@ -294,7 +294,7 @@ namespace FAT16 {
             bool searchchFlag = true;
 
             for (int j = 0; j < 11; j++) {
-                if (dirEntry.fileName[j] != formattedName[j]) {
+                if (dirEntry.fileName[j] != static_cast<uint8_t>(formattedName[j])) {
                     searchchFlag = false;
                     break;
                 }
@@ -337,7 +337,7 @@ namespace FAT16 {
             bytesToRead = dirEntry->fileSize - fat16File->position;
         }
 
-        auto clusterOffset = fat16File->position % (m_bytesPerSector * m_sector.bpb.sectorsPerCluster);
+        auto clusterOffset = fat16File->position % (static_cast<size_t>(m_bytesPerSector) * m_sector.bpb.sectorsPerCluster);
 
         uint32_t sectorIndexInCluster = clusterOffset / m_bytesPerSector;
 
@@ -384,7 +384,7 @@ namespace FAT16 {
         fat16File->position += bytesRead;
 
         // Return the number of bytes read
-        return bytesRead;
+        return static_cast<ssize_t>(bytesRead);
     }
 
     ssize_t FAT16FileSystem::write(File* file, const void* buffer, size_t size)
@@ -398,7 +398,7 @@ namespace FAT16 {
         auto bytesToWrite = size;
         const uint8_t* src = static_cast<const uint8_t*>(buffer);
 
-        auto clusterOffset = fat16File->position % (m_bytesPerSector * m_sector.bpb.sectorsPerCluster);
+        auto clusterOffset = fat16File->position % (static_cast<size_t>(m_bytesPerSector) * m_sector.bpb.sectorsPerCluster);
 
         uint32_t sectorIndexInCluster = clusterOffset / m_bytesPerSector;
 
@@ -414,7 +414,7 @@ namespace FAT16 {
         while (bytesWritten < bytesToWrite) {
             uint32_t lba = clusterToSector(fat16File->currentCluster) + sectorIndexInCluster;
 
-            auto writeSize = 0;
+            size_t writeSize = 0;
 
             if (sectorOffset == 0) {
                 writeSize = Utils::min((size_t)m_bytesPerSector, bytesToWrite - bytesWritten);

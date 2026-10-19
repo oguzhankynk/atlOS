@@ -188,7 +188,7 @@ int8_t getKey()
 
 static void keyboardIrq(void* arg)
 {
-    s_keyBuffer.append(toAscii(IOPort::inportb(0x60)));
+    s_keyBuffer.append(static_cast<int8_t>(toAscii(IOPort::inportb(0x60))));
 }
 
 static uint8_t toAscii(uint8_t key)

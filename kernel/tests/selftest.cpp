@@ -234,7 +234,7 @@ static void testHeap()
 
     // The last one spans more than one 2 MB page
     constexpr int n = 7;
-    const size_t sizes[n] = { 1, 16, 100, 1000, 4096, 100000, 3 * 1024 * 1024 };
+    const size_t sizes[n] = { 1, 16, 100, 1000, 4096, 100000, size_t(3) * 1024 * 1024 };
     uint8_t* ptrs[n];
 
     bool allocated = true;

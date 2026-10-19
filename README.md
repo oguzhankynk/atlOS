@@ -76,6 +76,7 @@ example `#include <mm/vmm.hpp>`.
 - [Memory management](docs/memory.md)
 - [Scheduler and threads](docs/scheduler.md)
 - [Self tests](docs/testing.md)
+- [Code style and design](docs/style.md)
 
 API documentation can be generated with Doxygen: `scripts/build.sh docs`
 (output in `build/docs/html`).

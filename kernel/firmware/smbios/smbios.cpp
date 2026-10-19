@@ -30,7 +30,7 @@ SMBIOS::SMBIOS()
 
     for (; ptr < (const char*)0x000FFFFF; ptr += 16) {
         if (memcmp((const void*)ptr, "_SM_", 4) == 0) {
-            length = ptr[5];
+            length = static_cast<uint8_t>(ptr[5]);
             uint8_t checksum = 0;
 
             for (int i = 0; i < length; i++)
@@ -81,7 +81,7 @@ SMBIOS::SMBIOS()
 
     void* pSystemBootInformationEnd = m_SystemBootInformation.scan(pMemoryArrayMappedAddressEnd);
 
-    void* pEndOfTableEnd = m_EndOfTable.scan(pSystemBootInformationEnd);
+    m_EndOfTable.scan(pSystemBootInformationEnd);
 }
 
 void SMBIOS::printEntryPoint() const

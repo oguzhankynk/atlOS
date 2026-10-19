@@ -83,6 +83,42 @@ elseif(NOT QEMU)
 endif()
 
 # ------------------------------------------------------------
+# Code style (docs/style.md)
+# ------------------------------------------------------------
+
+find_program(CLANG_FORMAT clang-format)
+find_program(RUN_CLANG_TIDY NAMES run-clang-tidy run-clang-tidy-14)
+
+file(GLOB_RECURSE ATLOS_FORMAT_FILES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/kernel/*.cpp ${CMAKE_SOURCE_DIR}/kernel/*.hpp ${CMAKE_SOURCE_DIR}/kernel/*.h
+    ${CMAKE_SOURCE_DIR}/libc/*.cpp ${CMAKE_SOURCE_DIR}/libc/*.h
+)
+
+if(CLANG_FORMAT)
+    add_custom_target(format
+        COMMAND ${CLANG_FORMAT} -i ${ATLOS_FORMAT_FILES}
+        COMMENT "Formatting sources with clang-format"
+        VERBATIM
+    )
+    add_custom_target(format-check
+        COMMAND ${CLANG_FORMAT} --dry-run --Werror ${ATLOS_FORMAT_FILES}
+        COMMENT "Checking source format"
+        VERBATIM
+    )
+endif()
+
+if(RUN_CLANG_TIDY)
+    # Kernel sources only; libc and liballoc are not held to the kernel rules
+    add_custom_target(tidy
+        COMMAND ${RUN_CLANG_TIDY} -p ${CMAKE_BINARY_DIR} -quiet
+            -extra-arg=-Wno-unknown-warning-option
+            "^(?!.*(/liballoc/|/libc/)).*/kernel/.*\\.cpp$"
+        COMMENT "Running clang-tidy"
+        VERBATIM
+    )
+endif()
+
+# ------------------------------------------------------------
 # API documentation
 # ------------------------------------------------------------
 

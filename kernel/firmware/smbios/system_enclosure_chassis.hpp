@@ -282,5 +282,5 @@ private:
     uint8_t* getContainedElementsAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x15); }
 
     /// @brief Get the address of the SKU Number field in the System Enclosure or Chassis Information structure.
-    uint8_t* getSkuNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x15 + getContainedElementCount() * getContainedElementRecordLength()); }
+    uint8_t* getSkuNumberAddr() const { return (uint8_t*)(static_cast<uint8_t*>(m_pStart) + 0x15 + static_cast<size_t>(getContainedElementCount()) * getContainedElementRecordLength()); }
 };

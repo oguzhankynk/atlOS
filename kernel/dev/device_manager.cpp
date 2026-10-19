@@ -113,7 +113,8 @@ static void detectATADevices()
 
                         auto* fat16 = new FileSystem::FAT16::FAT16FileSystem(*newPartition,
                             part.lbaFirstSector);
-                        auto ret = FileSystem::VFS::addFileSystem(*fat16);
+                        if (!FileSystem::VFS::addFileSystem(*fat16))
+                            printf("DeviceManager: no free VFS slot for the FAT16 partition\n");
 
                         break;
                     }

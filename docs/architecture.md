@@ -63,7 +63,8 @@ initialized yet, so key presses only reach the default handler).
 - Each subsystem is a directory under `kernel/` with headers next to their
   sources; includes are relative to `kernel/` (`#include <sched/thread.hpp>`).
 - File names are lower case. Code lives in a namespace per subsystem
-  (`Memory::PhysicalMemory`, `Scheduler`, `Threading`, `PIC`, ...).
+  (`Memory::PhysicalMemory`, `Scheduler`, `Threading`, `PIC`, ...); naming,
+  formatting and the design direction are in [style.md](style.md).
 - `libc/` is the freestanding C library (`libk`) that the kernel links; its
   public headers are in `libc/include`.
 - Kernel code is built without exceptions, RTTI or the red zone.

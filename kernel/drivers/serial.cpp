@@ -79,7 +79,7 @@ char readSerial()
     // Wait until the serial port is ready to read
     while (!(IOPort::inportb(port + 5) & 0x01))
         ;
-    return IOPort::inportb(port);
+    return static_cast<char>(IOPort::inportb(port));
 }
 
 /**
