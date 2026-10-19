@@ -24,7 +24,8 @@
    7. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
       lines masked) and binds it to the ISR dispatcher
    8. constructs the `Drivers::PIT` on top of the PIC and enables interrupts
-   9. `Scheduler::init(pit)` (boot flow becomes task 0, 1 ms tick)
+   9. constructs the `Threading::Scheduler` on the PIT (the boot flow becomes
+      task 0, 1 ms tick)
    10. self tests (`ATLOS_SELFTEST` builds) or the demo threads A/B
 
    `kernelMain` is the composition root: driver objects live in

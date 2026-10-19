@@ -53,16 +53,20 @@ struct TCB {
 };
 
 class ThreadImpl;
+class Scheduler;
 
-using EntryPoint = void (*)(void);
+/// A thread's code; it reaches its scheduler (yield, sleep, ...) through the argument
+using EntryPoint = void (*)(Scheduler& scheduler);
 
 class Thread {
 public:
     /**
+     * @param scheduler Runs the thread; must outlive it.
      * @param addressSpace Where the thread's 2 MB stack page is allocated; must
      *                     outlive the thread.
+     * @param addToScheduler Queue the thread right away.
      */
-    Thread(Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler = true);
+    Thread(Scheduler& scheduler, Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler = true);
 
     Thread(const Thread&) = delete;
 

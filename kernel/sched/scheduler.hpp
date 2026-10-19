@@ -4,7 +4,8 @@
  * @brief Cooperative round robin scheduler.
  *
  * Threads only change on yield/sleep/block/exit; the timer interrupt just
- * counts ticks and never switches threads.
+ * counts ticks and never switches threads. There is no global scheduler: a
+ * thread reaches its scheduler through the reference its entry point gets.
  *
  * Copyright © 2024 Oguzhan KAYNAK
  *
@@ -21,6 +22,7 @@
 
 #pragma once
 
+#include <sched/thread.hpp>
 #include <stdint.h>
 
 namespace Drivers {
@@ -28,63 +30,74 @@ class TickSource;
 }
 
 namespace Threading {
-class Thread;
-struct TCB;
+
+class Scheduler {
+public:
+    static constexpr uint32_t maxTasks = 16;
+    static constexpr uint32_t tickPeriodNs = 1000000; // 1 ms
+
+    /**
+     * @brief The calling flow becomes task 0 (it has no Thread object) and the
+     * 1 ms tick is started on ticks. Panics if ticks can not do 1 ms.
+     */
+    explicit Scheduler(Drivers::TickSource& ticks);
+
+    Scheduler(const Scheduler&) = delete;
+    Scheduler& operator=(const Scheduler&) = delete;
+
+    void addTask(Thread& thread);
+
+    /**
+     * @brief Remove a thread from the run queue. No-op if it is not queued
+     * (e.g. it has already exited). The running thread can not remove itself.
+     */
+    void removeTask(Thread& thread);
+
+    /// Run the next runnable thread, if there is one.
+    void yield();
+
+    /// Let other threads run for at least ms milliseconds (ticks).
+    void sleep(uint64_t ms);
+
+    /// Stop running the current thread until someone calls unblock on it.
+    void block();
+
+    /// Make a Blocked thread runnable again. Other states are left alone.
+    void unblock(TCB& tcb);
+
+    /**
+     * @brief End the current thread. It leaves the run queue and never runs again;
+     * its owner still has to delete the Thread object.
+     */
+    [[noreturn]] void exit();
+
+    /// TCB of the running thread.
+    TCB& current();
+
+    /// Milliseconds (ticks) since construction.
+    uint64_t ticks() const { return m_ticks; }
+
+    /// Number of queued tasks, including the flow that constructed the scheduler.
+    uint32_t taskCount() const { return m_threadCount; }
+
+private:
+    static void onTick(void* scheduler);
+
+    void wakeSleepers();
+    void removeAt(uint32_t index);
+    void switchTo(uint32_t nextIndex);
+    void schedule();
+
+    // Context of the constructing flow (kernelMain). It has no Thread object,
+    // but it must own a TCB so that the first switchTask has somewhere to save it.
+    TCB m_bootTcb {};
+
+    TCB* m_readyQueue[maxTasks] {};
+    uint32_t m_threadCount {};
+    uint32_t m_currentThreadIndex {};
+
+    // Only written by the timer interrupt; an aligned 64-bit store is atomic
+    volatile uint64_t m_ticks {};
 };
 
-namespace Scheduler {
-/**
- * @brief Register the boot flow as the first task and start the 1 ms tick on ticks.
- */
-void init(Drivers::TickSource& ticks);
-
-void addTask(Threading::Thread& thread);
-
-/**
- * @brief Remove a thread from the run queue. No-op if it is not queued
- * (e.g. it has already exited). The running thread can not remove itself.
- */
-void removeTask(Threading::Thread& thread);
-
-/**
- * @brief Run the next runnable thread, if there is one.
- */
-void yield();
-
-/**
- * @brief Let other threads run for at least ms milliseconds.
- */
-void sleep(uint64_t ms);
-
-/**
- * @brief Stop running the current thread until someone calls unblock on it.
- */
-void block();
-
-/**
- * @brief Make a Blocked thread runnable again. Other states are left alone.
- */
-void unblock(Threading::TCB& tcb);
-
-/**
- * @brief End the current thread. It leaves the run queue and never runs again;
- * its owner still has to delete the Thread object.
- */
-[[noreturn]] void exit();
-
-/**
- * @brief TCB of the running thread.
- */
-Threading::TCB& current();
-
-/**
- * @brief Milliseconds since Init.
- */
-uint64_t ticks();
-
-/**
- * @brief Number of queued tasks, including the boot flow.
- */
-uint32_t taskCount();
-
-} // namespace Scheduler
+} // namespace Threading

@@ -29,8 +29,9 @@ static uint16_t s_taskIdCounter {};
 
 class ThreadImpl {
 public:
-    ThreadImpl(Memory::AddressSpace& addressSpace, EntryPoint entry); // Constructor to initialize the thread
+    ThreadImpl(Scheduler& scheduler, Memory::AddressSpace& addressSpace, EntryPoint entry); // Constructor to initialize the thread
     ~ThreadImpl(); // Gives the stack page back
+    Scheduler& m_scheduler; // Runs the thread
     Memory::AddressSpace& m_addressSpace; // Owner of the stack page
     TCB m_tcb {}; // Thread Control Block (TCB) to store thread context
     EntryPoint m_entry {}; // Entry point function for the thread
@@ -40,8 +41,9 @@ public:
     static void threadStartPoint(void* obj); // Static function to start the thread
 };
 
-ThreadImpl::ThreadImpl(Memory::AddressSpace& addressSpace, EntryPoint entry)
-    : m_addressSpace(addressSpace)
+ThreadImpl::ThreadImpl(Scheduler& scheduler, Memory::AddressSpace& addressSpace, EntryPoint entry)
+    : m_scheduler(scheduler)
+    , m_addressSpace(addressSpace)
     , m_entry { entry }
 {
     // A page of its own keeps the stack 2 MB aligned (so the top is 16 byte
@@ -105,19 +107,19 @@ void ThreadImpl::threadStartPoint(void* obj)
     thread->m_tcb.state = ThreadState::Running;
 
     // Call the entry point function
-    thread->m_entry();
+    thread->m_entry(thread->m_scheduler);
 
     // Thread has finished execution, leave the run queue for good
     printf("Thread %s finished execution.\n", thread->m_name);
 
-    Scheduler::exit();
+    thread->m_scheduler.exit();
 }
 
-Thread::Thread(Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler)
-    : m_impl { new ThreadImpl(addressSpace, entry) }
+Thread::Thread(Scheduler& scheduler, Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler)
+    : m_impl { new ThreadImpl(scheduler, addressSpace, entry) }
 {
     if (addToScheduler) {
-        Scheduler::addTask(*this);
+        scheduler.addTask(*this);
     }
 }
 
@@ -127,7 +129,7 @@ Thread::~Thread()
     printf("Thread %s dtor called.\n", m_impl->m_name);
 
     // The scheduler must not keep a pointer to the TCB we are about to free
-    Scheduler::removeTask(*this);
+    m_impl->m_scheduler.removeTask(*this);
     delete m_impl;
 }
 

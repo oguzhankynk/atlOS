@@ -2,7 +2,7 @@
 
 The kernel has built-in tests in `kernel/tests/selftest.cpp`. A kernel built
 with `ATLOS_SELFTEST=ON` (the `selftest` preset) runs them right after
-`Scheduler::init` instead of the demo threads, prints the results on the
+the scheduler is set up instead of the demo threads, prints the results on the
 serial port and exits QEMU through the `isa-debug-exit` device.
 
 ## Running
@@ -18,7 +18,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 109 passed, 0 failed
+[SELFTEST] done: 122 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -42,7 +42,8 @@ serial log is written to `build/selftest/selftest.log`.
 | PIT (fake controller) | the PIT driver against a fake `InterruptController`: period checks, attaches and unmasks IRQ 0 |
 | CPU | CPUID: max leaf, vendor string, SSE2/FXSR present, cache list bounded |
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
-| Scheduler | round robin and exit, `sleep`, `block`/`unblock`, removing a queued thread |
+| Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, instances do not affect each other |
+| Scheduler sleep (kernel, PIT) | the kernel scheduler with real ticks: idling in `hlt`, a sleeping thread |
 
 ## Writing a test
 

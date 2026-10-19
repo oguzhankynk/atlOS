@@ -54,8 +54,8 @@
 
 #include <tests/selftest.hpp>
 
-extern void threadTaskA();
-extern void threadTaskB();
+extern void threadTaskA(Threading::Scheduler& scheduler);
+extern void threadTaskB(Threading::Scheduler& scheduler);
 
 // Objects owned by kernelMain, the composition root. They are constructed
 // explicitly below, in dependency order, and handed to their users by
@@ -64,6 +64,7 @@ static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
 static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
+static Cxx::Uninitialized<Threading::Scheduler> s_scheduler;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
 static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL * 1024 * 1024 * 1024)];
@@ -126,10 +127,12 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Drivers::PIT& pit = s_pit.construct(pic);
 
     IOPort::enableInterrupts();
-    Scheduler::init(pit);
+
+    // The boot flow becomes the scheduler's first task
+    Threading::Scheduler& scheduler = s_scheduler.construct(pit);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm, kernelSpace);
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler);
     SelfTest::exitQemu(failed == 0 ? 0 : 1);
 
     // Only reached when QEMU has no isa-debug-exit device
@@ -139,11 +142,11 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 #endif
 
     printf("Creating threads...\n");
-    Threading::Thread t1(kernelSpace, threadTaskA);
-    Threading::Thread t2(kernelSpace, threadTaskB);
+    Threading::Thread t1(scheduler, kernelSpace, threadTaskA);
+    Threading::Thread t2(scheduler, kernelSpace, threadTaskB);
 
     printf("Threads running...\n");
     while (1) {
-        Scheduler::yield();
+        scheduler.yield();
     }
 }

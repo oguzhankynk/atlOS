@@ -18,6 +18,7 @@
 #include <cxx/uninitialized.hpp>
 #include <drivers/interrupt_controller.hpp>
 #include <drivers/pit.hpp>
+#include <drivers/tick_source.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
 #include <mm/memory.hpp>
@@ -429,15 +430,15 @@ static void testHeap()
 // Interrupts
 // ------------------------------------------------------------
 
-static void testInterrupts()
+static void testInterrupts(Threading::Scheduler& scheduler)
 {
     group("Interrupts");
 
     // The timer is running
-    uint64_t t0 = Scheduler::ticks();
+    uint64_t t0 = scheduler.ticks();
     for (int i = 0; i < 5; i++)
         asm volatile("sti; hlt");
-    CHECK(Scheduler::ticks() > t0);
+    CHECK(scheduler.ticks() > t0);
 
     // An interrupt must not change the registers of the interrupted code
     uint64_t rax, r12;
@@ -518,7 +519,7 @@ public:
 
 static void fakeTick(void*) { }
 
-static void testPitWithFakeController()
+static void testPitWithFakeController(Threading::Scheduler& scheduler)
 {
     group("PIT (fake interrupt controller)");
 
@@ -544,9 +545,9 @@ static void testPitWithFakeController()
     CHECK(controller.unmaskedIrq == Drivers::Irq::Timer);
 
     // The scheduler tick keeps running
-    uint64_t t0 = Scheduler::ticks();
-    Scheduler::sleep(5);
-    CHECK(Scheduler::ticks() > t0);
+    uint64_t t0 = scheduler.ticks();
+    scheduler.sleep(5);
+    CHECK(scheduler.ticks() > t0);
 }
 
 // ------------------------------------------------------------
@@ -577,7 +578,37 @@ static void testCpu()
 
 // ------------------------------------------------------------
 // Threads and scheduler
+//
+// Most tests run on their own Scheduler driven by a FakeTickSource, so time
+// only moves when the test says so. The calling flow is task 0 of both that
+// scheduler and the kernel's; while a test scheduler runs, the kernel's simply
+// sees its task 0 running.
 // ------------------------------------------------------------
+
+using Threading::Scheduler;
+using Threading::Thread;
+using Threading::ThreadState;
+
+// A tick source the test advances by hand
+class FakeTickSource final : public Drivers::TickSource {
+public:
+    bool start(uint32_t periodNs, TickHandler handler, void* arg) override
+    {
+        m_handler = handler;
+        m_arg = arg;
+        return periodNs == Scheduler::tickPeriodNs;
+    }
+
+    void advance(uint64_t ticks)
+    {
+        for (uint64_t i = 0; i < ticks; i++)
+            m_handler(m_arg);
+    }
+
+private:
+    TickHandler m_handler {};
+    void* m_arg {};
+};
 
 static constexpr uint64_t rounds = 100;
 
@@ -585,7 +616,7 @@ static volatile uint64_t s_countA {};
 static volatile uint64_t s_countB {};
 static volatile bool s_frameAligned {};
 
-static void counterA()
+static void counterA(Scheduler& scheduler)
 {
     // After "push rbp" the frame must be 16 byte aligned if the thread was
     // started with an ABI conformant stack
@@ -593,40 +624,40 @@ static void counterA()
 
     for (uint64_t i = 0; i < rounds; i++) {
         s_countA = s_countA + 1;
-        Scheduler::yield();
+        scheduler.yield();
     }
 }
 
-static void counterB()
+static void counterB(Scheduler& scheduler)
 {
     for (uint64_t i = 0; i < rounds; i++) {
         s_countB = s_countB + 1;
-        Scheduler::yield();
+        scheduler.yield();
     }
 }
 
 /**
- * @brief Yield until the thread has exited, for at most maxMs
+ * @brief Yield until the thread has exited, for at most maxMs ticks (and a
+ * bounded number of rounds, in case the ticks do not move)
  */
-static bool waitForExit(Threading::Thread& thread, uint64_t maxMs)
+static bool waitForExit(Scheduler& scheduler, Thread& thread, uint64_t maxMs)
 {
-    uint64_t deadline = Scheduler::ticks() + maxMs;
+    uint64_t deadline = scheduler.ticks() + maxMs;
 
-    // Also bounded by iterations in case the timer does not run
     for (uint64_t i = 0; i < 10000000; i++) {
-        if (thread.getTCB().state == Threading::ThreadState::Terminated || Scheduler::ticks() >= deadline)
+        if (thread.getTCB().state == ThreadState::Terminated || scheduler.ticks() >= deadline)
             break;
-        Scheduler::yield();
+        scheduler.yield();
     }
 
-    return thread.getTCB().state == Threading::ThreadState::Terminated;
+    return thread.getTCB().state == ThreadState::Terminated;
 }
 
-static void testThreadStack(AddressSpace& space)
+static void testThreadStack(Scheduler& scheduler, AddressSpace& space)
 {
     group("Thread stack");
 
-    Threading::Thread* t = new Threading::Thread(space, counterA, false);
+    Thread* t = new Thread(scheduler, space, counterA, false);
 
     // threadStartPoint is entered by "ret", so rsp must look like right after a call
     uintptr_t sp = t->getTCB().regs.rsp;
@@ -641,109 +672,173 @@ static void testThreadStack(AddressSpace& space)
 
 static void testRoundRobin(AddressSpace& space)
 {
-    group("Scheduler round robin");
-    uint32_t tasksBefore = Scheduler::taskCount();
+    group("Scheduler round robin (isolated)");
 
-    Threading::Thread* a = new Threading::Thread(space, counterA);
-    Threading::Thread* b = new Threading::Thread(space, counterB);
-    CHECK(Scheduler::taskCount() == tasksBefore + 2);
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    CHECK(scheduler.taskCount() == 1);
 
-    // Queue is [boot, A, B]: each yield from here runs A and B once
+    Thread* a = new Thread(scheduler, space, counterA);
+    Thread* b = new Thread(scheduler, space, counterB);
+    CHECK(scheduler.taskCount() == 3);
+
+    // Queue is [caller, A, B]: each yield from here runs A and B once
     for (int i = 0; i < 10; i++)
-        Scheduler::yield();
+        scheduler.yield();
     CHECK(s_countA == 10);
     CHECK(s_countB == 10);
 
     // Returning from the entry point ends the thread and dequeues it
-    CHECK(waitForExit(*a, 1000));
-    CHECK(waitForExit(*b, 1000));
+    CHECK(waitForExit(scheduler, *a, 1000));
+    CHECK(waitForExit(scheduler, *b, 1000));
     CHECK(s_countA == rounds);
     CHECK(s_countB == rounds);
-    CHECK(Scheduler::taskCount() == tasksBefore);
+    CHECK(scheduler.taskCount() == 1);
     CHECK(s_frameAligned);
 
     delete a;
     delete b;
 }
 
-static volatile uint64_t s_sleptMs {};
+static volatile uint64_t s_sleptTicks {};
 
-static void sleeper()
+static void sleeper(Scheduler& scheduler)
 {
-    uint64_t t0 = Scheduler::ticks();
-    Scheduler::sleep(50);
-    s_sleptMs = Scheduler::ticks() - t0;
+    uint64_t t0 = scheduler.ticks();
+    scheduler.sleep(50);
+    s_sleptTicks = scheduler.ticks() - t0;
 }
 
-static void testSleep(AddressSpace& space)
+static void testSleepFakeTicks(AddressSpace& space)
 {
-    group("Scheduler sleep");
+    group("Scheduler sleep (fake ticks)");
 
-    // Nothing else can run: the boot flow idles in hlt until the timer wakes it
-    uint64_t t0 = Scheduler::ticks();
-    Scheduler::sleep(20);
-    uint64_t waited = Scheduler::ticks() - t0;
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    Thread* t = new Thread(scheduler, space, sleeper);
+
+    // The sleeper runs, goes to sleep and the caller is the only runnable task
+    scheduler.yield();
+    CHECK(t->getTCB().state == ThreadState::Sleeping);
+
+    ticks.advance(49);
+    scheduler.yield();
+    CHECK(t->getTCB().state == ThreadState::Sleeping);
+
+    // Exactly at its wake tick it runs again and finishes
+    ticks.advance(1);
+    scheduler.yield();
+    CHECK(t->getTCB().state == ThreadState::Terminated);
+    CHECK(s_sleptTicks == 50);
+    CHECK(scheduler.ticks() == 50);
+
+    delete t;
+}
+
+static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
+{
+    group("Scheduler sleep (kernel, PIT)");
+
+    // Nothing else can run: the caller idles in hlt until the timer wakes it
+    uint64_t t0 = scheduler.ticks();
+    scheduler.sleep(20);
+    uint64_t waited = scheduler.ticks() - t0;
     CHECK(waited >= 20);
     CHECK(waited < 120);
 
     // A sleeping thread is skipped until its time is up
-    Threading::Thread* t = new Threading::Thread(space, sleeper);
-    CHECK(waitForExit(*t, 1000));
-    CHECK(s_sleptMs >= 50);
-    CHECK(s_sleptMs < 150);
+    s_sleptTicks = 0;
+    Thread* t = new Thread(scheduler, space, sleeper);
+    CHECK(waitForExit(scheduler, *t, 1000));
+    CHECK(s_sleptTicks >= 50);
+    CHECK(s_sleptTicks < 150);
     delete t;
 }
 
 static volatile int s_blockStage {};
 
-static void blocker()
+static void blocker(Scheduler& scheduler)
 {
     s_blockStage = 1;
-    Scheduler::block();
+    scheduler.block();
     s_blockStage = 2;
 }
 
 static void testBlock(AddressSpace& space)
 {
-    group("Scheduler block");
+    group("Scheduler block (isolated)");
 
-    Threading::Thread* t = new Threading::Thread(space, blocker);
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    Thread* t = new Thread(scheduler, space, blocker);
     for (int i = 0; i < 5; i++)
-        Scheduler::yield();
+        scheduler.yield();
 
     // Blocked threads are skipped
     CHECK(s_blockStage == 1);
-    CHECK(t->getTCB().state == Threading::ThreadState::Blocked);
+    CHECK(t->getTCB().state == ThreadState::Blocked);
 
-    Scheduler::unblock(t->getTCB());
-    CHECK(waitForExit(*t, 1000));
+    scheduler.unblock(t->getTCB());
+    CHECK(waitForExit(scheduler, *t, 1000));
     CHECK(s_blockStage == 2);
     delete t;
 }
 
 static volatile bool s_ran {};
 
-static void neverRuns()
+static void neverRuns(Scheduler&)
 {
     s_ran = true;
 }
 
 static void testRemove(AddressSpace& space)
 {
-    group("Scheduler remove");
+    group("Scheduler remove (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
 
     // Deleting a queued thread before it ran takes it out of the queue
-    Threading::Thread* t = new Threading::Thread(space, neverRuns);
-    uint32_t tasks = Scheduler::taskCount();
+    Thread* t = new Thread(scheduler, space, neverRuns);
+    CHECK(scheduler.taskCount() == 2);
     delete t;
-    CHECK(Scheduler::taskCount() == tasks - 1);
+    CHECK(scheduler.taskCount() == 1);
 
     for (int i = 0; i < 5; i++)
-        Scheduler::yield();
+        scheduler.yield();
     CHECK(!s_ran);
 }
 
-int run(PhysicalMemoryManager& pmm, AddressSpace& space)
+static void testSchedulersAreIndependent(Scheduler& kernelScheduler, AddressSpace& space)
+{
+    group("Scheduler instances are independent");
+
+    uint32_t kernelTasks = kernelScheduler.taskCount();
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    s_countA = 0;
+    Thread* a = new Thread(scheduler, space, counterA);
+
+    // The thread is queued on the test scheduler only
+    CHECK(kernelScheduler.taskCount() == kernelTasks);
+    kernelScheduler.yield();
+    CHECK(s_countA == 0);
+
+    scheduler.yield();
+    CHECK(s_countA == 1);
+
+    // Ticks are per scheduler
+    uint64_t kernelTicks = kernelScheduler.ticks();
+    ticks.advance(1000);
+    CHECK(scheduler.ticks() == 1000);
+    CHECK(kernelScheduler.ticks() - kernelTicks < 1000);
+
+    CHECK(waitForExit(scheduler, *a, 1000));
+    delete a;
+}
+
+int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler)
 {
     printf("[SELFTEST] start\n");
 
@@ -753,15 +848,17 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space)
     testPmmKernel(pmm);
     testVmm(pmm, space);
     testHeap();
-    testInterrupts();
+    testInterrupts(scheduler);
     testUninitialized();
-    testPitWithFakeController();
+    testPitWithFakeController(scheduler);
     testCpu();
-    testThreadStack(space);
+    testThreadStack(scheduler, space);
     testRoundRobin(space);
-    testSleep(space);
+    testSleepFakeTicks(space);
+    testSleepRealTime(scheduler, space);
     testBlock(space);
     testRemove(space);
+    testSchedulersAreIndependent(scheduler, space);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;
