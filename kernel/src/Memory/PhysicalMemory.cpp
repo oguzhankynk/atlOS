@@ -72,6 +72,11 @@ namespace Memory
             bitmap[bit / 8] &= ~(1 << (bit % 8));
         }
 
+        static inline bool TestBlock(uint64_t bit)
+        {
+            return bitmap[bit / 8] & (1 << (bit % 8));
+        }
+
         static int64_t FirstFreeBlock(uint64_t num_blocks)
         {
             LOG_MSG(INF_LOG, "PMM: FirstFreeBlock: number of requested blocks:%u free block:%u \n", num_blocks, maxBlocks - usedBlocks);
@@ -142,9 +147,12 @@ namespace Memory
 
             for (; num_blocks > 0; num_blocks--)
             {
-                UnsetBlock(block_indx);
+                if (TestBlock(block_indx))
+                {
+                    UnsetBlock(block_indx);
+                    usedBlocks--;
+                }
                 block_indx++;
-                usedBlocks--;
             }
 
             LOG_MSG(INF_LOG, " usedBlocks:%u \n", usedBlocks);
@@ -152,16 +160,21 @@ namespace Memory
 
         void RemoveMemoryRegion(const void *base_address, uint64_t size)
         {
-            int64_t block_indx = (uint64_t)base_address / blockSize; // Convert memory address to blocks
-            int64_t num_blocks = (size + blockSize - 1) / blockSize; // Convert size to blocks
+            // Cover every block the region touches, even if it is not block aligned
+            uint64_t block_indx = (uint64_t)base_address / blockSize;
+            uint64_t end_indx = ((uint64_t)base_address + size + blockSize - 1) / blockSize;
+            uint64_t num_blocks = end_indx - block_indx;
 
             LOG_MSG(INF_LOG, "PMM: MemoryRegion remove: start_indx: %u num_blocks:%u ", block_indx, num_blocks);
 
             for (; num_blocks > 0; num_blocks--)
             {
-                SetBlock(block_indx);
+                if (!TestBlock(block_indx))
+                {
+                    SetBlock(block_indx);
+                    usedBlocks++;
+                }
                 block_indx++;
-                usedBlocks++;
             }
 
             LOG_MSG(INF_LOG, " usedBlocks:%u \n", usedBlocks);

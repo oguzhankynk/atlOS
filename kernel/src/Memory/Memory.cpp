@@ -121,6 +121,14 @@ namespace Memory
                 }
             }
         }
+
+        // The firmware reports the memory holding the kernel as AVAILABLE. Reserve
+        // everything below kernel_physical_end (low memory, boot page tables and
+        // stack, kernel image) so the PMM never hands those frames out.
+        PhysicalMemory::RemoveMemoryRegion(nullptr, (uint64_t)&kernel_physical_end);
+
+        // GRUB may place the multiboot info outside the kernel image
+        PhysicalMemory::RemoveMemoryRegion((void *)mbInfoAddr, totalSize);
     }
 
     /**
