@@ -12,6 +12,12 @@ namespace Memory
     constexpr uint32_t PAGE_SIZE_2MB = 2 * 1024 * 1024;
 
     /**
+     * @brief Size of a physical frame used for page tables.
+     *
+     */
+    constexpr uint32_t FRAME_SIZE_4KB = 4 * 1024;
+
+    /**
      * @brief Number of entries per page directory.
      */
     constexpr uint32_t PAGE_DIR_SIZE = 1024;

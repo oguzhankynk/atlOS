@@ -220,7 +220,9 @@ namespace Memory
                 // Page Directory Kontrolü (PDPT içindeki girişe bakıyoruz)
                 if (!pdpt_table[pdpt_idx].present)
                 {
-                    uint64_t new_pd_phys = (uintptr_t)PhysicalMemory::AllocateBlock(1);
+                    uint64_t new_pd_phys = (uintptr_t)PhysicalMemory::AllocateFrame();
+                    if (new_pd_phys == 0)
+                        kernel_panic("VMM: out of physical memory for page directory");
 
                     pdpt_table[pdpt_idx].present = 1;
                     pdpt_table[pdpt_idx].rw = 1;
@@ -234,6 +236,8 @@ namespace Memory
 
                 PageDirectoryEntry64 *pd_table = getPDVirt(pml4_idx, pdpt_idx);
                 uint64_t phys = (uintptr_t)PhysicalMemory::AllocateBlock(1);
+                if (phys == 0)
+                    kernel_panic("VMM: out of physical memory");
 
                 uint64_t *raw_pd = (uint64_t *)pd_table;
                 raw_pd[pd_idx] = (1ULL << 0) | (1ULL << 1) | (1ULL << 7) | (phys & 0x000000FFFFE00000ULL);

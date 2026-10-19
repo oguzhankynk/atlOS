@@ -33,6 +33,20 @@ namespace Memory
         void FreeBlocks(const void *addr, uint64_t num_blocks);
         uint64_t GetMaxBlockSize();
 
+        /**
+         * @brief Allocate a single 4 KB physical frame (e.g. for a page table).
+         *
+         * @return Physical address of the frame, or nullptr if out of memory.
+         */
+        void *AllocateFrame();
+
+        /**
+         * @brief Free a frame returned by AllocateFrame.
+         *
+         * @param addr Physical address of the frame.
+         */
+        void FreeFrame(const void *addr);
+
     }; // namespace PhysicalMemory
 }; // namespace Memory
 
