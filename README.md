@@ -31,7 +31,7 @@ You need an `x86_64-elf` GCC cross compiler on `PATH`, CMake 3.22+, Ninja,
 for building the toolchain.
 
 ```sh
-scripts/build.sh            # libc, kernel and build/atlOS.iso
+scripts/build.sh            # libc, kernel and build/default/atlOS.iso
 scripts/build.sh run        # boot in QEMU, serial output on the terminal
 scripts/build.sh selftest   # build and run the self tests
 ```

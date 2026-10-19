@@ -10,7 +10,7 @@
             "name": "default",
             "displayName": "atlOS",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build",
+            "binaryDir": "${sourceDir}/build/${presetName}",
             "toolchainFile": "${sourceDir}/cmake/toolchain-x86_64-elf.cmake",
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -20,7 +20,6 @@
             "name": "selftest",
             "displayName": "atlOS self tests",
             "inherits": "default",
-            "binaryDir": "${sourceDir}/build-selftest",
             "cacheVariables": {
                 "ATLOS_SELFTEST": "ON"
             }

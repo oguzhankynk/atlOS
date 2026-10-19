@@ -71,19 +71,19 @@ x86_64-elf-g++ --version
 
 | Command | What it does |
 |---|---|
-| `scripts/build.sh` / `scripts/build.sh all` | build libc, kernel and `build/atlOS.iso` |
+| `scripts/build.sh` / `scripts/build.sh all` | build libc, kernel and `build/default/atlOS.iso` |
 | `scripts/build.sh iso` | build the ISO |
 | `scripts/build.sh run` | boot the ISO in QEMU, serial output on the terminal (Ctrl-C quits) |
 | `scripts/build.sh debug` | boot the ISO in QEMU halted, waiting for gdb on `localhost:1234`; serial on `telnet localhost 4321` |
-| `scripts/build.sh selftest` | build the self test kernel in `build-selftest/` and run it, see [testing.md](testing.md) |
+| `scripts/build.sh selftest` | build the self test kernel in `build/selftest/` and run it, see [testing.md](testing.md) |
 | `scripts/build.sh docs` | Doxygen API docs into `build/docs/html` |
 | `scripts/build.sh format` / `format-check` | clang-format the sources / check them, see [style.md](style.md) |
 | `scripts/build.sh tidy` | clang-tidy on the kernel sources |
-| `scripts/build.sh clean` | remove `build/` and `build-selftest/` |
+| `scripts/build.sh clean` | remove `build/` (all presets) |
 
 Commands can be chained: `scripts/build.sh clean all run`.
 
-Builds are incremental. Everything goes into `build/` (or `build-selftest/`);
+Builds are incremental. Each preset builds in `build/<preset>/`;
 nothing is written into the source tree.
 
 ### With CMake directly
@@ -100,8 +100,8 @@ ctest --preset selftest                       # the same test through CTest
 
 | Preset | Build directory | Notes |
 |---|---|---|
-| `default` | `build/` | normal kernel with the demo threads |
-| `selftest` | `build-selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and exits QEMU |
+| `default` | `build/default/` | normal kernel with the demo threads |
+| `selftest` | `build/selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and exits QEMU |
 
 Both presets export `compile_commands.json` for editors and clangd.
 
@@ -109,15 +109,15 @@ Both presets export `compile_commands.json` for editors and clangd.
 
 | File | Description |
 |---|---|
-| `build/kernel/atlOS.kernel` | the kernel ELF (with debug info) |
-| `build/libc/libk.a` | the C library linked into the kernel |
-| `build/atlOS.iso` | bootable GRUB ISO |
+| `build/default/kernel/atlOS.kernel` | the kernel ELF (with debug info) |
+| `build/default/libc/libk.a` | the C library linked into the kernel |
+| `build/default/atlOS.iso` | bootable GRUB ISO |
 
 ## Debugging
 
 ```sh
 scripts/build.sh debug          # QEMU waits for gdb
-gdb build/kernel/atlOS.kernel -ex 'target remote localhost:1234'
+gdb build/default/kernel/atlOS.kernel -ex 'target remote localhost:1234'
 ```
 
 In VS Code, start the "Run QEMU Debug" task, then the "Debug Kernel" launch

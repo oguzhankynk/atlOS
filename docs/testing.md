@@ -25,7 +25,7 @@ SELFTEST PASSED
 `scripts/run-selftest.sh <iso> [log]` does the QEMU part and can be used on
 its own. Its exit code is 0 when all checks pass, 1 when a check fails and 2
 on a crash, panic or timeout (`SELFTEST_TIMEOUT`, default 60 s). The full
-serial log is written to `build-selftest/selftest.log`.
+serial log is written to `build/selftest/selftest.log`.
 
 ## What is covered
 

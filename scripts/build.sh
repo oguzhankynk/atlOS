@@ -11,7 +11,7 @@
 #   format    format kernel and libc sources with clang-format
 #   format-check  fail if a source file is not formatted
 #   tidy      run clang-tidy on the kernel sources
-#   clean     remove build/ and build-selftest/
+#   clean     remove build/ (every preset)
 
 set -e
 
@@ -27,12 +27,8 @@ build() {
     preset=$1
     shift
 
-    case $preset in
-        default) dir=build ;;
-        selftest) dir=build-selftest ;;
-    esac
-
-    if [ ! -f "$dir/CMakeCache.txt" ]; then
+    # Every preset builds in build/<preset name> (CMakePresets.json)
+    if [ ! -f "build/$preset/CMakeCache.txt" ]; then
         cmake --preset "$preset"
     fi
     cmake --build --preset "$preset" "$@"
@@ -47,7 +43,7 @@ for cmd in "$@"; do
         all) build default ;;
         iso | run | debug | docs | format | format-check | tidy) build default --target "$cmd" ;;
         selftest) build selftest --target selftest ;;
-        clean) rm -rf build build-selftest ;;
+        clean) rm -rf build ;;
         -h | --help | help) usage ;;
         *)
             echo "unknown command: $cmd" >&2

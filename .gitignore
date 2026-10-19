@@ -1,6 +1,5 @@
 # Build output (CMake presets)
 build/
-build-*/
 
 # FAT test disk image, see tools/disk/create_disk_image.sh
 tools/disk/disk.img

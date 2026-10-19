@@ -49,11 +49,11 @@ Exceptions, all excluded from the naming check:
 raw pointers and casts a kernel needs.
 
 ```sh
-scripts/build.sh tidy           # kernel sources, uses build/compile_commands.json
+scripts/build.sh tidy           # kernel sources, uses build/default/compile_commands.json
 ```
 
 The kernel is clean: new warnings should be fixed, not suppressed. Code inside
-`#ifdef ATLOS_SELFTEST` is only seen when running tidy on `build-selftest`.
+`#ifdef ATLOS_SELFTEST` is only seen when running tidy on `build/selftest`.
 
 ## Third party code
 
