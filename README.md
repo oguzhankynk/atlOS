@@ -22,7 +22,7 @@ Working:
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
 - A kernel shell (keyboard or serial terminal): files, `md`/`mw` memory dump and write, `vmmap`, `tasks`, `run`, ...
-- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`write`, `exit`); a fault ends only the program
+- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`write`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
@@ -72,7 +72,7 @@ kernel/
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
 cmake/           cross toolchain file
-user/            user programs (ring 3) for the test disk
+user/            user programs (ring 3) for the test disk, see user/README.md
 scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh, make-disk-image.sh, check-test-disk.sh
 tools/           grub.cfg, files of the test disk
 docs/            documentation

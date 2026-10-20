@@ -1,5 +1,7 @@
 # User programs (`kernel/proc/`)
 
+(Writing a program: see `user/README.md`. This page is the kernel's side.)
+
 How a file on the disk becomes a program running in **ring 3**: in its own
 address space, unable to touch the kernel, talking to it only through
 system calls, and ended by the kernel when it faults.

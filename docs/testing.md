@@ -130,7 +130,9 @@ kernel with the test disk and COM1 on a TCP socket, waits for the prompt and
 types commands the way a terminal does (`\r` for Enter, DEL for Backspace,
 `ESC [ A` for Up, Ctrl+C), checking each answer: `ls`, `cat`, `cd`, writing
 with `echo >`/`>>`, `rm`/`rmdir`, `mw`/`md`, `vmmap`, `tasks`, `run` of a user
-program and of one that faults (the shell must still answer), and at the end
+program and of one that faults (the shell must still answer), the example of
+`user/README.md` (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
+report, and at the end
 `fault`, whose kernel page fault report must appear. The serial log is
 `build/default/shelltest.log`.
 

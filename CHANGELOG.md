@@ -18,6 +18,11 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   checks; a fault in ring 3 ends the program with 128 + vector instead of a
   panic; the shell's `run` command; `HELLO.ELF`, `FAULT.ELF`, `BADPTR.ELF`
 - `AddressSpace::isUserAccessible`; `GDT::setKernelStack`; TCB `owner`
+- `user/README.md`: a guide to writing user programs (environment, memory
+  layout, system calls, exit codes, a first program, debugging a crash, build
+  rules); `COUNT.ELF`, its example; user programs are built with `-g`
+- `scripts/symbolize.sh` resolves `RIP=` of a register dump too, against any
+  ELF file: the kernel or a user program
 - Self tests for ELF parsing and the user programs (706 checks); the shell
   test runs programs
 - Several address spaces: `AddressSpace(pmm, kernel)` shares the kernel's

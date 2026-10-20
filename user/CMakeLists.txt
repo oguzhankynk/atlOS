@@ -3,7 +3,7 @@
 
 set(ATLOS_USER_FLAGS
     -ffreestanding -fno-pic -fno-pie -mcmodel=large ${ATLOS_NO_SIMD_FLAGS}
-    -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -O2 -Wall -Wextra -Werror
+    -g -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -O2 -Wall -Wextra -Werror
 )
 
 add_library(atlos_user_crt OBJECT lib/crt0.S)
@@ -24,6 +24,7 @@ endfunction()
 atlos_user_program(hello)
 atlos_user_program(fault)
 atlos_user_program(badptr)
+atlos_user_program(count)
 
 set(ATLOS_USER_PROGRAMS ${ATLOS_USER_PROGRAMS} PARENT_SCOPE)
-set(ATLOS_USER_TARGETS hello fault badptr PARENT_SCOPE)
+set(ATLOS_USER_TARGETS hello fault badptr count PARENT_SCOPE)

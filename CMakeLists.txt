@@ -110,7 +110,7 @@ if(GRUB_MKRESCUE AND QEMU)
     # The normal kernel's shell, driven over the serial port
     if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST AND PYTHON3 AND ATLOS_DISK_TARGET)
         add_custom_target(shelltest
-            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log
+            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log ${CMAKE_BINARY_DIR}/user
             DEPENDS iso ${ATLOS_DISK_TARGET}
             USES_TERMINAL
             VERBATIM

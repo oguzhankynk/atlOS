@@ -112,3 +112,11 @@ configuration (`.vscode/launch.json`).
 drivers are not wired up yet, so the image is not attached by the run targets.
 Details, requirements and how to attach it to QEMU by hand:
 [`tools/disk/README.md`](../tools/disk/README.md).
+
+## User programs
+
+The programs in `user/` (ring 3, see [user/README.md](../user/README.md)) are
+built with every preset into `build/<preset>/user/*.elf` and copied to the
+test disk as `/BIN/<NAME>.ELF`. Run one from the shell:
+`run /disk0/BIN/HELLO.ELF`.
+
