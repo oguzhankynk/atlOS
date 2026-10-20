@@ -23,7 +23,9 @@
 #include <cxx/uninitialized.hpp>
 #include <drivers/character_sink.hpp>
 #include <drivers/interrupt_controller.hpp>
+#include <drivers/keyboard.hpp>
 #include <drivers/pit.hpp>
+#include <drivers/scancode.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/tick_source.hpp>
 #include <drivers/vga_console.hpp>
@@ -658,6 +660,18 @@ static void testVgaConsole()
         CHECK(screenChar(s_screen, 0, 0) == 'c');
         CHECK(screenChar(s_screen, 0, height - 2) == 'z');
         CHECK(screenChar(s_screen, 0, height - 1) == ' ');
+    }
+
+    // Backspace moves back a cell, across the line start, not past the top
+    {
+        VGATextConsole console(s_screen);
+        writeText(console, "ab\bc");
+        CHECK(screenChar(s_screen, 0, 0) == 'a' && screenChar(s_screen, 1, 0) == 'c');
+        writeText(console, "\n\bz");
+        CHECK(screenChar(s_screen, width - 1, 0) == 'z');
+        VGATextConsole top(s_screen);
+        writeText(top, "\bq");
+        CHECK(screenChar(s_screen, 0, 0) == 'q');
     }
 }
 
@@ -1482,6 +1496,174 @@ static void testIdleKeepsInterruptState(Scheduler& scheduler)
     IOPort::enableInterrupts();
 }
 
+// ------------------------------------------------------------
+// Keyboard
+// ------------------------------------------------------------
+
+// Feed bytes, return the characters of the completed events (0 = none)
+static char feedKey(Drivers::ScancodeDecoder& decoder, uint8_t byte)
+{
+    Drivers::KeyEvent event {};
+    if (!decoder.feed(byte, event))
+        return 0;
+    return event.character;
+}
+
+static void testScancodeDecoder()
+{
+    group("Scancode decoder (set 1, US)");
+    Drivers::ScancodeDecoder decoder;
+    Drivers::KeyEvent event {};
+
+    // Make code: a press with a character; break code: a release without
+    CHECK(decoder.feed(0x1E, event));
+    CHECK(event.pressed && !event.extended && event.code == 0x1E && event.character == 'a');
+    CHECK(decoder.feed(0x9E, event));
+    CHECK(!event.pressed && event.code == 0x1E && event.character == 0);
+
+    CHECK(feedKey(decoder, 0x02) == '1');
+    CHECK(feedKey(decoder, 0x39) == ' ');
+    CHECK(feedKey(decoder, 0x1C) == '\n');
+    CHECK(feedKey(decoder, 0x0E) == '\b');
+    CHECK(feedKey(decoder, 0x0F) == '\t');
+    CHECK(feedKey(decoder, 0x35) == '/');
+    CHECK(feedKey(decoder, 0x3B) == 0); // F1
+    CHECK(feedKey(decoder, 0x47) == '7'); // keypad
+    CHECK(feedKey(decoder, 0x58) == 0); // F12: beyond the table
+
+    // Shift (left and right) while held
+    CHECK(feedKey(decoder, 0x2A) == 0);
+    CHECK(decoder.shift());
+    CHECK(feedKey(decoder, 0x1E) == 'A');
+    CHECK(feedKey(decoder, 0x02) == '!');
+    CHECK(feedKey(decoder, 0x28) == '"');
+    CHECK(feedKey(decoder, 0xAA) == 0);
+    CHECK(!decoder.shift());
+    feedKey(decoder, 0x36);
+    CHECK(feedKey(decoder, 0x0D) == '+');
+    feedKey(decoder, 0xB6);
+    CHECK(feedKey(decoder, 0x0D) == '=');
+
+    // Caps Lock toggles on press, only letters, Shift undoes it
+    feedKey(decoder, 0x3A);
+    feedKey(decoder, 0xBA);
+    CHECK(decoder.capsLock());
+    CHECK(feedKey(decoder, 0x10) == 'Q');
+    CHECK(feedKey(decoder, 0x02) == '1');
+    feedKey(decoder, 0x2A);
+    CHECK(feedKey(decoder, 0x10) == 'q');
+    CHECK(feedKey(decoder, 0x02) == '!');
+    feedKey(decoder, 0xAA);
+    feedKey(decoder, 0x3A);
+    CHECK(!decoder.capsLock());
+
+    // Ctrl+letter: control characters; right Ctrl is E0 1D
+    feedKey(decoder, 0x1D);
+    CHECK(feedKey(decoder, 0x2E) == 3); // Ctrl+C
+    feedKey(decoder, 0x9D);
+    CHECK(!decoder.ctrl());
+    CHECK(!decoder.feed(0xE0, event)); // a prefix completes nothing
+    CHECK(decoder.feed(0x1D, event) && event.extended);
+    CHECK(decoder.ctrl());
+    feedKey(decoder, 0xE0);
+    feedKey(decoder, 0x9D);
+    CHECK(!decoder.ctrl());
+
+    // Extended keys: keypad Enter and / have characters, arrows do not
+    feedKey(decoder, 0xE0);
+    CHECK(feedKey(decoder, 0x1C) == '\n');
+    feedKey(decoder, 0xE0);
+    CHECK(feedKey(decoder, 0x35) == '/');
+    feedKey(decoder, 0xE0);
+    CHECK(decoder.feed(0x48, event) && event.extended && event.character == 0); // up arrow
+    CHECK(feedKey(decoder, 0x48) == '8'); // the prefix is gone: keypad 8
+
+    // Print Screen's fake shift (E0 2A) does not shift
+    feedKey(decoder, 0xE0);
+    feedKey(decoder, 0x2A);
+    CHECK(!decoder.shift());
+
+    // Pause (E1 1D 45 E1 9D C5) and controller answers are not keys
+    const uint8_t pause[] = { 0xE1, 0x1D, 0x45, 0xE1, 0x9D, 0xC5 };
+    for (uint8_t byte : pause)
+        CHECK(!decoder.feed(byte, event));
+    CHECK(!decoder.ctrl());
+    CHECK(!decoder.feed(0xFA, event));
+    CHECK(!decoder.feed(0xFE, event));
+    CHECK(feedKey(decoder, 0x1E) == 'a');
+}
+
+static void typeText(Drivers::PS2Keyboard& keyboard, const char* text)
+{
+    // Only lowercase letters and space, enough for the tests
+    static const uint8_t s_letters[] = { 0x1E, 0x30, 0x2E, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32,
+        0x31, 0x18, 0x19, 0x10, 0x13, 0x1F, 0x14, 0x16, 0x2F, 0x11, 0x2D, 0x15, 0x2C };
+    for (; *text; text++) {
+        uint8_t code = *text == ' ' ? 0x39 : s_letters[*text - 'a'];
+        keyboard.handleScancode(code);
+        keyboard.handleScancode(code | 0x80);
+    }
+}
+
+static Drivers::PS2Keyboard* s_keyboard {};
+static char s_line[8] {};
+
+static void lineReader(Scheduler& scheduler)
+{
+    for (int i = 0; i < 3; i++)
+        s_line[i] = s_keyboard->read();
+}
+
+static void testKeyboard(AddressSpace& space)
+{
+    group("PS/2 keyboard (fake interrupt controller)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    FakeInterruptController controller;
+    Drivers::PS2Keyboard keyboard(controller, scheduler);
+    CHECK(controller.attachedIrq == Drivers::Irq::Keyboard);
+    CHECK(controller.unmaskedIrq == Drivers::Irq::Keyboard);
+    CHECK(controller.attachedArg == &keyboard);
+
+    char c = 0;
+    CHECK(!keyboard.tryRead(c));
+    typeText(keyboard, "hi");
+    CHECK(keyboard.tryRead(c) && c == 'h');
+    CHECK(keyboard.tryRead(c) && c == 'i');
+    CHECK(!keyboard.tryRead(c));
+
+    // A reader waits without spinning until the "interrupt" brings characters
+    s_keyboard = &keyboard;
+    memset(s_line, 0, sizeof(s_line));
+    Thread* t = new Thread(scheduler, space, lineReader);
+    scheduler.yield();
+    CHECK(t->getTCB().state == ThreadState::Blocked);
+    IOPort::disableInterrupts(); // as in the IRQ handler
+    typeText(keyboard, "ok");
+    IOPort::enableInterrupts();
+    scheduler.yield();
+    CHECK(s_line[0] == 'o' && s_line[1] == 'k');
+    CHECK(t->getTCB().state == ThreadState::Blocked);
+    typeText(keyboard, "x");
+    CHECK(waitForExit(scheduler, *t, 1000));
+    CHECK(s_line[2] == 'x');
+    delete t;
+
+    // Full buffer: new characters are dropped, the typed ones keep their order
+    for (uint32_t i = 0; i < Drivers::PS2Keyboard::bufferSize + 5; i++)
+        typeText(keyboard, i % 2 ? "b" : "a");
+    CHECK(keyboard.droppedCount() == 5);
+    bool inOrder = true;
+    for (uint32_t i = 0; i < Drivers::PS2Keyboard::bufferSize; i++)
+        inOrder = inOrder && keyboard.tryRead(c) && c == (i % 2 ? 'b' : 'a');
+    CHECK(inOrder);
+    CHECK(!keyboard.tryRead(c));
+
+    // The IRQ handler the driver registered reads the data port; just check it is ours
+    CHECK(controller.attachedHandler != nullptr);
+}
+
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler)
 {
     printf("[SELFTEST] start\n");
@@ -1519,6 +1701,8 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testMutex(space);
     testConditionVariable(space);
     testIdleKeepsInterruptState(scheduler);
+    testScancodeDecoder();
+    testKeyboard(space);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;

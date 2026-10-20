@@ -28,7 +28,8 @@
    8. constructs the `Drivers::PIT` on top of the PIC and enables interrupts
    9. constructs the `Threading::Scheduler` on the PIT (the boot flow becomes
       task 0, 1 ms tick)
-   10. self tests (`ATLOS_SELFTEST` builds) or the demo threads A/B
+   10. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
+       or the demo: constructs the `Drivers::PS2Keyboard` and echoes what is typed
 
    `kernelMain` is the composition root: driver objects live in
    `Cxx::Uninitialized<T>` storage, are constructed there explicitly in

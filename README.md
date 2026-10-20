@@ -14,16 +14,17 @@ small enough to read end to end.
 Working:
 
 - 64-bit higher half kernel (loaded at 4 MB, mapped at `0xFFFFFFFF80000000` + physical), booted by GRUB2
-- GDT, IDT, exception reporting, 8259 PIC, PIT (1 ms tick)
+- GDT with a TSS (double fault stack), IDT, decoded exception reports with a backtrace, 8259 PIC, PIT (1 ms tick)
 - Physical memory manager (2 MB blocks + 4 KB frames for page tables)
 - Virtual memory manager with 2 MB pages and recursive page table mapping
 - Kernel heap (`kmalloc`/`kfree`, based on liballoc 1.1)
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
+- Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
+- PS/2 keyboard (US layout); the default kernel echoes what is typed
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
-In the tree but not wired up yet: ATA, FAT16 and VFS code, the keyboard driver,
-mutex and semaphore. The CPUID helpers are built and tested but not called at
+In the tree but not wired up yet: ATA, FAT16 and VFS code. The CPUID helpers are built and tested but not called at
 boot. There is no user mode, no system calls and no shell; atlOS runs on a
 single CPU.
 

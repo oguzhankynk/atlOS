@@ -136,8 +136,6 @@ static void detectATADevices()
 void init()
 {
 
-    // Keyboard::init();
-
     // detectATADevices();
 }
 } // namespace DeviceManager

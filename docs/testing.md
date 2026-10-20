@@ -2,7 +2,7 @@
 
 The kernel has built-in tests in `kernel/tests/selftest.cpp`. A kernel built
 with `ATLOS_SELFTEST=ON` (the `selftest` preset) runs them right after
-the scheduler is set up instead of the demo threads, prints the results on the
+the scheduler is set up instead of the keyboard demo, prints the results on the
 serial port and halts with the result (`Core::haltWithStatus`).
 
 How the result leaves the machine: the self test presets set
@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 265 passed, 0 failed
+[SELFTEST] done: 333 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -52,7 +52,7 @@ backtrace in it into function names.
 | Uninitialized | `Cxx::Uninitialized<T>` constructs once, on demand, with the given arguments |
 | PIT (fake controller) | the PIT driver against a fake `InterruptController`: period checks, attaches and unmasks IRQ 0 |
 | Console (fake sink) | `Core::setConsole` routes printf to a sink and returns the previous one |
-| VGA text console (RAM buffer) | clearing, text, newline, tab, color, line wrap, scrolling, on a buffer in RAM |
+| VGA text console (RAM buffer) | clearing, text, newline, tab, backspace, color, line wrap, scrolling, on a buffer in RAM |
 | Serial port (missing COM2) | a port that fails the loopback test reports it and drops writes instead of hanging (skipped on a machine with a COM2) |
 | CPU | CPUID: max leaf, vendor string, SSE2/FXSR present, cache list bounded |
 | Fault decoding | page fault and selector error codes, exception names, the vector numbers |
@@ -69,6 +69,8 @@ backtrace in it into function names.
 | Mutex (isolated) | threads that yield while holding it run one after the other, ownership hand off |
 | ConditionVariable (isolated) | Mesa semantics: the waiter checks again; woken waiters get the mutex back first |
 | Scheduler idle keeps the interrupt state (kernel, PIT) | sleeping with interrupts off returns with them off |
+| Scancode decoder (set 1, US) | make/break, Shift, Caps Lock, Ctrl, 0xE0 keys, Print Screen's fake shift, Pause and controller answers |
+| PS/2 keyboard (fake interrupt controller) | IRQ 1 attached and unmasked, `tryRead`, a reader blocked until characters arrive, a full buffer drops new characters |
 
 ## Crash test
 

@@ -51,15 +51,13 @@
 #include <arch/x86_64/idt/handlers.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/keyboard.hpp>
 #include <drivers/pic.hpp>
 #include <drivers/pit.hpp>
 
 #include <core/halt.hpp>
 #include <tests/crashtest.hpp>
 #include <tests/selftest.hpp>
-
-extern void threadTaskA(Threading::Scheduler& scheduler);
-extern void threadTaskB(Threading::Scheduler& scheduler);
 
 // Objects owned by kernelMain, the composition root. They are constructed
 // explicitly below, in dependency order, and handed to their users by
@@ -71,6 +69,7 @@ static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
 static Cxx::Uninitialized<Threading::Scheduler> s_scheduler;
+static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
 static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL * 1024 * 1024 * 1024)];
@@ -143,12 +142,15 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     CrashTest::run();
 #endif
 
-    printf("Creating threads...\n");
-    Threading::Thread t1(scheduler, kernelSpace, threadTaskA);
-    Threading::Thread t2(scheduler, kernelSpace, threadTaskB);
-
-    printf("Threads running...\n");
-    while (1) {
-        scheduler.yield();
+    // Demo: echo what is typed. read() blocks this flow (task 0) on the
+    // keyboard's semaphore; with nothing else to run the CPU sleeps in hlt.
+    Drivers::PS2Keyboard& keyboard = s_keyboard.construct(pic, scheduler);
+    printf("Type something:\n");
+    while (true) {
+        char c = keyboard.read();
+        if (c == '\b')
+            printf("\b \b");
+        else
+            printf("%c", c);
     }
 }

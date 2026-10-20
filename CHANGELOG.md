@@ -26,6 +26,11 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   counting `Semaphore` (`take`/`tryTake`/`give`, `give` from interrupt
   handlers), `Mutex` with an owner, `ConditionVariable`; teaching README
 - Self tests for the sync objects (265 checks)
+- `Drivers::PS2Keyboard` (IRQ 1) behind a new `CharacterSource` interface:
+  scancode set 1 decoding (Shift, Caps Lock, Ctrl, extended keys) as a pure
+  `ScancodeDecoder`, US layout, a 64 character buffer, `read()` waits on a
+  semaphore; self tests (333 checks)
+- The VGA console handles backspace
 
 ### Changed
 
@@ -38,6 +43,8 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - The scheduler tick counter is a `Sync::Atomic`; idling in `sti; hlt`
   restores the caller's interrupt state
 - `Spinlock` uses `Sync::Atomic`
+- The default kernel echoes keyboard input instead of running the A/B demo
+  threads
 
 ### Fixed
 

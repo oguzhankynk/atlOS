@@ -72,7 +72,7 @@ ctest --preset selftest                       # the same test through CTest
 
 | Preset | Build directory | Notes |
 |---|---|---|
-| `default` | `build/default/` | normal kernel with the demo threads |
+| `default` | `build/default/` | normal kernel: echoes what is typed on the keyboard |
 | `selftest` | `build/selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and halts with the result |
 | `crashtest` | `build/crashtest/` | `ATLOS_CRASHTEST=ON`: the kernel page faults on purpose after boot |
 

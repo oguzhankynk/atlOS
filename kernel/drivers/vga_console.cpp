@@ -61,6 +61,18 @@ void VGATextConsole::putChar(char c)
         return;
     }
 
+    // Back one cell (to the end of the previous line at column 0); the cell
+    // is not cleared, "\b \b" erases like a terminal
+    if (c == '\b') {
+        if (m_column) {
+            m_column--;
+        } else if (m_row) {
+            m_row--;
+            m_column = width - 1;
+        }
+        return;
+    }
+
     if (c == '\t') {
         for (int i = 0; i < 4; i++)
             putChar(' ');
