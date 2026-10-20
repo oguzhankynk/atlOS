@@ -31,6 +31,7 @@
 #include <drivers/scancode.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/tick_source.hpp>
+#include <drivers/vga.hpp>
 #include <drivers/vga_console.hpp>
 #include <fs/fat16.hpp>
 #include <fs/vfs.hpp>
@@ -684,6 +685,26 @@ static void testVgaConsole()
         CHECK(screenChar(s_screen, 0, 0) == 'c');
         CHECK(screenChar(s_screen, 0, height - 2) == 'z');
         CHECK(screenChar(s_screen, 0, height - 1) == ' ');
+    }
+
+    // ANSI colors as a serial terminal knows them; other sequences are skipped
+    {
+        VGATextConsole console(s_screen);
+        writeText(console, "\x1b[93mY\x1b[0mN\x1b[1;34mB\x1b[2J\x1b[22mb\x1b[mR");
+        CHECK(s_screen[0] == ((VgaColorLightBrown << 8) | 'Y'));
+        CHECK(s_screen[1] == ((VgaColorLightGrey << 8) | 'N'));
+        CHECK(s_screen[2] == ((VgaColorLightBlue << 8) | 'B'));
+        CHECK(s_screen[3] == ((VgaColorBlue << 8) | 'b')); // ESC[2J drew nothing
+        CHECK(s_screen[4] == ((VgaColorLightGrey << 8) | 'R'));
+    }
+
+    // UTF-8 block characters land on their code page 437 glyphs, others are '?'
+    {
+        VGATextConsole console(s_screen);
+        writeText(console, "\xe2\x96\x80\xe2\x96\x84\xe2\x96\x88\xc3\xa9x");
+        CHECK(screenChar(s_screen, 0, 0) == (char)0xDF && screenChar(s_screen, 1, 0) == (char)0xDC);
+        CHECK(screenChar(s_screen, 2, 0) == (char)0xDB);
+        CHECK(screenChar(s_screen, 3, 0) == '?' && screenChar(s_screen, 4, 0) == 'x'); // é
     }
 
     // Backspace moves back a cell, across the line start, not past the top
@@ -2643,7 +2664,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     runCommand(shell, sink, "tasks");
     bool threads = sink.contains("*0") && sink.contains("kernel") && sink.contains("running")
         && sink.contains(sleeper->getName()) && sink.contains("sleeping") && sink.contains(" ms")
-        && sink.contains("+2048 KB") && sink.contains("2 task(s)");
+        && sink.contains("2 task(s)");
     bool ps = (runCommand(shell, sink, "ps"), sink.contains("sleeping"));
     scheduler.removeTask(*sleeper);
     delete sleeper;

@@ -20,18 +20,37 @@
 #include <core/version.hpp>
 #include <stdio.h>
 
-static const char* s_banner = "\
-|============================================|\n\
-|          Welcome to atlOS                  |\n\
-|   Developed by: Oguzhan KAYNAK             |\n\
-|                                            |\n\
-| Your reliable and efficient operating      |\n\
-| system for a better computing experience!  |\n\
-|============================================|\n\
-";
+// ANSI colors: serial terminals show them, VGATextConsole understands them too
+#define PICTURE "\x1b[93m" // bright yellow
+#define NAME "\x1b[97m" // bright white
+#define DIM "\x1b[37m"
+#define RESET "\x1b[0m"
+
+// Made by scripts/make-banner.py (half blocks: two pixels per character cell)
+static const char* const s_banner[] = {
+    PICTURE "          ▄▄▄▄          " NAME "" RESET,
+    PICTURE "         ▄██▀▀█▄▄       " NAME "" RESET,
+    PICTURE "       ▄███▀   ▀▀▀█▄▄   " NAME "" RESET,
+    PICTURE "    ▄▄█▀▀▄▄      ▄▄ █▄  " NAME "             ▄█     █▄     ▄▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄" RESET,
+    PICTURE "  ▄█▀▄▄ ▀▀       ▀▀▀ █▄ " NAME "   ████████▄ █████▄ ██    ██▀▀▀▀▀▀██▄▄██▀▀▀▀▀▀▀▀" RESET,
+    PICTURE "   ▄ ▀▄█              ██" NAME "    ▄▄▄▄▄▄██ ██▀▀▀  ██   ███       ██▀██▄▄▄▄▄▄▄" RESET,
+    PICTURE "  ▀▀▄▄                █▀" NAME "  ▄██▀▀▀▀▀██ ██▄    ██   ███       ██ ▀▀▀▀▀▀▀▀██" RESET,
+    PICTURE " ▄▀ ▀         ▄▄██▄▄▄█▀ " NAME "   █████████ ▀█████ █████ ██████████▀ █████████▀" RESET,
+    PICTURE "            ▄██    ██▀  " NAME "" RESET,
+    PICTURE "             ▀▀█        " NAME "" RESET,
+    PICTURE "                ▀       " NAME "" RESET,
+};
+
+void atlOSBootLine()
+{
+    printf("atlOS %s (%s) starting\n", ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
+}
 
 void atlOSBanner()
 {
-    printf("%s", s_banner);
-    printf("atlOS %s (%s)\n", ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
+    printf("\n");
+    for (const char* line : s_banner)
+        printf("%s\n", line);
+    printf("\n  " NAME "atlOS %s" RESET DIM " (%s)  x86_64, a small kernel to learn how an OS works" RESET "\n\n",
+        ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
 }

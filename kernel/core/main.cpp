@@ -102,8 +102,8 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     else
         printf("COM1 not found, the console stays on the screen\n");
 
-    // Print the banner
-    atlOSBanner();
+    // The version first, so every log says what it is from
+    atlOSBootLine();
 
     // Call global constructors
     Cxx::callConstructors();

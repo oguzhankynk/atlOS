@@ -41,6 +41,14 @@ public:
      */
     explicit VGATextConsole(volatile uint16_t* buffer = reinterpret_cast<volatile uint16_t*>(textBufferAddress));
 
+    /**
+     * @brief Write text. "\n", "\t" and "\b" move the cursor; ANSI color
+     * sequences (ESC [ ... m: 0 reset, 1 bright, 30..37 / 90..97 foreground,
+     * 39 default) set the color, as on a serial terminal; other escape
+     * sequences are skipped. UTF-8 is decoded for the block characters
+     * U+2580 ▀, U+2584 ▄, U+2588 █, U+2591..U+2593 ░▒▓ (the VGA font has
+     * them, at their code page 437 positions); other characters show as '?'.
+     */
     void write(const char* data, size_t size) override;
 
     /// Blank the screen and go to the top left.
@@ -50,6 +58,8 @@ public:
 
 private:
     void putChar(char c);
+    void putEntryChar(unsigned char c);
+    void applyAnsi();
     void putEntryAt(unsigned char c, uint8_t color, size_t x, size_t y);
     void newLine();
     void scroll();
@@ -58,6 +68,21 @@ private:
     size_t m_row {};
     size_t m_column {};
     uint8_t m_color;
+
+    // An ANSI escape sequence in progress: ESC, '[', parameters, a final byte
+    enum class Escape {
+        None,
+        Started,
+        Parameters,
+    };
+    Escape m_escape { Escape::None };
+    uint32_t m_parameters[4] {};
+    uint32_t m_parameterCount {};
+    bool m_bright {};
+
+    // A UTF-8 sequence in progress
+    uint32_t m_codePoint {};
+    uint32_t m_utf8Left {};
 };
 
 } // namespace Drivers

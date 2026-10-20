@@ -51,7 +51,11 @@ Small interfaces, concrete drivers as objects, created and wired in
   `TeeSink(screen, serial)`, so output shows on both.
 - **VGATextConsole**: 80×25 cells of `char | color << 8`. The buffer pointer is
   a constructor argument (the real screen by default), so the tests run it on
-  RAM.
+  RAM. It understands what a serial terminal does, so the same bytes look
+  alike on both: ANSI colors (`ESC [ 93 m` bright yellow, `ESC [ 0 m` reset;
+  other escape sequences are skipped) and UTF-8 for the block characters
+  `▀ ▄ █ ░ ▒ ▓`, shown with the VGA font's code page 437 glyphs (other
+  characters become `?`).
 - **PS2Keyboard**, see below. Interrupt driven: input arrives whenever the
   user types, polling would have to look all the time.
 - The output drivers poll their status registers: the simplest way to use a

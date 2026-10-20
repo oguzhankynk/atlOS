@@ -120,3 +120,11 @@ built with every preset into `build/<preset>/user/*.elf` and copied to the
 test disk as `/BIN/<NAME>.ELF`. Run one from the shell:
 `run /disk0/BIN/HELLO.ELF`.
 
+## Screenshots and the banner
+
+`scripts/take-screenshots.py <iso> <disk.img> <dir>` boots the normal kernel,
+types a few shell commands over the serial port and saves the VGA screen
+(QEMU's `screendump`) as `boot.png` and `shell.png`, e.g. for the wiki.
+`scripts/make-banner.py` prints the lines of the boot banner in
+`kernel/core/banner.cpp`.
+
