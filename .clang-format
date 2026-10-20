@@ -1,0 +1,7 @@
+# atlOS code format: WebKit style, see docs/style.md and
+# https://webkit.org/code-style-guidelines/
+BasedOnStyle: WebKit
+Standard: c++17
+
+# Keep #include blocks as written (blocks separated by blank lines are sorted)
+IncludeBlocks: Preserve

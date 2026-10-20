@@ -1,0 +1,12 @@
+{
+    "configurations": [
+        {
+            "name": "x86_64-elf",
+            "compileCommands": "${workspaceFolder}/build/default/compile_commands.json",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

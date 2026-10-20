@@ -1,0 +1,14 @@
+# Mechanical commits without functional change, hidden from git blame.
+# Enable with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Normalize line endings to LF
+db3f1b68cc79cfee5a04f8e94624838b24ec3326
+
+# Rename identifiers to the WebKit naming style
+44c77f068652a1656627c6e6224dfc75d85a493f
+
+# Format with clang-format (WebKit style), #pragma once
+d55c5f5a2a19448ef33dc666feff8d2284d3da68
+
+# Rename public data members to camelCase
+cba444989de030372a087fd125b350816e17359f

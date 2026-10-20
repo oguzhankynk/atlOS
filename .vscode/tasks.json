@@ -1,0 +1,51 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Clean",
+            "type": "shell",
+            "command": "./scripts/build.sh clean",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "./scripts/build.sh all",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Run",
+            "type": "shell",
+            "command": "./scripts/build.sh run",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Self tests",
+            "type": "shell",
+            "command": "./scripts/build.sh selftest",
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run QEMU Debug",
+            "type": "shell",
+            "isBackground": true,
+            "command": "./scripts/build.sh debug",
+            "problemMatcher": []
+        },
+        {
+            "label": "Create Disk Image (FAT16)",
+            "type": "shell",
+            "command": "./tools/disk/create_disk_image.sh 16",
+            "problemMatcher": []
+        }
+    ]
+}

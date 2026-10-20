@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Kernel",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/default/kernel/atlOS.kernel",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/usr/bin/gdb",
+            "targetArchitecture": "x86_64",
+            "customLaunchSetupCommands": [
+                {
+                    "text": "shell sleep 1",
+                    "description": "Wait for QEMU to start gdbserver"
+                },
+                {
+                    "text": "target remote localhost:1234",
+                    "description": "Connect to QEMU remote debugger"
+                },
+                {
+                    "text": "symbol-file ${workspaceFolder}/build/default/kernel/atlOS.kernel",
+                    "description": "Load kernel symbols"
+                }
+            ],
+            "avoidWindowsConsoleRedirection": true
+        }
+    ]
+}
