@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish the release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag and project version must match
+        id: version
+        run: |
+          version=$(sed -n 's/^project(atlOS VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match project(atlOS VERSION $version)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup
+
+      - name: Build libc, kernel and ISO
+        run: scripts/build.sh all
+
+      - name: Self tests (QEMU)
+        run: scripts/build.sh selftest
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/release-notes.sh "$VERSION" > notes.md
+          cp build/default/atlOS.iso "atlOS-$VERSION.iso"
+          gh release create "$GITHUB_REF_NAME" \
+            "atlOS-$VERSION.iso#atlOS-$VERSION.iso (bootable, x86_64)" \
+            --title "atlOS $VERSION" --notes-file notes.md --verify-tag

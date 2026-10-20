@@ -113,10 +113,11 @@ _start64:
         movw %ax, %gs
         movw %ax, %ss
 
-        movq mbInfo(%rip), %rdi   
-        movl mbMagic(%rip), %esi  
+        movq mbInfo(%rip), %rdi
+        movl mbMagic(%rip), %esi
 
-        
+        // rbp = 0 ends the frame pointer chain of a backtrace
+        xorq %rbp, %rbp
         call kernelMain
 
         cli

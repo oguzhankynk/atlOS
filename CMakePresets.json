@@ -21,7 +21,17 @@
             "displayName": "atlOS self tests",
             "inherits": "default",
             "cacheVariables": {
-                "ATLOS_SELFTEST": "ON"
+                "ATLOS_SELFTEST": "ON",
+                "ATLOS_DEBUG_EXIT_PORT": "0xf4"
+            }
+        },
+        {
+            "name": "crashtest",
+            "displayName": "atlOS crash test",
+            "inherits": "default",
+            "cacheVariables": {
+                "ATLOS_CRASHTEST": "ON",
+                "ATLOS_DEBUG_EXIT_PORT": "0xf4"
             }
         }
     ],
@@ -33,12 +43,23 @@
         {
             "name": "selftest",
             "configurePreset": "selftest"
+        },
+        {
+            "name": "crashtest",
+            "configurePreset": "crashtest"
         }
     ],
     "testPresets": [
         {
             "name": "selftest",
             "configurePreset": "selftest",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "crashtest",
+            "configurePreset": "crashtest",
             "output": {
                 "outputOnFailure": true
             }

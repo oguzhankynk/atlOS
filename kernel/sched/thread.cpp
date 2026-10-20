@@ -57,6 +57,9 @@ ThreadImpl::ThreadImpl(Scheduler& scheduler, Memory::AddressSpace& addressSpace,
 
     // Set up the TCB (Thread Control Block)
     m_tcb.state = ThreadState::Ready;
+    m_tcb.name = m_name;
+    m_tcb.stackBase = reinterpret_cast<uintptr_t>(m_stack);
+    m_tcb.stackSize = stackSize;
     m_tcb.regs.rax = 0;
     m_tcb.regs.rbx = 0;
     m_tcb.regs.rcx = 0;
@@ -89,7 +92,9 @@ ThreadImpl::ThreadImpl(Scheduler& scheduler, Memory::AddressSpace& addressSpace,
     push(sp, reinterpret_cast<uintptr_t>(nullptr));
 
     m_tcb.regs.rsp = reinterpret_cast<uint64_t>(sp);
-    m_tcb.regs.rbp = m_tcb.regs.rsp;
+
+    // No caller frame: rbp = 0 ends a backtrace at threadStartPoint
+    m_tcb.regs.rbp = 0;
 }
 
 ThreadImpl::~ThreadImpl()

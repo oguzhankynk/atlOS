@@ -24,6 +24,7 @@
 
 #include <sched/thread.hpp>
 #include <stdint.h>
+#include <sync/atomic.hpp>
 
 namespace Drivers {
 class TickSource;
@@ -75,10 +76,16 @@ public:
     TCB& current();
 
     /// Milliseconds (ticks) since construction.
-    uint64_t ticks() const { return m_ticks; }
+    uint64_t ticks() const { return m_ticks.load(); }
 
     /// Number of queued tasks, including the flow that constructed the scheduler.
     uint32_t taskCount() const { return m_threadCount; }
+
+    /// TCB of queued task index (0 .. taskCount() - 1), for listings.
+    const TCB& task(uint32_t index) const { return *m_readyQueue[index]; }
+
+    /// Index of the running task in the queue.
+    uint32_t currentIndex() const { return m_currentThreadIndex; }
 
 private:
     static void onTick(void* scheduler);
@@ -96,8 +103,8 @@ private:
     uint32_t m_threadCount {};
     uint32_t m_currentThreadIndex {};
 
-    // Only written by the timer interrupt; an aligned 64-bit store is atomic
-    volatile uint64_t m_ticks {};
+    // Incremented by the timer interrupt, read by threads
+    Sync::Atomic<uint64_t> m_ticks;
 };
 
 } // namespace Threading

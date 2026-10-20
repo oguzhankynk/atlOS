@@ -22,13 +22,16 @@
       multiboot memory map (`Memory::populateFromMultiboot`, reserves the
       kernel image), constructs the `Memory::AddressSpace` on top and binds it
       to the heap (see [memory.md](memory.md))
-   6. `DeviceManager::init` (currently empty)
+   6. constructs the `Fs::Vfs` and mounts the FAT16 partitions of the ATA
+      disks (`Fs::mountAtaDisks`, see `kernel/fs/README.md`)
    7. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
       lines masked) and binds it to the ISR dispatcher
    8. constructs the `Drivers::PIT` on top of the PIC and enables interrupts
    9. constructs the `Threading::Scheduler` on the PIT (the boot flow becomes
       task 0, 1 ms tick)
-   10. self tests (`ATLOS_SELFTEST` builds) or the demo threads A/B
+   10. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
+       or the shell: a `CharacterQueue` fed by the keyboard and COM1, and
+       `Shell::Interpreter` running in the boot flow (see `kernel/shell/README.md`)
 
    `kernelMain` is the composition root: driver objects live in
    `Cxx::Uninitialized<T>` storage, are constructed there explicitly in

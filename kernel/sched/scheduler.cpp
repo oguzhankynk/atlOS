@@ -1,3 +1,4 @@
+#include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <drivers/tick_source.hpp>
 #include <sched/scheduler.hpp>
@@ -16,6 +17,7 @@ static bool isRunnable(const TCB* tcb)
 Scheduler::Scheduler(Drivers::TickSource& ticks)
 {
     m_bootTcb.state = ThreadState::Running;
+    m_bootTcb.name = "kernel"; // the flow that constructed the scheduler (kernelMain)
     m_readyQueue[0] = &m_bootTcb;
     m_threadCount = 1;
     m_currentThreadIndex = 0;
@@ -27,12 +29,12 @@ Scheduler::Scheduler(Drivers::TickSource& ticks)
 void Scheduler::onTick(void* scheduler)
 {
     auto* self = static_cast<Scheduler*>(scheduler);
-    self->m_ticks = self->m_ticks + 1;
+    self->m_ticks.fetchAdd(1);
 }
 
 void Scheduler::wakeSleepers()
 {
-    uint64_t now = m_ticks;
+    uint64_t now = m_ticks.load();
     for (uint32_t i = 0; i < m_threadCount; i++) {
         if (m_readyQueue[i]->state == ThreadState::Sleeping && now >= m_readyQueue[i]->wakeTick)
             m_readyQueue[i]->state = ThreadState::Ready;
@@ -73,6 +75,10 @@ void Scheduler::switchTo(uint32_t nextIndex)
 // halt until an interrupt (e.g. the timer waking a sleeper) changes that.
 void Scheduler::schedule()
 {
+    // A thread may wait with interrupts off (Sync::WaitQueue); idling turns
+    // them on, so put back what the caller had before returning to it
+    bool interruptsWereEnabled = IOPort::interruptsEnabled();
+
     while (true) {
         wakeSleepers();
 
@@ -84,10 +90,15 @@ void Scheduler::schedule()
             }
         }
 
-        if (isRunnable(m_readyQueue[m_currentThreadIndex]))
+        // Keep running the current thread; after a sleep it is only Ready
+        if (isRunnable(m_readyQueue[m_currentThreadIndex])) {
+            m_readyQueue[m_currentThreadIndex]->state = ThreadState::Running;
             return;
+        }
 
         asm volatile("sti; hlt");
+        if (!interruptsWereEnabled)
+            IOPort::disableInterrupts();
     }
 }
 
@@ -131,7 +142,7 @@ void Scheduler::sleep(uint64_t ms)
     }
 
     TCB* self = m_readyQueue[m_currentThreadIndex];
-    self->wakeTick = m_ticks + ms;
+    self->wakeTick = m_ticks.load() + ms;
     self->state = ThreadState::Sleeping;
     schedule();
 }

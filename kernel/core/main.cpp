@@ -36,10 +36,12 @@
 #include <mm/pmm.hpp>
 #include <mm/vmm.hpp>
 
-#include <dev/device_manager.hpp>
 #include <drivers/serial.hpp>
+#include <fs/storage.hpp>
+#include <fs/vfs.hpp>
 
 #include <arch/x86_64/boot/multiboot2.inc>
+#include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/idt.hpp>
 
 #include <cxx/init.hpp>
@@ -50,13 +52,16 @@
 #include <arch/x86_64/idt/handlers.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/character_queue.hpp>
+#include <drivers/keyboard.hpp>
 #include <drivers/pic.hpp>
 #include <drivers/pit.hpp>
+#include <drivers/tee_sink.hpp>
+#include <shell/interpreter.hpp>
 
+#include <core/halt.hpp>
+#include <tests/crashtest.hpp>
 #include <tests/selftest.hpp>
-
-extern void threadTaskA(Threading::Scheduler& scheduler);
-extern void threadTaskB(Threading::Scheduler& scheduler);
 
 // Objects owned by kernelMain, the composition root. They are constructed
 // explicitly below, in dependency order, and handed to their users by
@@ -68,6 +73,11 @@ static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
 static Cxx::Uninitialized<Threading::Scheduler> s_scheduler;
+static Cxx::Uninitialized<Drivers::TeeSink> s_console;
+static Cxx::Uninitialized<Drivers::CharacterQueue> s_input;
+static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
+static Cxx::Uninitialized<Shell::Interpreter> s_shell;
+static Cxx::Uninitialized<Fs::Vfs> s_vfs;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
 static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL * 1024 * 1024 * 1024)];
@@ -79,13 +89,13 @@ static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL 
 extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 {
 
-    // Console: the VGA screen for the first messages, then COM1
+    // Console: the VGA screen, and COM1 too when there is one
     Drivers::VGATextConsole& vga = s_vga.construct();
     Core::setConsole(vga);
 
     Drivers::SerialPort& serial = s_serial.construct(Drivers::SerialPort::com1);
     if (serial.isPresent())
-        Core::setConsole(serial);
+        Core::setConsole(s_console.construct(vga, serial));
     else
         printf("COM1 not found, the console stays on the screen\n");
 
@@ -95,7 +105,8 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // Call global constructors
     Cxx::callConstructors();
 
-    // Initialize IDT
+    // TSS first: the IDT gives the double fault handler a TSS (IST) stack
+    GDT::init();
     IDT::init();
 
     // Validate multiboot information
@@ -115,7 +126,9 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // kmalloc gets its pages from the kernel address space (liballoc hooks)
     Memory::setHeapAddressSpace(kernelSpace);
 
-    DeviceManager::init();
+    // Disks: ATA PIO polls, it needs neither interrupts nor the scheduler
+    Fs::Vfs& vfs = s_vfs.construct();
+    Fs::mountAtaDisks(vfs);
 
     // Interrupt controller: the 8259 PIC (there is no APIC driver yet). The ISR
     // dispatcher is the one place that needs it without being handed it.
@@ -131,21 +144,20 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Threading::Scheduler& scheduler = s_scheduler.construct(pit);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm, kernelSpace, scheduler);
-    SelfTest::exitQemu(failed == 0 ? 0 : 1);
-
-    // Only reached when QEMU has no isa-debug-exit device
-    while (1) {
-        asm volatile("cli; hlt");
-    }
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs);
+    Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
 #endif
 
-    printf("Creating threads...\n");
-    Threading::Thread t1(scheduler, kernelSpace, threadTaskA);
-    Threading::Thread t2(scheduler, kernelSpace, threadTaskB);
+#ifdef ATLOS_CRASHTEST
+    CrashTest::run();
+#endif
 
-    printf("Threads running...\n");
-    while (1) {
-        scheduler.yield();
-    }
+    // The shell reads the keyboard and COM1 through one queue
+    Drivers::CharacterQueue& input = s_input.construct(scheduler);
+    s_keyboard.construct(pic, input);
+    serial.startReceiving(pic, input);
+
+    // Runs in the boot flow (task 0) for good; reading sleeps in hlt
+    static Shell::Context s_context { pmm, kernelSpace, scheduler, vfs, &vga, serial.isPresent() ? &serial : nullptr };
+    s_shell.construct(input, s_context).run();
 }

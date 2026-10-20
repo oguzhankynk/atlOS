@@ -16,6 +16,9 @@ Checks: >
 #   performance-no-int-to-ptr             page table code casts addresses by design
 #   modernize-*, cppcoreguidelines-*      fight raw pointers and casts a kernel needs
 
+# Any finding fails `scripts/build.sh tidy` (and CI): the kernel is kept clean.
+WarningsAsErrors: '*'
+
 # Only kernel headers. libc keeps the standard C names; kernel/mm/liballoc
 # (third party) and kernel/arch/x86_64/boot (multiboot spec headers) have their
 # own .clang-tidy without naming rules.

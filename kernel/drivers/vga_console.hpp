@@ -43,6 +43,9 @@ public:
 
     void write(const char* data, size_t size) override;
 
+    /// Blank the screen and go to the top left.
+    void clear();
+
     void setColor(uint8_t color) { m_color = color; }
 
 private:

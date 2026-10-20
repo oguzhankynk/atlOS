@@ -18,6 +18,8 @@
  */
 
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/gdt/gdt.hpp>
+#include <arch/x86_64/idt/fault.hpp>
 #include <arch/x86_64/idt/handlers.hpp>
 #include <arch/x86_64/idt/idt.hpp>
 
@@ -342,7 +344,7 @@ static IDTEntry s_idt[idtTableLen];
  */
 static IDTR s_idtr;
 
-static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAttr);
+static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAttr, uint8_t ist = 0);
 
 /**
  * @brief Initializes the IDT.
@@ -359,6 +361,11 @@ void init()
             (uint16_t)SegmentSelect::KERNELCODE,
             IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateTrap);
     }
+
+    // A double fault gets a known good stack from the TSS (GDT::init)
+    setEntry(static_cast<int>(ExternalInterrupts::DoubleFault), (void*)s_interruptTable[8],
+        (uint16_t)SegmentSelect::KERNELCODE,
+        IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateTrap, GDT::doubleFaultStack);
 
     for (; i < IDT::idtTableLen; i++) {
         setEntry(i, (void*)s_interruptTable[i],
@@ -387,12 +394,17 @@ void init()
  * Configures an entry in the IDT with the provided handler address, code segment
  * selector, and type attributes.
  */
-static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAttr)
+const IDTEntry& entry(uint32_t vector)
+{
+    return s_idt[vector];
+}
+
+static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAttr, uint8_t ist)
 {
     // Configure the IDT entry
     s_idt[index].isrLow = (uintptr_t)handler & 0xFFFF;
     s_idt[index].kernelCs = selector;
-    s_idt[index].ist = 0 & 0x7;
+    s_idt[index].ist = ist & 0x7;
     s_idt[index].attributes = typeAttr;
     s_idt[index].isrMid = ((uintptr_t)handler >> 16) & 0xFFFF;
     s_idt[index].isrHigh = ((uintptr_t)handler >> 32) & 0xFFFFFFFF;
@@ -400,133 +412,15 @@ static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAt
 }
 
 /**
- * @brief Exception handler
- * @param regs The status of registers at exception time
+ * @brief Common C entry of every interrupt stub (isr.S).
+ * @param regs The status of registers at interrupt time
  */
 extern "C" void intHandler(const InterruptFrame& regs)
 {
-    const char* intStr;
+    // CPU exceptions are fatal for now: report and panic, never return
+    if (regs.intNo < 32)
+        Fault::reportException(regs);
 
-    switch (static_cast<ExternalInterrupts>(regs.intNo)) {
-    case ExternalInterrupts::DivideError:
-        intStr = "DivideError";
-        break;
-
-    case ExternalInterrupts::DebugException:
-        intStr = "DebugException";
-        break;
-
-    case ExternalInterrupts::NMIInterrupt:
-        intStr = "NMIInterrupt";
-        break;
-
-    case ExternalInterrupts::Breakpoint:
-        intStr = "Breakpoint";
-        break;
-
-    case ExternalInterrupts::Overflow:
-        intStr = "Overflow";
-        break;
-
-    case ExternalInterrupts::BOUNDRangeExceeded:
-        intStr = "BOUNDRangeExceeded";
-        break;
-
-    case ExternalInterrupts::InvalidOpcode:
-        intStr = "InvalidOpcode";
-        break;
-
-    case ExternalInterrupts::DeviceNotAvailable:
-        intStr = "DeviceNotAvailable";
-        break;
-
-    case ExternalInterrupts::DoubleFault:
-        intStr = "DoubleFault";
-        break;
-
-    case ExternalInterrupts::CoprocessorSegmentOverrun:
-        intStr = "CoprocessorSegmentOverrun";
-        break;
-
-    case ExternalInterrupts::Reserved:
-        intStr = "reserved";
-        break;
-
-    case ExternalInterrupts::InvalidTSS:
-        intStr = "InvalidTSS";
-        break;
-
-    case ExternalInterrupts::SegmentNotPresent:
-        intStr = "SegmentNotPresent";
-        break;
-
-    case ExternalInterrupts::StackSegmentFault:
-        intStr = "StackSegmentFault";
-        break;
-
-    case ExternalInterrupts::GeneralProtection:
-        intStr = "GeneralProtection";
-        break;
-
-    case ExternalInterrupts::PageFault:
-        intStr = "PageFault";
-        break;
-
-    case ExternalInterrupts::IntelReserved:
-        intStr = "IntelReserved";
-        break;
-
-    case ExternalInterrupts::X87FpuFloatingPointError:
-        intStr = "x87_FPU_FloatingPointError";
-        break;
-
-    case ExternalInterrupts::AlignmentCheck:
-        intStr = "AlignmentCheck";
-        break;
-
-    case ExternalInterrupts::MachineCheck:
-        intStr = "MachineCheck";
-        break;
-
-    case ExternalInterrupts::SimdFloatingPointException:
-        intStr = "SIMD_FloatingPointException";
-        break;
-
-    case ExternalInterrupts::VirtualizationException:
-        intStr = "VirtualizationException";
-        break;
-
-    case ExternalInterrupts::ControlProtectionException:
-        intStr = "ControlProtectionException";
-        break;
-
-    default:
-        intStr = "OtherException";
-        Handlers::interruptHandler(regs.intNo);
-        return;
-    }
-
-    printf("==== EXCEPTION/INTERRUPT INFO ====\n");
-    printf("INT_NO  = 0x%lx %s\n", regs.intNo, intStr);
-    printf("ERR_CODE= 0x%lx\n", regs.errCode);
-
-    printf("\n--- General Purpose Registers ---\n");
-    printf("RAX=0x%016lx RBX=0x%016lx RCX=0x%016lx RDX=0x%016lx\n",
-        regs.rax, regs.rbx, regs.rcx, regs.rdx);
-    printf("RSI=0x%016lx RDI=0x%016lx RBP=0x%016lx\n",
-        regs.rsi, regs.rdi, regs.rbp);
-    printf("R8 =0x%016lx R9 =0x%016lx R10=0x%016lx R11=0x%016lx\n",
-        regs.r8, regs.r9, regs.r10, regs.r11);
-    printf("R12=0x%016lx R13=0x%016lx R14=0x%016lx R15=0x%016lx\n",
-        regs.r12, regs.r13, regs.r14, regs.r15);
-
-    printf("\n--- CPU State ---\n");
-    printf("RIP=0x%016lx CS=0x%04lx RFLAGS=0x%016lx\n",
-        regs.rip, regs.cs, regs.rflags);
-    printf("RSP=0x%016lx SS=0x%04lx\n", regs.rsp, regs.ss);
-    printf("=================================\n");
-
-    while (1)
-        ;
+    Handlers::interruptHandler(regs.intNo);
 }
 }; // namespace IDT

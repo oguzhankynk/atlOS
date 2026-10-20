@@ -19,14 +19,25 @@
 
 #pragma once
 
+#include <sync/atomic.hpp>
+
 namespace Sync {
+
+/**
+ * @brief Busy waiting lock, for several CPUs (SMP).
+ *
+ * On one CPU it only helps if used by the rules: never wait, yield or sleep
+ * while holding it, and if an interrupt handler takes it too, hold it with
+ * interrupts off (InterruptGuard). Otherwise the CPU spins forever on a lock
+ * whose holder can not run again. See README.md.
+ */
 class Spinlock {
 private:
     /**
-     * @brief Atomic boolean to indicate if the lock is currently held
+     * @brief Whether the lock is currently held
      *
      */
-    volatile bool m_locked { false };
+    Atomic<bool> m_locked { false };
 
 public:
     /**

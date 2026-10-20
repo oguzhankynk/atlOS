@@ -1,78 +1,140 @@
 /**
  * @file vfs.cpp
  * @author Oguzhan KAYNAK
- * @brief Astraction layer for file systems
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * @brief Fs::Vfs: one tree of paths over every mounted file system.
  */
 
 #include <fs/vfs.hpp>
 
-#include <stdio.h>
 #include <string.h>
 
-#include <dev/device.hpp>
-#include <drivers/disk/disk.hpp>
+namespace Fs {
 
-namespace FileSystem {
-namespace VFS {
-    struct FileSystemInfo {
-        char name[32] {};
-        IFileSystem* fs {};
-    };
+bool Vfs::mount(const char* name, FileSystem& fileSystem)
+{
+    size_t length = strlen(name);
+    if (!length || length > maxMountNameLength || strchr(name, '/') || find(name) || m_count == maxMounts)
+        return false;
 
-    static constexpr uint16_t maxFileSystem = 5;
+    Mount& mount = m_mounts[m_count++];
+    strncpy(mount.name, name, maxMountNameLength); // length checked above, the rest is zero
+    mount.fileSystem = &fileSystem;
+    return true;
+}
 
-    static FileSystemInfo* s_fileSystems[maxFileSystem] {};
+FileSystem* Vfs::find(const char* name)
+{
+    for (uint32_t i = 0; i < m_count; i++) {
+        if (!strcmp(m_mounts[i].name, name))
+            return m_mounts[i].fileSystem;
+    }
+    return nullptr;
+}
 
-    bool addFileSystem(IFileSystem& fs)
-    {
-        int fsIndex = 0;
+bool Vfs::isRoot(const char* path)
+{
+    while (*path == '/')
+        path++;
+    return !*path;
+}
 
-        for (fsIndex = 0; fsIndex < maxFileSystem; fsIndex++) {
-            if (s_fileSystems[fsIndex] == nullptr) {
-                break;
-            }
-        }
+FileSystem* Vfs::resolve(const char* path, const char*& rest)
+{
+    while (*path == '/')
+        path++;
 
-        if (fsIndex == maxFileSystem) {
-            return false;
-        }
+    size_t length = 0;
+    while (path[length] && path[length] != '/')
+        length++;
+    if (!length || length > maxMountNameLength)
+        return nullptr;
 
-        auto& newFs = s_fileSystems[fsIndex];
+    char name[maxMountNameLength + 1];
+    memcpy(name, path, length);
+    name[length] = '\0';
 
-        newFs = new FileSystemInfo;
+    rest = path + length;
+    return find(name);
+}
 
-        if (newFs == nullptr) {
-            return false;
-        }
-
-        newFs->fs = &fs;
-        snprintf(newFs->name, sizeof(newFs->name), "/fs%d", fsIndex);
-
-        auto ret = newFs->fs->mount();
-
-        if (ret == false) {
-            delete newFs;
-            newFs = nullptr;
-            return false;
-        }
-
-        printf("vfs: %s mounted on %s \n", newFs->name, newFs->fs->getDisk().getName());
-
-        newFs->fs->printFilelist();
-
+bool Vfs::stat(const char* path, FileInfo& info)
+{
+    if (isRoot(path)) {
+        strcpy(info.name, "/");
+        info.isDirectory = true;
+        info.size = 0;
         return true;
     }
-} // namespace VFS
-} // namespace FileSystem
+
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->stat(rest, info);
+}
+
+int64_t Vfs::read(const char* path, uint64_t offset, void* buffer, uint64_t size)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    if (!fileSystem)
+        return -1;
+    return fileSystem->read(rest, offset, buffer, size);
+}
+
+bool Vfs::listDirectory(const char* path, DirectoryCallback callback, void* arg)
+{
+    // The root holds no files, only the mount points
+    if (isRoot(path)) {
+        for (uint32_t i = 0; i < m_count; i++) {
+            FileInfo info {};
+            strncpy(info.name, m_mounts[i].name, maxNameLength);
+            info.isDirectory = true;
+            callback(info, arg);
+        }
+        return true;
+    }
+
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->listDirectory(rest, callback, arg);
+}
+
+// The root and the mount points themselves can not be changed: an empty
+// rest of the path ("/disk0") is refused by the file system (no parent)
+bool Vfs::create(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->create(rest);
+}
+
+int64_t Vfs::write(const char* path, uint64_t offset, const void* buffer, uint64_t size)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    if (!fileSystem)
+        return -1;
+    return fileSystem->write(rest, offset, buffer, size);
+}
+
+bool Vfs::makeDirectory(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->makeDirectory(rest);
+}
+
+bool Vfs::remove(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->remove(rest);
+}
+
+bool Vfs::removeDirectory(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->removeDirectory(rest);
+}
+
+} // namespace Fs

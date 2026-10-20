@@ -7,6 +7,91 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
+Fault handling, synchronization, the keyboard, disks with FAT16 and a VFS,
+and a kernel shell.
+
+### Added
+
+- CI on GitHub Actions: build, self tests, format and clang-tidy on every push
+  and pull request; tagged releases are built and published automatically
+- `scripts/build-toolchain.sh` builds the cross toolchain (pinned versions,
+  verified downloads)
+- TSS with an IST stack for the double fault handler: a broken kernel stack
+  is reported instead of resetting the machine (triple fault)
+- Exception reports decode the page fault (CR2, read/write/fetch, present,
+  user/kernel) and selector error codes (#TS, #NP, #SS, #GP)
+- Panic backtrace through the frame pointer chain; `scripts/symbolize.sh`
+  turns its addresses into functions and lines
+- `crashtest` preset and `scripts/run-crashtest.sh`: a kernel that page faults
+  on purpose, its report is checked in CI
+- Self tests for fault decoding, the TSS and the backtrace (175 checks)
+- `kernel/sync/`: `Atomic<T>`, `InterruptGuard`, `WaitQueue` (FIFO),
+  counting `Semaphore` (`take`/`tryTake`/`give`, `give` from interrupt
+  handlers), `Mutex` with an owner, `ConditionVariable`; teaching README
+- Self tests for the sync objects (265 checks)
+- `Drivers::PS2Keyboard` (IRQ 1) behind a new `CharacterSource` interface:
+  scancode set 1 decoding (Shift, Caps Lock, Ctrl, extended keys) as a pure
+  `ScancodeDecoder`, US layout, a 64 character buffer, `read()` waits on a
+  semaphore; self tests (333 checks)
+- The VGA console handles backspace
+- Storage: `BlockDevice` interface; `ATAPioDevice` (IDENTIFY, 28-bit LBA PIO
+  with polling and timeouts), `MemoryBlockDevice`, MBR partition table and
+  `PartitionDevice`; read only `Fs::Fat16` (8.3 names, subdirectories,
+  checks for broken cluster chains); `Fs::Vfs` with mount points (`/disk0`);
+  the ATA disks are probed and their FAT16 partitions mounted at boot
+- `scripts/make-disk-image.sh` and the `disk-image` target build the test disk
+  without root (sfdisk, mkfs.fat, mtools); the self tests read it in CI
+  (439 checks)
+- FAT16 writing: `create`, `write` (append and overwrite, clusters allocated
+  first fit, every FAT copy updated), `makeDirectory`, `remove`,
+  `removeDirectory`, also through `Fs::Vfs`; fixed 1980-01-01 timestamps
+- `scripts/check-test-disk.sh`: after the self tests, `fsck.fat` and mtools
+  check on the host what the kernel wrote to the test disk (577 checks)
+- Kernel shell (`kernel/shell/`), started by the normal kernel: line editor
+  (Backspace, Ctrl+C, history on Up/Down), quoted words, a command table:
+  `help`, `clear`, `echo` (with `>`/`>>`), `version`, `uptime`, `pwd`, `cd`,
+  `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount`, `mem`, `md`, `mw`,
+  `vmmap`, `tasks`/`ps`, `cpuinfo`, `panic`, `fault`, `reboot`
+- `Drivers::CharacterQueue`: the keyboard and COM1 (receive interrupt, new)
+  feed one queue; the arrow keys arrive as ANSI sequences
+- `Drivers::TeeSink`: the console writes to the screen and COM1
+- `AddressSpace::translate` (no fault, physical 0 told apart from unmapped,
+  4 KB tables followed) and `forEachMapping`; `Memory::heapStatistics`
+- TCBs carry a name and their stack range
+- `scripts/run-shelltest.py` / `scripts/build.sh shelltest`: the shell driven
+  over the serial port in CI; self tests for the parser, line editor and
+  commands (651 checks)
+
+### Changed
+
+- clang-tidy findings are errors (`WarningsAsErrors`)
+- One panic path: exceptions and `kernelPanic` print a backtrace and halt with
+  `cli; hlt`; the exit status goes to an optional debug exit port
+  (`ATLOS_DEBUG_EXIT_PORT`, set by the test presets) instead of a hard coded
+  test device, so test kernels also run on real hardware
+- New threads and the boot flow start with `rbp = 0`
+- The scheduler tick counter is a `Sync::Atomic`; idling in `sti; hlt`
+  restores the caller's interrupt state
+- `Spinlock` uses `Sync::Atomic`
+- The default kernel echoes keyboard input instead of running the A/B demo
+  threads, and lists the mounted disks first
+- The serial port sends `\r\n` for `\n`; the console no longer leaves the
+  screen when COM1 exists
+- The default kernel starts the shell instead of the keyboard echo demo
+- `PS2Keyboard` pushes into a `CharacterQueue` instead of its own buffer
+- Removed the old `DeviceManager`, `Device`/`Disk` classes, the untested FAT16
+  write code and the `sudo` based disk scripts
+
+### Fixed
+
+- A task that kept the CPU after a sleep (nothing else to run) stayed in the
+  Ready state instead of Running
+
+- Exception names for vectors 10..21 were off by one (a page fault was
+  reported as "IntelReserved")
+
 ## [0.1.0] - 2026-10-20
 
 First release.
@@ -49,5 +134,6 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzhankynk/atlOS/releases/tag/v0.1.0

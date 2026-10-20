@@ -26,5 +26,12 @@ class AddressSpace;
  */
 void setHeapAddressSpace(AddressSpace& space);
 
+struct HeapStatistics {
+    uint64_t reserved; ///< bytes of pages the heap took from the address space
+    uint64_t inUse; ///< bytes handed out by kmalloc and not freed yet
+};
+
+HeapStatistics heapStatistics();
+
 } // namespace Memory
 #endif

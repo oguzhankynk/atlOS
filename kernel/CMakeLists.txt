@@ -19,6 +19,7 @@ target_compile_options(kernel_flags INTERFACE
     -Wno-sign-compare -Wno-implicit-fallthrough
     -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic
     -fno-unwind-tables -fno-asynchronous-unwind-tables
+    -fno-omit-frame-pointer # rbp chain for the panic backtrace
     -mcmodel=large -mno-red-zone ${ATLOS_NO_SIMD_FLAGS}
     $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>
 )
@@ -30,7 +31,12 @@ target_compile_definitions(kernel_flags INTERFACE
     KERNEL_PHYSICAL_START=${KERNEL_PHYSICAL_START}
     KERNEL_VIRTUAL_LOAD_OFFSET=${KERNEL_VIRTUAL_LOAD_OFFSET}
     $<$<BOOL:${ATLOS_SELFTEST}>:ATLOS_SELFTEST>
+    $<$<BOOL:${ATLOS_CRASHTEST}>:ATLOS_CRASHTEST>
 )
+
+if(NOT ATLOS_DEBUG_EXIT_PORT STREQUAL "")
+    target_compile_definitions(kernel_flags INTERFACE ATLOS_DEBUG_EXIT_PORT=${ATLOS_DEBUG_EXIT_PORT})
+endif()
 
 # Includes are relative to kernel/, e.g. <mm/vmm.hpp>; libc headers come with k.
 # Generated headers (core/version.hpp) live in the build tree.
@@ -57,12 +63,12 @@ add_custom_target(atlos_version
 file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     core/*.cpp
     cxx/*.cpp
-    dev/*.cpp
     drivers/*.cpp
     firmware/*.cpp
     fs/*.cpp
     mm/*.cpp
     sched/*.cpp
+    shell/*.cpp
     sync/*.cpp
     tests/*.cpp
     ${ARCHDIR}/gdt/*.cpp

@@ -1,24 +1,50 @@
 /**
  * @file semaphore.hpp
- * @author Oguzhan KAYNAK ()
- * @brief
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
+ * @author Oguzhan KAYNAK
+ * @brief Sync::Semaphore: a counting semaphore. take() waits for a unit,
+ * give() returns one, also from an interrupt handler.
  */
 
 #pragma once
 
+#include <stdint.h>
+
+#include <sync/wait_queue.hpp>
+
 namespace Sync {
+
+class Semaphore {
+public:
+    /**
+     * @brief A semaphore with initial units out of at most max.
+     * max = 1 is a binary semaphore. Panics if max is 0 or initial > max.
+     */
+    Semaphore(Threading::Scheduler& scheduler, uint32_t initial, uint32_t max);
+
+    Semaphore(const Semaphore&) = delete;
+    Semaphore& operator=(const Semaphore&) = delete;
+
+    /// Take a unit, wait while there is none. Not for interrupt handlers.
+    void take();
+
+    /// Take a unit if there is one, never wait.
+    bool tryTake();
+
+    /**
+     * @brief Give a unit back: straight to the longest waiting thread if there
+     * is one, else to the count. Safe in an interrupt handler.
+     *
+     * @return false if the count is already at max (the unit is dropped).
+     */
+    bool give();
+
+    uint32_t count() const { return m_count; }
+    uint32_t waiterCount() const { return m_waiters.waiterCount(); }
+
+private:
+    WaitQueue m_waiters;
+    uint32_t m_count;
+    uint32_t m_max;
+};
 
 } // namespace Sync

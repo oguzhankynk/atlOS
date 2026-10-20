@@ -1,49 +1,34 @@
-# FAT test disk
+# Test disk
 
-Scripts to create a raw disk image with FAT partitions for the (not yet wired
-up) ATA and FAT16 drivers. The image is generated, never committed:
-`tools/disk/disk.img` is in `.gitignore`.
-
-## Create the image
+Files for the test disk: a raw image with an MBR and one FAT16 partition,
+which the self tests read as `/disk0`. The image is generated, never
+committed.
 
 ```sh
-tools/disk/create_disk_image.sh 16   # FAT16 (also the default)
-tools/disk/create_disk_image.sh 12   # FAT12
+cmake --build --preset default --target disk-image   # build/default/disk.img
+scripts/make-disk-image.sh some/where/disk.img       # or directly
 ```
 
-This writes `tools/disk/disk.img`:
+`scripts/make-disk-image.sh` needs no root: it partitions the file with
+`sfdisk`, formats the partition in place with `mkfs.fat --offset` and copies
+the files with mtools (`mcopy -i disk.img@@1048576`). The image:
 
-- 128 MB, MBR partition table
-- four primary partitions of about 32 MB each, the first one starting at
-  sector 2048
-- every partition formatted with `mkfs.fat -F 16` (or `-F 12`), partition
-  type `0x06` (FAT16) or `0x01` (FAT12)
+- 32 MB (`DISK_SIZE_MB` changes it), one primary partition of type `0x06`
+  from sector 2048 (1 MB) to the end
+- FAT16, volume label `ATLOS`
+- `files/HELLO.TXT`, `files/DOCS/README.TXT`, and a generated `BIG.TXT`
+  (2000 lines `line 00001` .. `line 02000`, 22000 bytes, many clusters)
 
-## Put a file on it
+The self tests (`kernel/tests/selftest.cpp`, *ATA disk*) compare the contents
+with what they expect, then write `KERNEL/NOTE.TXT` and `KERNEL/DATA.TXT` to
+a copy of the image; `scripts/check-test-disk.sh` checks that copy on the host
+with `fsck.fat` and mtools. Change them together.
+
+To look inside:
 
 ```sh
-tools/disk/copy.sh
+mdir -i build/default/disk.img@@1048576 ::/
+mtype -i build/default/disk.img@@1048576 ::/HELLO.TXT
 ```
 
-copies `tools/disk/MY_HELLO.txt` to the first partition (mounted on `/mnt`
-for the copy).
-
-## Requirements
-
-Both scripts use `sudo` and the loop device `/dev/loop0`, which must be free
-(`losetup -a` lists the ones in use). They need `losetup`, `partx` or
-`partprobe`, `fdisk`, `mount` and `mkfs.fat`; on Debian/Ubuntu:
-
-```sh
-sudo apt install util-linux fdisk parted dosfstools
-```
-
-## Use it in QEMU
-
-The `run`/`debug` targets do not attach the disk yet, since the kernel does
-not detect disks. To try it by hand:
-
-```sh
-qemu-system-x86_64 -cdrom build/default/atlOS.iso -m 512M -serial stdio \
-    -drive file=tools/disk/disk.img,format=raw,if=ide
-```
+Requirements on Debian/Ubuntu: `sudo apt install fdisk dosfstools mtools`.

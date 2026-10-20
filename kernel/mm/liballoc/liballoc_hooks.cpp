@@ -13,6 +13,16 @@ void Memory::setHeapAddressSpace(AddressSpace& space)
     s_heapAddressSpace = &space;
 }
 
+void liballoc_statistics(unsigned long long* allocated, unsigned long long* inuse);
+
+Memory::HeapStatistics Memory::heapStatistics()
+{
+    unsigned long long allocated = 0;
+    unsigned long long inUse = 0;
+    liballoc_statistics(&allocated, &inUse);
+    return { allocated, inUse };
+}
+
 static Memory::AddressSpace& heapAddressSpace()
 {
     if (!s_heapAddressSpace)

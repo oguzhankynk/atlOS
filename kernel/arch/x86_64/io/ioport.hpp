@@ -66,4 +66,9 @@ void enableInterrupts(void);
  */
 void disableInterrupts(void);
 
+/**
+ * @brief Whether maskable interrupts are enabled (RFLAGS.IF).
+ */
+bool interruptsEnabled(void);
+
 } // namespace IOPort

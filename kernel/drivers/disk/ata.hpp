@@ -1,70 +1,61 @@
 /**
  * @file ata.hpp
  * @author Oguzhan KAYNAK
- * @brief Defines the ATA class that implements disk operations using the ATA protocol.
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * @brief Drivers::ATAPioDevice: an ATA (IDE) disk read and written with
+ * programmed I/O, polling the status register.
  */
 
 #pragma once
 
 #include <stdint.h>
 
-#include <drivers/disk/disk.hpp>
+#include <drivers/disk/block_device.hpp>
 
-/**
- *
- * @class ATA
- * @brief Represents an ATA disk driver for reading and writing sectors.
- *
- */
-class ATA : public Disk {
+namespace Drivers {
+
+class ATAPioDevice final : public BlockDevice {
 public:
-    ATA(const char* name)
-    noexcept;
-    virtual ~ATA() noexcept = default;
+    enum class Channel : uint8_t {
+        Primary, ///< I/O ports 0x1F0..0x1F7, control 0x3F6
+        Secondary, ///< I/O ports 0x170..0x177, control 0x376
+    };
+
+    enum class Drive : uint8_t {
+        Master,
+        Slave,
+    };
 
     /**
-     * @brief Reads a single sector from the disk into the buffer.
-     *
-     * @param lba The Logical Block Address (LBA) of the sector to read.
-     * @param buffer Pointer to the buffer where the data will be stored.
+     * @brief Look for an ATA disk at channel/drive with IDENTIFY DEVICE.
+     * Without one (nothing there, or an ATAPI CD drive) isPresent() is false
+     * and every read fails. Turns the channel's interrupt off: the driver polls.
      */
-    void readSector(uint32_t lba, uint8_t* buffer) const override;
+    ATAPioDevice(Channel channel, Drive drive, const char* name);
 
-    /**
-     * @brief Reads multiple sectors from the disk into the buffer.
-     *
-     * @param lbaStart The starting LBA of the first sector to read.
-     * @param buffer Pointer to the buffer where the data will be stored.
-     * @param size The size of data to read in bytes.
-     */
-    void read(uint32_t lbaStart, uint8_t* buffer, size_t size) const override;
+    bool isPresent() const { return m_present; }
 
-    /**
-     * @brief Writes a single sector to the disk from the buffer.
-     *
-     * @param lba The Logical Block Address (LBA) of the sector to write.
-     * @param buffer Pointer to the buffer containing the data to write.
-     */
-    void writeSector(uint32_t lba, const uint8_t* buffer) const override;
+    /// Model string from IDENTIFY, e.g. "QEMU HARDDISK".
+    const char* model() const { return m_model; }
 
-    /**
-     * @brief Writes multiple sectors to the disk from the buffer.
-     *
-     * @param lbaStart The starting LBA of the first sector to write.
-     * @param buffer Pointer to the buffer containing the data to write.
-     * @param size The size of data to write in bytes.
-     */
-    void write(uint32_t lbaStart, const uint8_t* buffer, size_t size) const override;
+    bool readSectors(uint64_t lba, uint32_t count, void* buffer) override;
+    bool writeSectors(uint64_t lba, uint32_t count, const void* buffer) override;
+    uint64_t sectorCount() const override { return m_sectorCount; }
+    const char* name() const override { return m_name; }
+
+private:
+    bool identify();
+    void selectDrive(uint64_t lba);
+    bool startCommand(uint64_t lba, uint32_t count, uint8_t command);
+    bool waitNotBusy();
+    bool waitDataRequest();
+
+    uint16_t m_ioBase;
+    uint16_t m_controlBase;
+    Drive m_drive;
+    bool m_present {};
+    uint64_t m_sectorCount {};
+    char m_model[41] {};
+    char m_name[16] {};
 };
+
+} // namespace Drivers

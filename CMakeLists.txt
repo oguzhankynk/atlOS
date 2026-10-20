@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # The one place the version is written; see docs/releasing.md
-project(atlOS VERSION 0.1.0 LANGUAGES C CXX ASM)
+project(atlOS VERSION 0.2.0 LANGUAGES C CXX ASM)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "atlOS")
     message(FATAL_ERROR "Configure with the cross toolchain: cmake --preset default")
@@ -9,6 +9,13 @@ endif()
 
 # Run the in-kernel self tests instead of the demo threads (preset "selftest")
 option(ATLOS_SELFTEST "Build the kernel in self test mode" OFF)
+
+# Fault on purpose after boot to test the fault report (preset "crashtest")
+option(ATLOS_CRASHTEST "Build a kernel that page faults on purpose" OFF)
+
+# I/O port that receives the exit status when the kernel halts (Core::haltWithStatus),
+# so a test machine can end the run with it. Empty: nothing is written.
+set(ATLOS_DEBUG_EXIT_PORT "" CACHE STRING "I/O port for the exit status at halt, empty for none")
 
 # No MMX/SSE/AVX anywhere in the kernel image (kernel and libc): boot does not
 # enable SSE in CR4, and neither the context switch nor the ISRs save SIMD state.
@@ -24,6 +31,10 @@ add_subdirectory(kernel)
 
 find_program(GRUB_MKRESCUE NAMES grub2-mkrescue grub-mkrescue)
 find_program(QEMU qemu-system-x86_64)
+find_program(SFDISK sfdisk PATHS /usr/sbin /sbin)
+find_program(MKFS_FAT mkfs.fat PATHS /usr/sbin /sbin)
+find_program(MCOPY mcopy)
+find_program(PYTHON3 python3)
 
 set(ATLOS_ISO_DIR ${CMAKE_BINARY_DIR}/isodir)
 set(ATLOS_ISO ${CMAKE_BINARY_DIR}/atlOS.iso)
@@ -47,37 +58,88 @@ else()
 endif()
 
 # ------------------------------------------------------------
+# Test disk: MBR + one FAT16 partition, see scripts/make-disk-image.sh
+# ------------------------------------------------------------
+
+set(ATLOS_DISK ${CMAKE_BINARY_DIR}/disk.img)
+set(ATLOS_DISK_ARGS "")
+set(ATLOS_DISK_TARGET "")
+set(ATLOS_SELFTEST_DISK "")
+
+if(SFDISK AND MKFS_FAT AND MCOPY)
+    file(GLOB_RECURSE ATLOS_DISK_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tools/disk/files/*)
+    add_custom_command(
+        OUTPUT ${ATLOS_DISK}
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK}
+        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK_FILES}
+        COMMENT "Creating disk.img"
+        VERBATIM
+    )
+    add_custom_target(disk-image DEPENDS ${ATLOS_DISK})
+
+    # Primary master; boot from the CD (the disk has an MBR but no boot code)
+    set(ATLOS_DISK_ARGS -drive file=${ATLOS_DISK},format=raw,if=ide,index=0 -boot d)
+    set(ATLOS_DISK_TARGET disk-image)
+    set(ATLOS_SELFTEST_DISK ${ATLOS_DISK})
+else()
+    message(WARNING "sfdisk, mkfs.fat or mtools not found: no test disk (the disk self tests are skipped)")
+endif()
+
+# ------------------------------------------------------------
 # QEMU
 # ------------------------------------------------------------
 
 if(GRUB_MKRESCUE AND QEMU)
     # Serial output on the terminal; Ctrl-C quits
     add_custom_target(run
-        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} -m 512M -nographic -monitor none -serial stdio -no-shutdown
-        DEPENDS iso
+        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 512M -nographic -monitor none -serial stdio -no-shutdown
+        DEPENDS iso ${ATLOS_DISK_TARGET}
         USES_TERMINAL
         VERBATIM
     )
 
     # Waits for gdb on :1234, serial output on telnet localhost 4321
     add_custom_target(debug
-        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s
-        DEPENDS iso
+        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s
+        DEPENDS iso ${ATLOS_DISK_TARGET}
         USES_TERMINAL
         VERBATIM
     )
 
+    # The normal kernel's shell, driven over the serial port
+    if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST AND PYTHON3 AND ATLOS_DISK_TARGET)
+        add_custom_target(shelltest
+            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log
+            DEPENDS iso ${ATLOS_DISK_TARGET}
+            USES_TERMINAL
+            VERBATIM
+        )
+    endif()
+
     if(ATLOS_SELFTEST)
         add_custom_target(selftest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log
-            DEPENDS iso
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK}
+            DEPENDS iso ${ATLOS_DISK_TARGET}
             USES_TERMINAL
             VERBATIM
         )
 
         enable_testing()
         add_test(NAME selftest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log)
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK})
+    endif()
+
+    if(ATLOS_CRASHTEST)
+        add_custom_target(crashtest
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>
+            DEPENDS iso
+            USES_TERMINAL
+            VERBATIM
+        )
+
+        enable_testing()
+        add_test(NAME crashtest
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>)
     endif()
 elseif(NOT QEMU)
     message(WARNING "qemu-system-x86_64 not found: the run, debug and selftest targets are not available")
@@ -87,7 +149,7 @@ endif()
 # Code style (docs/style.md)
 # ------------------------------------------------------------
 
-find_program(CLANG_FORMAT clang-format)
+find_program(CLANG_FORMAT NAMES clang-format clang-format-14)
 find_program(RUN_CLANG_TIDY NAMES run-clang-tidy run-clang-tidy-14)
 
 file(GLOB_RECURSE ATLOS_FORMAT_FILES CONFIGURE_DEPENDS

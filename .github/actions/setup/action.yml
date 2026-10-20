@@ -1,0 +1,40 @@
+name: Set up the atlOS build
+description: Host packages and the x86_64-elf cross toolchain (built once, then cached)
+
+runs:
+  using: composite
+  steps:
+    - name: Host packages
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          cmake ninja-build grub-pc-bin grub-common xorriso mtools \
+          qemu-system-x86 clang-format clang-tidy dosfstools fdisk
+
+    # The key changes when scripts/build-toolchain.sh (versions, flags) does
+    - name: Restore the cross toolchain
+      id: toolchain
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/opt/cross
+        key: x86_64-elf-${{ runner.os }}-ubuntu-22.04-${{ hashFiles('scripts/build-toolchain.sh') }}
+
+    - name: Build the cross toolchain
+      if: steps.toolchain.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get install -y --no-install-recommends \
+          build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo
+        scripts/build-toolchain.sh "$HOME/opt/cross"
+
+    - name: Save the cross toolchain
+      if: steps.toolchain.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/opt/cross
+        key: ${{ steps.toolchain.outputs.cache-primary-key }}
+
+    - name: Put the toolchain on PATH
+      shell: bash
+      run: echo "$HOME/opt/cross/bin" >> "$GITHUB_PATH"

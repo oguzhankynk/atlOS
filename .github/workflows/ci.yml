@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [development, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, self tests, style
+    # Same tool versions as the development machine (clang-format 14, QEMU 6.2)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs the tags
+
+      - uses: ./.github/actions/setup
+
+      - name: Build libc, kernel and ISO
+        run: scripts/build.sh all
+
+      - name: Self tests (QEMU)
+        run: scripts/build.sh selftest
+
+      - name: Crash test (fault report)
+        run: scripts/build.sh crashtest
+
+      - name: Shell test (serial port)
+        run: scripts/build.sh shelltest
+
+      - name: Format
+        run: scripts/build.sh format-check
+
+      - name: clang-tidy
+        run: scripts/build.sh tidy
+
+      - name: Keep the ISO and the test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlOS-${{ github.sha }}
+          path: |
+            build/default/atlOS.iso
+            build/selftest/selftest.log
+            build/crashtest/crashtest.log
+            build/default/shelltest.log
+          if-no-files-found: ignore
+          retention-days: 14

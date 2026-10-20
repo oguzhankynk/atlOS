@@ -9,61 +9,33 @@
 | Ninja | any | build (generator of the presets) |
 | `grub-mkrescue` + `xorriso` | GRUB 2 | bootable ISO |
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
+| `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed |
 | Doxygen | optional | API docs |
-| clang-format, clang-tidy | 14 or newer, optional | `format`, `format-check`, `tidy` |
+| clang-format, clang-tidy | 14 (as in CI), optional | `format`, `format-check`, `tidy`; other versions may format differently |
 
 On Debian/Ubuntu:
 
 ```sh
-sudo apt install cmake ninja-build grub-pc-bin grub-common xorriso mtools qemu-system-x86 doxygen
+sudo apt install cmake ninja-build grub-pc-bin grub-common xorriso mtools qemu-system-x86 dosfstools fdisk doxygen
 ```
 
 ## Cross compiler
 
 atlOS has to be built with a cross compiler that targets `x86_64-elf`; the
-host compiler will not work. The steps below build one in `$HOME/opt/cross`.
-More background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.org/GCC_Cross-Compiler).
+host compiler will not work. `scripts/build-toolchain.sh` builds one
+(binutils 2.41, GCC 13.2.0 for C and C++, libgcc for the kernel code model);
+the downloaded sources are checked against pinned SHA-256 sums. CI builds its
+toolchain with the same script.
 
 ```sh
-export PREFIX="$HOME/opt/cross"
-export TARGET=x86_64-elf
-export PATH="$PREFIX/bin:$PATH"     # also add this to ~/.bashrc or ~/.zshrc
-
-sudo apt install build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo wget
-mkdir -p $HOME/src && cd $HOME/src
-```
-
-Binutils:
-
-```sh
-wget https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz
-tar -xf binutils-2.41.tar.xz
-mkdir build-binutils && cd build-binutils
-../binutils-2.41/configure --target=$TARGET --prefix=$PREFIX --with-sysroot --disable-nls --disable-werror
-make -j$(nproc)
-make install
-cd ..
-```
-
-GCC (C and C++, no headers, libgcc built for the kernel code model):
-
-```sh
-wget https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz
-tar -xf gcc-13.2.0.tar.xz
-mkdir build-gcc && cd build-gcc
-../gcc-13.2.0/configure --target=$TARGET --prefix=$PREFIX --disable-nls --enable-languages=c,c++ --without-headers
-make all-gcc -j$(nproc)
-make all-target-libgcc CFLAGS_FOR_TARGET='-g -O2 -mcmodel=large -mno-red-zone' -j$(nproc)
-make install-gcc
-make install-target-libgcc
-```
-
-Check:
-
-```sh
+sudo apt install build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo curl
+scripts/build-toolchain.sh              # into $HOME/opt/cross (takes 15-30 minutes)
+export PATH="$HOME/opt/cross/bin:$PATH" # also add this to ~/.bashrc or ~/.zshrc
 x86_64-elf-gcc --version
-x86_64-elf-g++ --version
 ```
+
+A different prefix can be given as the argument; `JOBS` sets the number of
+parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.org/GCC_Cross-Compiler).
 
 ## Building
 
@@ -76,6 +48,8 @@ x86_64-elf-g++ --version
 | `scripts/build.sh run` | boot the ISO in QEMU, serial output on the terminal (Ctrl-C quits) |
 | `scripts/build.sh debug` | boot the ISO in QEMU halted, waiting for gdb on `localhost:1234`; serial on `telnet localhost 4321` |
 | `scripts/build.sh selftest` | build the self test kernel in `build/selftest/` and run it, see [testing.md](testing.md) |
+| `scripts/build.sh crashtest` | build a kernel that faults on purpose in `build/crashtest/` and check its report |
+| `scripts/build.sh shelltest` | boot the normal kernel and drive its shell over the serial port, see [testing.md](testing.md) |
 | `scripts/build.sh docs` | Doxygen API docs into `build/docs/html` |
 | `scripts/build.sh format` / `format-check` | clang-format the sources / check them, see [style.md](style.md) |
 | `scripts/build.sh tidy` | clang-tidy on the kernel sources |
@@ -100,10 +74,16 @@ ctest --preset selftest                       # the same test through CTest
 
 | Preset | Build directory | Notes |
 |---|---|---|
-| `default` | `build/default/` | normal kernel with the demo threads |
-| `selftest` | `build/selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and exits QEMU |
+| `default` | `build/default/` | normal kernel: mounts the disks and starts the shell |
+| `selftest` | `build/selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and halts with the result |
+| `crashtest` | `build/crashtest/` | `ATLOS_CRASHTEST=ON`: the kernel page faults on purpose after boot |
 
-Both presets export `compile_commands.json` for editors and clangd.
+`selftest` and `crashtest` also set `ATLOS_DEBUG_EXIT_PORT=0xf4`: the exit
+status is written to that port when the kernel halts, see
+[testing.md](testing.md). Leave it empty (`-DATLOS_DEBUG_EXIT_PORT=`) for a
+test kernel meant for real hardware.
+
+All presets export `compile_commands.json` for editors and clangd.
 
 ### Outputs
 
@@ -112,6 +92,7 @@ Both presets export `compile_commands.json` for editors and clangd.
 | `build/default/kernel/atlOS.kernel` | the kernel ELF (with debug info) |
 | `build/default/libc/libk.a` | the C library linked into the kernel |
 | `build/default/atlOS.iso` | bootable GRUB ISO |
+| `build/default/disk.img` | the test disk (`--target disk-image`; `run` and `debug` attach it as the primary ATA master) |
 
 ## Debugging
 
