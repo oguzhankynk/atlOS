@@ -158,6 +158,9 @@ struct IDTR {
 
 static constexpr uint32_t idtTableLen = 256;
 
+/// @brief The vector of system calls: "int $0x80", allowed from ring 3.
+static constexpr uint32_t systemCallVector = 0x80;
+
 /**
  * @brief Initializes the IDT.
  *

@@ -68,7 +68,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap` |
-| system | `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
+| system | `run program.elf`, `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
 

@@ -21,14 +21,15 @@ Working:
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
-- A kernel shell (keyboard or serial terminal): files, `md`/`mw` memory dump and write, `vmmap`, `tasks`, ...
+- A kernel shell (keyboard or serial terminal): files, `md`/`mw` memory dump and write, `vmmap`, `tasks`, `run`, ...
+- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`write`, `exit`); a fault ends only the program
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
 The CPUID helpers are built and tested but not called at
-boot. There is no user mode and no system calls (the shell runs in the kernel);
-atlOS runs on a single CPU.
+boot. The shell runs in the kernel; user programs have two system calls so far.
+atlOS runs on a single CPU, scheduling is cooperative.
 
 ## Quick start
 
@@ -62,6 +63,7 @@ kernel/
   mm/            pmm, vmm, heap (liballoc)
   sched/         scheduler, threads
   shell/         the kernel shell: line editor, parser, commands
+  proc/          user programs: ELF loading, ring 3, system calls
   sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
   drivers/       pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR)
   fs/            file system interface, fat16, vfs, mounting the disks
@@ -70,6 +72,7 @@ kernel/
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
 cmake/           cross toolchain file
+user/            user programs (ring 3) for the test disk
 scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh, make-disk-image.sh, check-test-disk.sh
 tools/           grub.cfg, files of the test disk
 docs/            documentation

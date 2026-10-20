@@ -84,4 +84,11 @@ const GDTR& getGDTR();
 /// @brief The TSS of this CPU (the only one).
 const TaskStateSegment& taskStateSegment();
 
+/**
+ * @brief Set rsp0: the stack the CPU switches to when an interrupt, an
+ * exception or a system call comes from ring 3. The scheduler sets it to the
+ * running thread's kernel stack.
+ */
+void setKernelStack(uint64_t stackTop);
+
 };

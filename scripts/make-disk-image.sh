@@ -1,9 +1,10 @@
 #!/bin/sh
 # Create the test disk: a raw image with an MBR and one FAT16 partition,
-# holding tools/disk/files/ and a generated BIG.TXT. No root needed.
+# holding tools/disk/files/, a generated BIG.TXT and the given programs in
+# /BIN (as upper case 8.3 names: hello.elf -> /BIN/HELLO.ELF). No root needed.
 # Used by the "disk-image" target; the self tests read it as /disk0.
 #
-# Usage: scripts/make-disk-image.sh <disk.img>
+# Usage: scripts/make-disk-image.sh <disk.img> [program.elf...]
 # Needs sfdisk (util-linux/fdisk), mkfs.fat (dosfstools) and mtools.
 
 set -e
@@ -12,6 +13,7 @@ set -e
 PATH=$PATH:/usr/sbin:/sbin
 
 OUT=$1
+shift
 SIZE_MB=${DISK_SIZE_MB:-32}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 FILES=$ROOT/tools/disk/files
@@ -51,3 +53,12 @@ while [ $i -le 2000 ]; do
 done > "$BIG"
 mcopy -i "$PART" "$BIG" ::/BIG.TXT
 rm -f "$BIG"
+
+# User programs
+if [ $# -gt 0 ]; then
+    mmd -i "$PART" ::/BIN
+    for program in "$@"; do
+        name=$(basename "$program" | tr '[:lower:]' '[:upper:]')
+        mcopy -i "$PART" "$program" "::/BIN/$name"
+    done
+fi

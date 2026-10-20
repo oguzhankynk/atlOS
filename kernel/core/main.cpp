@@ -39,6 +39,7 @@
 #include <drivers/serial.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
+#include <proc/process.hpp>
 
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/gdt/gdt.hpp>
@@ -78,6 +79,7 @@ static Cxx::Uninitialized<Drivers::CharacterQueue> s_input;
 static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
 static Cxx::Uninitialized<Shell::Interpreter> s_shell;
 static Cxx::Uninitialized<Fs::Vfs> s_vfs;
+static Cxx::Uninitialized<Process::Runtime> s_runtime;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
 // As much memory as the physmap covers: page tables are written through it
@@ -144,8 +146,13 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // The boot flow becomes the scheduler's first task
     Threading::Scheduler& scheduler = s_scheduler.construct(pit);
 
+    // User programs: loaded from the VFS, run on threads of this scheduler.
+    // The int 0x80 and ring 3 fault handlers reach it through setRuntime
+    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, scheduler, vfs);
+    Process::setRuntime(&runtime);
+
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs);
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime);
     Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
 #endif
 
@@ -159,6 +166,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     serial.startReceiving(pic, input);
 
     // Runs in the boot flow (task 0) for good; reading sleeps in hlt
-    static Shell::Context s_context { pmm, kernelSpace, scheduler, vfs, &vga, serial.isPresent() ? &serial : nullptr };
+    static Shell::Context s_context { pmm, kernelSpace, scheduler, vfs, runtime, &vga,
+        serial.isPresent() ? &serial : nullptr };
     s_shell.construct(input, s_context).run();
 }

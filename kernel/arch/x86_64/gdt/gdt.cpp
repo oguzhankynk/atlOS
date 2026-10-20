@@ -161,6 +161,11 @@ const TaskStateSegment& taskStateSegment()
     return s_tss;
 }
 
+void setKernelStack(uint64_t stackTop)
+{
+    s_tss.rsp[0] = stackTop;
+}
+
 /**
  * @brief Returns a reference to the GDTR structure.
  *

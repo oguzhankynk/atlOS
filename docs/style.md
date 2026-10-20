@@ -101,9 +101,10 @@ state and stays a function over printf.
   in static storage that is constructed explicitly (there is no heap yet and
   the boot stack is small), which also avoids static initialization order
   problems.
-- **Globals only at C/assembly boundaries** (interrupt dispatch, liballoc
-  hooks, `operator new`, the panic/printf sink): one explicitly bound pointer
-  per boundary, set by the composition root.
+- **Globals only at C/assembly boundaries** (interrupt dispatch, the user
+  program runtime behind `int 0x80` and ring 3 faults, liballoc hooks,
+  `operator new`, the panic/printf sink): one explicitly bound pointer per
+  boundary, set by the composition root.
 
 `git blame` ignores the mechanical style commits listed in
 `.git-blame-ignore-revs`; enable it once with

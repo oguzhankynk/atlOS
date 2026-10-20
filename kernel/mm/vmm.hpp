@@ -108,6 +108,13 @@ public:
     /// Walk the page tables and report every mapped page, in ascending virtual order.
     void forEachMapping(MappingCallback callback, void* arg) const;
 
+    /**
+     * @brief Whether ring 3 may touch every byte of [virtAddr, virtAddr + size)
+     * in this address space: inside the user range, mapped with the User flag,
+     * and Writable too if write. System calls check user pointers with it.
+     */
+    bool isUserAccessible(uint64_t virtAddr, uint64_t size, bool write) const;
+
     /// Load this address space into CR3.
     void activate() const;
 

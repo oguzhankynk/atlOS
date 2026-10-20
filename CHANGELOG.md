@@ -11,6 +11,15 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 - Physmap: all physical memory (up to 64 GB) at `0xFFFF800000000000`, with
   its tables in the kernel image; page tables are edited through it
+- User programs (`kernel/proc/`, `user/`): static ELF64 files from the disk
+  (`/disk0/BIN`), loaded into an address space of their own and run in ring 3
+  on a kernel thread (`iretq`, `TSS.rsp0` set by the scheduler on every
+  switch); `int 0x80` system calls `exit` and `write` with user pointer
+  checks; a fault in ring 3 ends the program with 128 + vector instead of a
+  panic; the shell's `run` command; `HELLO.ELF`, `FAULT.ELF`, `BADPTR.ELF`
+- `AddressSpace::isUserAccessible`; `GDT::setKernelStack`; TCB `owner`
+- Self tests for ELF parsing and the user programs (706 checks); the shell
+  test runs programs
 - Several address spaces: `AddressSpace(pmm, kernel)` shares the kernel's
   `PML4[0]` and `PML4[256..511]`; `allocateAt`/`freeAt` map zeroed 2 MB user
   pages in `PML4[1..255]`; `activate()`, `isActive()`; the destructor gives
@@ -18,8 +27,15 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ### Changed
 
+- The PMM and VMM no longer log every allocation
 - The recursive page table mapping (`PML4[510]`) is gone
 - The PMM manages at most the 64 GB the physmap covers
+
+### Fixed
+
+- `InterruptFrame` had `rsi` and `rdi` swapped: register dumps showed them
+  the wrong way round, and system call arguments would have been read from
+  the wrong registers
 
 ## [0.2.0] - 2026-10-20
 

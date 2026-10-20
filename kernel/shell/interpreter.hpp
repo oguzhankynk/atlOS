@@ -31,6 +31,10 @@ namespace Threading {
 class Scheduler;
 }
 
+namespace Process {
+class Runtime;
+}
+
 namespace Shell {
 
 /// What the commands work on, handed in by kernelMain (no globals).
@@ -39,6 +43,7 @@ struct Context {
     Memory::AddressSpace& space;
     Threading::Scheduler& scheduler;
     Fs::Vfs& vfs;
+    Process::Runtime& runtime;
     Drivers::VGATextConsole* screen; ///< for clear, may be null
     Drivers::SerialPort* serial; ///< for clear, may be null
 };

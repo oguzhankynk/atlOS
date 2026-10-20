@@ -11,6 +11,7 @@
 
 #include <drivers/character_source.hpp>
 #include <fs/vfs.hpp>
+#include <proc/process.hpp>
 #include <shell/parser.hpp>
 
 namespace Shell {
@@ -26,6 +27,8 @@ void Interpreter::run()
     printf("atlOS shell, \"help\" lists the commands\n");
 
     while (true) {
+        // Programs that exited since the last prompt give their memory back
+        m_context.runtime.reap();
         printf("atlOS:%s> ", m_cwd);
         m_editor.start();
 

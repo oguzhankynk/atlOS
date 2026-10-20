@@ -22,6 +22,7 @@
 #include <arch/x86_64/idt/fault.hpp>
 #include <arch/x86_64/idt/handlers.hpp>
 #include <arch/x86_64/idt/idt.hpp>
+#include <proc/process.hpp>
 
 namespace IDT {
 
@@ -373,6 +374,11 @@ void init()
             IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateInt);
     }
 
+    // System calls: the only gate ring 3 may use with "int" (DPL 3); the
+    // others raise #GP when a program tries
+    setEntry(systemCallVector, (void*)s_interruptTable[systemCallVector], (uint16_t)SegmentSelect::KERNELCODE,
+        IDTEntry::PRESENT | IDTEntry::RING3 | IDTEntry::GateInt);
+
     // Set the IDTR structure
     s_idtr.limit = sizeof(s_idt) - 1;
     s_idtr.base = reinterpret_cast<uintptr_t>(&s_idt);
@@ -415,11 +421,23 @@ static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAt
  * @brief Common C entry of every interrupt stub (isr.S).
  * @param regs The status of registers at interrupt time
  */
-extern "C" void intHandler(const InterruptFrame& regs)
+extern "C" void intHandler(InterruptFrame& regs)
 {
-    // CPU exceptions are fatal for now: report and panic, never return
-    if (regs.intNo < 32)
+    // A system call: the result goes back in the frame's rax
+    if (regs.intNo == systemCallVector && Fault::isFromUserMode(regs) && Process::runtime()) {
+        Process::runtime()->systemCall(regs);
+        return;
+    }
+
+    if (regs.intNo < 32) {
+        // A fault in a program ends the program, the kernel goes on
+        if (Fault::isFromUserMode(regs) && Process::runtime()) {
+            Fault::printReport(regs);
+            Process::runtime()->exitCurrent(128 + (int64_t)regs.intNo);
+        }
+        // In the kernel: report and panic, never return
         Fault::reportException(regs);
+    }
 
     Handlers::interruptHandler(regs.intNo);
 }

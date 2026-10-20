@@ -39,6 +39,8 @@
 #include <mm/memory.hpp>
 #include <mm/pmm.hpp>
 #include <mm/vmm.hpp>
+#include <proc/elf.hpp>
+#include <proc/process.hpp>
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
 #include <shell/interpreter.hpp>
@@ -2235,7 +2237,7 @@ static void testAtaDisk(Fs::Vfs& vfs)
 
     ListResult list {};
     CHECK(vfs.listDirectory("/disk0", collectEntry, &list));
-    CHECK(list.count == 3);
+    CHECK(list.count == 4); // HELLO.TXT, DOCS, BIG.TXT, BIN
 
     // Writing. The files stay: scripts/run-selftest.sh checks them on the host
     // afterwards with fsck.fat and mtools (another FAT implementation)
@@ -2559,7 +2561,8 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     FakeTickSource ticks;
     Scheduler isolated(ticks);
     Drivers::CharacterQueue input(isolated);
-    Shell::Context context { pmm, space, scheduler, vfs, nullptr, nullptr };
+    Process::Runtime runtime(pmm, space, scheduler, vfs);
+    Shell::Context context { pmm, space, scheduler, vfs, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2668,7 +2671,184 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     kfree(image);
 }
 
-int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs)
+// ------------------------------------------------------------
+// User programs
+// ------------------------------------------------------------
+
+// A made up ELF64 executable: header, then program headers
+struct FakeElf {
+    uint8_t bytes[512];
+};
+
+static void fakeElfHeader(FakeElf& elf, uint16_t segments, uint64_t entry)
+{
+    memset(elf.bytes, 0, sizeof(elf.bytes));
+    memcpy(elf.bytes, "\x7f"
+                      "ELF",
+        4);
+    elf.bytes[4] = 2; // 64-bit
+    elf.bytes[5] = 1; // little endian
+    elf.bytes[6] = 1;
+    uint16_t type = 2, machine = 0x3E, phSize = 56;
+    uint64_t phOffset = 64;
+    memcpy(elf.bytes + 16, &type, 2);
+    memcpy(elf.bytes + 18, &machine, 2);
+    memcpy(elf.bytes + 24, &entry, 8);
+    memcpy(elf.bytes + 32, &phOffset, 8);
+    memcpy(elf.bytes + 54, &phSize, 2);
+    memcpy(elf.bytes + 56, &segments, 2);
+}
+
+static void fakeSegment(FakeElf& elf, int index, uint32_t flags, uint64_t offset, uint64_t virt, uint64_t fileSize,
+    uint64_t memSize)
+{
+    uint8_t* ph = elf.bytes + 64 + (size_t)index * 56;
+    uint32_t load = 1;
+    memcpy(ph, &load, 4);
+    memcpy(ph + 4, &flags, 4);
+    memcpy(ph + 8, &offset, 8);
+    memcpy(ph + 16, &virt, 8);
+    memcpy(ph + 32, &fileSize, 8);
+    memcpy(ph + 40, &memSize, 8);
+}
+
+static void testElf()
+{
+    group("ELF64 parsing");
+    using Process::ElfError;
+    using Process::parseElf;
+
+    static FakeElf s_elf;
+    Process::ElfImage image;
+    uint64_t data = userBase + 2ULL * pageSize2Mb + 0x40;
+
+    // Code (R X) and data (R W) in separate pages, like user.ld makes them
+    fakeElfHeader(s_elf, 2, userBase + 0xB0);
+    fakeSegment(s_elf, 0, 5, 0, userBase, 0x100, 0x100);
+    fakeSegment(s_elf, 1, 6, 0x100, data, 0x20, 0x3000);
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::None);
+    CHECK(image.entry == userBase + 0xB0 && image.segmentCount == 2);
+    CHECK(image.segments[0].executable && !image.segments[0].writable);
+    CHECK(image.segments[1].writable && image.segments[1].memSize == 0x3000 && image.segments[1].fileSize == 0x20);
+
+    CHECK(parseElf(s_elf.bytes, 10, image) == ElfError::TooSmall);
+    s_elf.bytes[1] = 'X';
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::BadMagic);
+    s_elf.bytes[1] = 'E';
+    s_elf.bytes[4] = 1;
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::NotElf64);
+    s_elf.bytes[4] = 2;
+    s_elf.bytes[18] = 0x03; // i386
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::WrongMachine);
+    s_elf.bytes[18] = 0x3E;
+    s_elf.bytes[16] = 1; // relocatable
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::NotExecutable);
+    s_elf.bytes[16] = 2;
+
+    // Segments the loader must refuse
+    fakeSegment(s_elf, 1, 6, 0x100, data, 0x1000, 0x3000);
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::SegmentOutsideFile);
+    fakeSegment(s_elf, 1, 6, 0x100, data, 0x20, 0x10);
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::FileSizeAboveMemSize);
+    fakeSegment(s_elf, 1, 6, 0x100, KERNEL_VIRTUAL_LOAD_OFFSET, 0x20, 0x20); // into the kernel
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::SegmentOutsideUserRange);
+    fakeSegment(s_elf, 1, 6, 0x100, 0x400000, 0x20, 0x20); // the kernel's identity map
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::SegmentOutsideUserRange);
+    fakeSegment(s_elf, 1, 6, 0x100, userBase + 0x1000, 0x20, 0x20); // in the code's page
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::SegmentsSharePage);
+    fakeSegment(s_elf, 1, 6, 0x100, data, 0x20, 0x3000);
+    uint64_t entryInData = data;
+    memcpy(s_elf.bytes + 24, &entryInData, 8);
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::EntryOutsideSegments);
+    fakeElfHeader(s_elf, 6, userBase);
+    CHECK(parseElf(s_elf.bytes, 64 + 3 * 56, image) == ElfError::BadProgramHeaders);
+    fakeElfHeader(s_elf, 0, userBase);
+    CHECK(parseElf(s_elf.bytes, sizeof(s_elf.bytes), image) == ElfError::NoSegments);
+}
+
+// Start path, let it run until it exits, return its exit code (-1000 if it did not)
+static int64_t runProgram(Process::Runtime& runtime, Scheduler& scheduler, const char* path, int* pid = nullptr)
+{
+    int started = runtime.spawn(path);
+    if (pid)
+        *pid = started;
+    if (started < 0)
+        return -1000;
+
+    const Process::Process* process = runtime.find(started);
+    for (int i = 0; i < 100000 && !process->exited; i++)
+        scheduler.yield();
+    int64_t code = process->exited ? process->exitCode : -1000;
+    scheduler.yield(); // the thread leaves the queue
+    runtime.reap();
+    return code;
+}
+
+static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runtime, Scheduler& scheduler, Fs::Vfs& vfs)
+{
+    group("User programs (ring 3, test disk)");
+
+    Fs::FileInfo info;
+    if (!vfs.stat("/disk0/BIN/HELLO.ELF", info)) {
+        printf("[SELFTEST] skipped: no /disk0/BIN/HELLO.ELF (the test scripts attach the test disk)\n");
+        return;
+    }
+
+    uint64_t freeBefore = pmm.freeBlockCount();
+    FakeSink sink;
+    Drivers::CharacterSink* previous = Core::setConsole(sink);
+
+    // Prints from ring 3 through int 0x80, exits with 0
+    int pid = 0;
+    int64_t hello = runProgram(runtime, scheduler, "/disk0/BIN/HELLO.ELF", &pid);
+    bool helloOutput = sink.contains("Hello from user mode!\n") && sink.contains("running at 0x0000008000")
+        && sink.contains("exited with 0]");
+    bool reaped = runtime.find(pid) == nullptr && runtime.count() == 0;
+
+    // A fault in ring 3: reported, the program ends with 128 + 14, the kernel goes on
+    sink.clear();
+    int64_t fault = runProgram(runtime, scheduler, "/disk0/BIN/FAULT.ELF");
+    bool faultReport = sink.contains("about to write to address 0") && sink.contains("Page fault (in user mode)")
+        && sink.contains("CR2=0x0000000000000000 (user write, protection violation)") && !sink.contains("not reached")
+        && !sink.contains("KERNEL PANIC");
+
+    // Pointers into the kernel, unmapped or not user: refused
+    sink.clear();
+    int64_t badptr = runProgram(runtime, scheduler, "/disk0/BIN/BADPTR.ELF");
+    bool badptrOutput = sink.contains("every bad pointer refused");
+
+    // Files that are not programs
+    sink.clear();
+    int missing = runtime.spawn("/disk0/BIN/NOPE.ELF");
+    int notElf = runtime.spawn("/disk0/BIG.TXT"); // text, long enough for a header
+    bool reasons = sink.contains("no such file") && sink.contains("not an ELF file");
+
+    // Several at once: each has its own address space at the same addresses
+    sink.clear();
+    int a = runtime.spawn("/disk0/BIN/HELLO.ELF");
+    int b = runtime.spawn("/disk0/BIN/HELLO.ELF");
+    bool two = a > 0 && b > 0 && a != b && runtime.count() == 2;
+    for (int i = 0; i < 100000 && !(runtime.find(a)->exited && runtime.find(b)->exited); i++)
+        scheduler.yield();
+    scheduler.yield();
+    bool bothExited = runtime.find(a)->exited && runtime.find(b)->exited && runtime.find(a)->exitCode == 0
+        && runtime.find(b)->exitCode == 0;
+    runtime.reap();
+
+    Core::setConsole(*previous);
+    CHECK(hello == 0 && helloOutput);
+    CHECK(reaped);
+    CHECK(fault == 128 + 14);
+    CHECK(faultReport);
+    CHECK(badptr == 0 && badptrOutput);
+    CHECK(missing == -1 && notElf == -1 && reasons);
+    CHECK(two && bothExited && runtime.count() == 0);
+    // Address spaces, pages, kernel stacks: all given back
+    CHECK(pmm.freeBlockCount() == freeBefore);
+}
+
+int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
+    Process::Runtime& runtime)
 {
     printf("[SELFTEST] start\n");
 
@@ -2714,6 +2894,8 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testAtaDisk(vfs);
     testTranslate(space);
     testAddressSpaces(pmm, space);
+    testElf();
+    testUserPrograms(pmm, runtime, scheduler, vfs);
     testShellParser();
     testLineEditor();
     testShell(pmm, space, scheduler);

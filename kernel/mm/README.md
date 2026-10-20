@@ -107,7 +107,8 @@ address space only); the two it needs are there from boot.
   physical page (MMIO) without the PMM.
 - User pages: `allocateAt(virt, n, flags)` maps zeroed blocks in the user
   range, `Writable` and `User` (ring 3) as asked; the tables above get the
-  user bit, the PD entry decides.
+  user bit, the PD entry decides. `isUserAccessible(virt, size, write)` is
+  what system calls check user pointers with.
 - An unused bit of the entry (bit 9) marks pages whose block the address
   space owns: unmapping or destroying it gives those back, never a
   `mapPhysical` page. The destructor also frees its PDs and PDPTs.

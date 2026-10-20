@@ -146,9 +146,10 @@ static void printRegisters(const InterruptFrame& regs)
     printf("RSP=0x%016lx SS=0x%04lx\n", regs.rsp, regs.ss);
 }
 
-void reportException(const InterruptFrame& frame)
+void printReport(const InterruptFrame& frame)
 {
-    printf("\n==== EXCEPTION %lu: %s ====\n", frame.intNo, exceptionName(frame.intNo));
+    printf("\n==== EXCEPTION %lu: %s%s ====\n", frame.intNo, exceptionName(frame.intNo),
+        isFromUserMode(frame) ? " (in user mode)" : "");
     printf("error code 0x%lx\n", frame.errCode);
 
     switch (static_cast<ExternalInterrupts>(frame.intNo)) {
@@ -174,6 +175,11 @@ void reportException(const InterruptFrame& frame)
     }
 
     printRegisters(frame);
+}
+
+void reportException(const InterruptFrame& frame)
+{
+    printReport(frame);
 
     // The backtrace starts at the faulting instruction
     kernelPanicFrom(exceptionName(frame.intNo), frame.rip, frame.rbp);

@@ -33,7 +33,7 @@
 
 namespace Memory {
 
-static constexpr LogFlag dbgLog = LogFlag::Log;
+static constexpr LogFlag dbgLog = LogFlag::NoLog; // every mapping: very chatty
 static constexpr LogFlag infLog = LogFlag::Log;
 
 /// Page tables built in boot.S (in the boot sections: physical address == symbol address)
@@ -447,6 +447,27 @@ void AddressSpace::forEachMapping(MappingCallback callback, void* arg) const
             }
         }
     }
+}
+
+bool AddressSpace::isUserAccessible(uint64_t virtAddr, uint64_t size, bool write) const
+{
+    if (virtAddr < userBase || virtAddr >= userEnd || size > userEnd - virtAddr)
+        return false;
+
+    // The CPU allows an access only if every level allows it
+    uint64_t need = MMU_PRESENT | MMU_USER_MEMORY | (write ? MMU_WRITABLE : 0);
+    for (uint64_t page = virtAddr & ~(uint64_t)(pageSize2Mb - 1); page < virtAddr + size; page += pageSize2Mb) {
+        uint64_t entry = table(m_pml4)[index4(page)];
+        if ((entry & need) != need)
+            return false;
+        entry = table(entry)[index3(page)];
+        if ((entry & need) != need || (entry & MMU_PDE_TWO_MB))
+            return false;
+        entry = table(entry)[index2(page)];
+        if ((entry & need) != need || !(entry & MMU_PDE_TWO_MB))
+            return false;
+    }
+    return true;
 }
 
 void AddressSpace::activate() const

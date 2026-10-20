@@ -48,10 +48,19 @@ SelectorError decodeSelectorError(uint64_t errorCode);
 /// @brief Name of an exception vector, nullptr for vectors 32..255.
 const char* exceptionName(uint64_t vector);
 
+/// @brief Whether the interrupted code ran in ring 3 (a user program).
+inline bool isFromUserMode(const InterruptFrame& frame)
+{
+    return (frame.cs & 3) == 3;
+}
+
 /**
- * @brief Print what the CPU reported (vector, decoded error code, CR2 for a
- * page fault, registers) and panic with a backtrace of the faulting code.
+ * @brief Print what the CPU reported: vector, decoded error code, CR2 for a
+ * page fault, registers.
  */
+void printReport(const InterruptFrame& frame);
+
+/// @brief printReport, then panic with a backtrace of the faulting code.
 [[noreturn]] void reportException(const InterruptFrame& frame);
 
 } // namespace Fault

@@ -1,3 +1,4 @@
+#include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <drivers/tick_source.hpp>
@@ -66,6 +67,10 @@ void Scheduler::switchTo(uint32_t nextIndex)
 
     to->state = ThreadState::Running;
     m_currentThreadIndex = nextIndex;
+
+    // Interrupts and system calls from ring 3 land on the thread's own kernel stack
+    if (to->stackBase)
+        GDT::setKernelStack(to->stackBase + to->stackSize);
 
     switchTask(&from->regs, &to->regs);
 }

@@ -168,6 +168,16 @@ def main():
             check("up " in out, "uptime", out)
             out = serial.command("mount\r")
             check("/disk0" in out and "fat16" in out, "mount", out)
+            # User programs: ring 3 on their own thread, the shell prompt comes back first
+            out = serial.command("run /disk0/BIN/HELLO.ELF\r")
+            out += serial.read_until(b"exited with 0]")
+            check("started pid" in out and "Hello from user mode!" in out, "run a user program", out)
+            out = serial.command("run /disk0/BIN/FAULT.ELF\r")
+            out += serial.read_until(b"exited with 142]")
+            check("Page fault (in user mode)" in out and "KERNEL PANIC" not in out, "a fault in ring 3 ends only the program", out)
+            out = serial.command("pwd\r")
+            check("/disk0\n" in out, "the shell goes on after the fault", out)
+
             out = serial.command("nonsense\r")
             check("unknown command" in out, "unknown command", out)
 

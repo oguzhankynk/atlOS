@@ -21,6 +21,7 @@
 #include <mm/heap.hpp>
 #include <mm/pmm.hpp>
 #include <mm/vmm.hpp>
+#include <proc/process.hpp>
 #include <sched/scheduler.hpp>
 #include <shell/parser.hpp>
 
@@ -444,7 +445,7 @@ static void cmdTasks(Interpreter& shell, int, char**)
     uint64_t now = scheduler.ticks();
 
     // The header uses the rows' widths, so the columns line up
-    printf("  %c%-3s %-9s %-10s  %-8s  %-35s  %s\n", ' ', "id", "name", "state", "wakes in", "stack", "rsp");
+    printf("  %c%-3s %-12s %-10s  %-8s  %-35s  %s\n", ' ', "id", "name", "state", "wakes in", "stack", "rsp");
     for (uint32_t i = 0; i < scheduler.taskCount(); i++) {
         const Threading::TCB& tcb = scheduler.task(i);
 
@@ -457,11 +458,31 @@ static void cmdTasks(Interpreter& shell, int, char**)
             snprintf(stack, sizeof(stack), "%016lx +%lu KB", tcb.stackBase, tcb.stackSize / 1024);
 
         // The running task's rsp is live in the CPU; regs.rsp is from its last switch
-        printf("  %c%-3u %-9s %-10s  %-8s  %-35s  %016lx\n", i == scheduler.currentIndex() ? '*' : ' ', i,
-            tcb.name ? tcb.name : "?", stateName(tcb.state), wake, stack,
+        // A program's thread: rsp is in its kernel stack (it is in a system call or about to start)
+        const auto* process = static_cast<const Process::Process*>(tcb.owner);
+        char name[24];
+        if (process)
+            snprintf(name, sizeof(name), "%s:%u", tcb.name, process->pid);
+        else
+            snprintf(name, sizeof(name), "%s", tcb.name ? tcb.name : "?");
+
+        printf("  %c%-3u %-12s %-10s  %-8s  %-35s  %016lx\n", i == scheduler.currentIndex() ? '*' : ' ', i, name,
+            stateName(tcb.state), wake, stack,
             i == scheduler.currentIndex() ? (uint64_t)__builtin_frame_address(0) : tcb.regs.rsp);
     }
     printf("  %u task(s), * = running (this shell)\n", scheduler.taskCount());
+}
+
+static void cmdRun(Interpreter& shell, int argc, char** argv)
+{
+    char path[Interpreter::maxPath];
+    if (!usage("run", argc, 2, 2) || !resolve(shell, argv[1], path))
+        return;
+
+    // The program starts on its own thread and runs while the shell waits for keys
+    int pid = shell.context().runtime.spawn(path);
+    if (pid > 0)
+        printf("started pid %d\n", pid);
 }
 
 static void cmdCpuinfo(Interpreter&, int, char**)
@@ -529,6 +550,7 @@ static const Command s_commands[] = {
     { "vmmap", "vmmap", "the page table mappings", cmdVmmap },
     { "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
     { "ps", "ps", "the same as tasks", cmdTasks },
+    { "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
     { "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
     { "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
