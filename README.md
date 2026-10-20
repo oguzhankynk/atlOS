@@ -113,3 +113,7 @@ API documentation can be generated with Doxygen: `scripts/build.sh docs`
 
 MIT, see [LICENSE](LICENSE). Third party code and its licenses:
 [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## Screenshot
+
+<img src="docs/images/ss.png" alt="atlOS boot" width="480">
