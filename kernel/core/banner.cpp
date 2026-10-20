@@ -33,8 +33,5 @@ static const char* s_banner = "\
 void atlOSBanner()
 {
     printf("%s", s_banner);
-    char version[256];
-    sprintf(version, "atlOS Version: %d.%d.%d Build Time: %s",
-        MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION, BUILD_TIME);
-    printf("%s\n", version);
+    printf("atlOS %s (%s)\n", ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
 }

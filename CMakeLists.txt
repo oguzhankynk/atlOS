@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(atlOS C CXX ASM)
+# The one place the version is written; see docs/releasing.md
+project(atlOS VERSION 0.1.0 LANGUAGES C CXX ASM)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "atlOS")
     message(FATAL_ERROR "Configure with the cross toolchain: cmake --preset default")
@@ -125,7 +126,7 @@ endif()
 find_program(DOXYGEN doxygen)
 if(DOXYGEN)
     add_custom_target(docs
-        COMMAND ${DOXYGEN} docs/Doxyfile
+        COMMAND ${CMAKE_COMMAND} -E env ATLOS_VERSION=${PROJECT_VERSION} ${DOXYGEN} docs/Doxyfile
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Generating API docs in build/docs"
         VERBATIM

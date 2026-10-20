@@ -32,8 +32,23 @@ target_compile_definitions(kernel_flags INTERFACE
     $<$<BOOL:${ATLOS_SELFTEST}>:ATLOS_SELFTEST>
 )
 
-# Includes are relative to kernel/, e.g. <mm/vmm.hpp>; libc headers come with k
-target_include_directories(kernel_flags INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+# Includes are relative to kernel/, e.g. <mm/vmm.hpp>; libc headers come with k.
+# Generated headers (core/version.hpp) live in the build tree.
+set(KERNEL_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(kernel_flags INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} ${KERNEL_GENERATED_DIR})
+
+# core/version.hpp from the project version and git describe, refreshed on
+# every build (the file only changes when the version or git state does)
+add_custom_target(atlos_version
+    COMMAND ${CMAKE_COMMAND}
+        -DVERSION=${PROJECT_VERSION}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DOUTPUT=${KERNEL_GENERATED_DIR}/core/version.hpp
+        -P ${CMAKE_SOURCE_DIR}/cmake/generate-version.cmake
+    BYPRODUCTS ${KERNEL_GENERATED_DIR}/core/version.hpp
+    COMMENT "Updating core/version.hpp"
+    VERBATIM
+)
 
 # ------------------------------------------------------------
 # Sources
@@ -68,7 +83,7 @@ target_link_libraries(crts PRIVATE kernel_flags)
 
 add_executable(atlOS.kernel ${KERNEL_SOURCES})
 target_link_libraries(atlOS.kernel PRIVATE kernel_flags k gcc)
-add_dependencies(atlOS.kernel crts)
+add_dependencies(atlOS.kernel crts atlos_version)
 
 target_link_options(atlOS.kernel PRIVATE
     -T${ARCHDIR}/linker.ld

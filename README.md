@@ -77,10 +77,12 @@ example `#include <mm/vmm.hpp>`.
 - [Scheduler and threads](docs/scheduler.md)
 - [Self tests](docs/testing.md)
 - [Code style and design](docs/style.md)
+- [Versioning and releases](docs/releasing.md), [changelog](CHANGELOG.md)
 
 API documentation can be generated with Doxygen: `scripts/build.sh docs`
 (output in `build/docs/html`).
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Third party code and its licenses:
+[THIRD_PARTY.md](THIRD_PARTY.md).
