@@ -7,6 +7,20 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Physmap: all physical memory (up to 64 GB) at `0xFFFF800000000000`, with
+  its tables in the kernel image; page tables are edited through it
+- Several address spaces: `AddressSpace(pmm, kernel)` shares the kernel's
+  `PML4[0]` and `PML4[256..511]`; `allocateAt`/`freeAt` map zeroed 2 MB user
+  pages in `PML4[1..255]`; `activate()`, `isActive()`; the destructor gives
+  back pages and tables (owned pages are marked in entry bit 9)
+
+### Changed
+
+- The recursive page table mapping (`PML4[510]`) is gone
+- The PMM manages at most the 64 GB the physmap covers
+
 ## [0.2.0] - 2026-10-20
 
 Fault handling, synchronization, the keyboard, disks with FAT16 and a VFS,

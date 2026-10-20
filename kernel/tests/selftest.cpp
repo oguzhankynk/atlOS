@@ -2282,6 +2282,92 @@ static void countMapping(uint64_t virtAddr, uint64_t physAddr, uint64_t size, ui
         found[1] = physAddr + (text - virtAddr);
     if (virtAddr == 0)
         found[2] = 1; // the identity mapping of the first megabytes
+    if (virtAddr >= physmapBase && virtAddr < physmapBase + physmapSize)
+        found[3] += size;
+}
+
+static void testAddressSpaces(PhysicalMemoryManager& pmm, AddressSpace& kernel)
+{
+    group("Address spaces (a second one, user pages)");
+
+    uint64_t freeBefore = pmm.freeBlockCount();
+    uint64_t phys;
+    {
+        AddressSpace user(pmm, kernel);
+        // Tables are 4 KB frames from a pool cut from a 2 MB block: count pages from here
+        uint64_t freeWithTables = pmm.freeBlockCount();
+        CHECK(!user.isActive() && kernel.isActive());
+        CHECK(user.pml4Physical() != kernel.pml4Physical());
+
+        // The kernel half and the identity mapping are shared
+        CHECK(user.translate(&_text_start, phys) && phys == (uint64_t)&_text_start - KERNEL_VIRTUAL_LOAD_OFFSET);
+        CHECK(user.translate((const void*)0xB8000, phys) && phys == 0xB8000);
+        CHECK(user.translate(physToVirt(0x1000), phys) && phys == 0x1000);
+
+        // User pages: only in [userBase, userEnd), 2 MB aligned, zeroed
+        uint64_t code = userBase;
+        uint64_t stack = userBase + 64ULL * pageSize2Mb;
+        CHECK(!user.allocateAt(0x400000, 1, AddressSpace::User)); // PML4[0]: the kernel's
+        CHECK(!user.allocateAt(userBase + 4096, 1, AddressSpace::User)); // not aligned
+        CHECK(!user.allocateAt(userEnd, 1, AddressSpace::User));
+        CHECK(user.allocateAt(code, 2, AddressSpace::User));
+        CHECK(user.allocateAt(stack, 1, AddressSpace::User | AddressSpace::Writable));
+        CHECK(!user.allocateAt(code + pageSize2Mb, 1, AddressSpace::User)); // mapped already
+        CHECK(pmm.freeBlockCount() == freeWithTables - 3);
+
+        // Built while not active: reachable through the physmap, not visible in the kernel space
+        CHECK(user.translate((const void*)code, phys));
+        auto* bytes = static_cast<volatile uint8_t*>(physToVirt(phys));
+        bool zeroed = true;
+        for (uint64_t i = 0; i < pageSize2Mb; i += 4096)
+            zeroed = zeroed && bytes[i] == 0;
+        CHECK(zeroed);
+        bytes[123] = 0x5A;
+        CHECK(!kernel.translate((const void*)code, phys));
+
+        // The flags: user (ring 3) on every level, writable only where asked
+        struct Found {
+            uint64_t code;
+            uint64_t stack;
+        } flags {};
+        user.forEachMapping(
+            [](uint64_t virtAddr, uint64_t, uint64_t, uint64_t flags, void* arg) {
+                auto* found = static_cast<Found*>(arg);
+                if (virtAddr == userBase)
+                    found->code = flags;
+                if (virtAddr == userBase + 64ULL * pageSize2Mb)
+                    found->stack = flags;
+            },
+            &flags);
+        CHECK((flags.code & AddressSpace::User) && !(flags.code & AddressSpace::Writable));
+        CHECK((flags.stack & AddressSpace::User) && (flags.stack & AddressSpace::Writable));
+
+        // Switch to it: the kernel keeps running (shared half), the user page is there
+        IOPort::disableInterrupts();
+        user.activate();
+        bool active = user.isActive() && !kernel.isActive();
+        uint8_t seen = *(volatile uint8_t*)(code + 123);
+        kernel.activate();
+        IOPort::enableInterrupts();
+        CHECK(active && seen == 0x5A);
+        CHECK(kernel.isActive());
+
+        user.freeAt(code + pageSize2Mb, 1);
+        CHECK(pmm.freeBlockCount() == freeWithTables - 2);
+        CHECK(!user.translate((const void*)(code + pageSize2Mb), phys));
+    }
+    // The destructor gave back the pages and the tables
+    CHECK(pmm.freeBlockCount() == freeBefore);
+
+    // A kernel page made while a user space is active is seen by all spaces
+    {
+        AddressSpace user(pmm, kernel);
+        void* page = kernel.allocatePages(1);
+        CHECK(user.translate(page, phys) && kernel.translate(page, phys));
+        kernel.freePages(page, 1);
+        CHECK(!user.translate(page, phys));
+    }
+    CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
 static void testTranslate(AddressSpace& space)
@@ -2296,11 +2382,17 @@ static void testTranslate(AddressSpace& space)
     CHECK(!space.translate((const void*)0xDEAD0000, phys));
     CHECK(!space.translate((const void*)0x0000800000000000ULL, phys)); // not canonical
 
-    // The page tables themselves through the recursive slot: 4 KB "pages"
-    CHECK(space.translate((const void*)0xFFFFFF7FBFDFE000ULL, phys)); // PML4 at [510][510][510][510]
+    // The physmap: every physical address at physmapBase + phys
+    CHECK(space.translate(physToVirt(0x12345678), phys) && phys == 0x12345678);
+    CHECK(space.translate(physToVirt(physmapSize - 1), phys) && phys == physmapSize - 1);
+    CHECK(!space.translate(physToVirt(physmapSize), phys));
+    CHECK(*(volatile uint8_t*)physToVirt((uint64_t)&_text_start - KERNEL_VIRTUAL_LOAD_OFFSET) == _text_start);
+    // No recursive slot any more
+    CHECK(!space.translate((const void*)0xFFFFFF7FBFDFE000ULL, phys));
 
-    uint64_t found[3] {};
+    uint64_t found[4] {};
     space.forEachMapping(countMapping, found);
+    CHECK(found[3] == physmapSize);
     CHECK(found[0] > 2);
     CHECK(found[1] == text - KERNEL_VIRTUAL_LOAD_OFFSET);
     CHECK(found[2] == 1);
@@ -2621,6 +2713,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testFat16Write();
     testAtaDisk(vfs);
     testTranslate(space);
+    testAddressSpaces(pmm, space);
     testShellParser();
     testLineEditor();
     testShell(pmm, space, scheduler);

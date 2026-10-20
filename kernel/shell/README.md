@@ -84,17 +84,18 @@ atlOS:/> md 0xdead0000
 0x00000000dead0000: not mapped
 ```
 
-`translate` differs from `virtToPhys` in two ways: "not mapped" is not
+`translate` differs from `virtToPhys` in one way: "not mapped" is not
 confused with "mapped at physical 0" (the first megabytes are identity
-mapped), and it follows 4 KB page tables too: through the recursive slot the
-page tables themselves look like 4 KB pages.
+mapped). Physical memory itself can be looked at through the physmap:
+`md 0xffff800000007000` shows physical address `0x7000`.
 
 `vmmap` walks the active tables (`AddressSpace::forEachMapping`) and joins
 neighbouring pages with the same flags into one line:
 
 ```
-0000000000000000-0000000000e00000 -> 000000000000   14 MB  rw kernel 7 x 2M   identity map of boot
-ffffffff80000000-ffffffff80e00000 -> 000000000000   14 MB  rw kernel 7 x 2M   the higher half kernel
+0000000000000000-0000000000e00000 -> 000000000000      14 MB  rw kernel 7 x 2M       identity map of boot
+ffff800000000000-ffff801000000000 -> 000000000000   65536 MB  rw kernel 32768 x 2M   the physmap
+ffffffff80000000-ffffffff80e00000 -> 000000000000      14 MB  rw kernel 7 x 2M       the higher half kernel
 ```
 
 `mw` writes 1, 2, 4 or 8 bytes. It is a sharp tool: writing over kernel data

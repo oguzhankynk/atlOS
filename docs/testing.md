@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 651 passed, 0 failed
+[SELFTEST] done: 681 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -83,7 +83,8 @@ backtrace in it into function names.
 | FAT16 writing (RAM disk) | create, append, overwrite, files over several clusters, both FAT copies equal, remove frees every cluster, mkdir/rmdir, a directory growing past a cluster, a full volume, a full root directory, the VFS |
 | ATA disk (test disk) | IDENTIFY, the partition table, writing and reading back sector 1, `/disk0` as mounted at boot (`HELLO.TXT`, `DOCS/README.TXT`, a 22000 byte `BIG.TXT` line by line), then writing `KERNEL/NOTE.TXT` and `KERNEL/DATA.TXT` and creating/removing `KERNEL/TMP` |
 | PS/2 keyboard and the character queue (fake interrupt controller) | IRQ 1 attached and unmasked, arrow keys as ANSI sequences, a reader blocked until characters arrive, a full queue drops new characters, sequences go in whole |
-| VMM translate and mappings | `translate` tells physical 0 from unmapped, refuses non canonical addresses, follows the recursive slot; `forEachMapping` finds the kernel and the identity map |
+| VMM translate and mappings | `translate` tells physical 0 from unmapped, refuses non canonical addresses, covers the physmap (and no more); `forEachMapping` finds the kernel, the identity map and 64 GB of physmap |
+| Address spaces (a second one, user pages) | a new address space shares the kernel half and the identity map; user pages only in the user range, 2 MB aligned, zeroed, with the asked flags; built while inactive, seen after `activate()`; the destructor gives back pages and tables; kernel pages appear in every address space |
 | Shell parser | words, quotes, limits; hex and decimal numbers, overflow |
 | Shell line editor | echo, Backspace and DEL, `\r\n` as one Enter, Ctrl+C, skipped escape sequences, history (order, duplicates, full), the length limit |
 | Shell commands (RAM disk) | every command on a FAT16 volume in RAM with the output captured: paths and `cd`, files, `echo >`/`>>`, `md`/`mw` on a test buffer, unmapped memory refused, `mem`, `vmmap`, `tasks` with a sleeping thread, errors |

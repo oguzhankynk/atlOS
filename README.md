@@ -16,7 +16,7 @@ Working:
 - 64-bit higher half kernel (loaded at 4 MB, mapped at `0xFFFFFFFF80000000` + physical), booted by GRUB2
 - GDT with a TSS (double fault stack), IDT, decoded exception reports with a backtrace, 8259 PIC, PIT (1 ms tick)
 - Physical memory manager (2 MB blocks + 4 KB frames for page tables)
-- Virtual memory manager with 2 MB pages and recursive page table mapping
+- Virtual memory with 2 MB pages, a physmap of all physical memory, and separate address spaces sharing the kernel half
 - Kernel heap (`kmalloc`/`kfree`, based on liballoc 1.1)
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables

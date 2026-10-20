@@ -10,80 +10,56 @@
 #include <mm/pmm.hpp>
 
 /*
-    x86_64 48-bit canonical virtual address layout for 2 MB huge pages
-    with recursive PML4 mapping (PML4 → PDPT → PD → [2MB PAGE]):
+    x86_64 4-level paging with 2 MB pages (PML4 -> PDPT -> PD -> 2 MB page):
 
     63  . . . 48 | 47     39 | 38     30 | 29     21 | 20     0
     -----------------------------------------------------------
     Sign extend  |   PML4    |   PDPT    |    PD     | Page offset
 
-    Breakdown:
-    - Bits 47..39 : PML4 index (9 bits, 512 entries)
-    - Bits 38..30 : PDPT index (9 bits, 512 entries)
-    - Bits 29..21 : PD index   (9 bits, 512 entries)
-    - Bits 20..0  : Offset within 2 MB huge page (21 bits)
+    Layout of every address space:
 
-    Recursive mapping design (THIS KERNEL):
-    - Kernel virtual space lives entirely in PML4[511]
-    - Recursive page-table mapping uses PML4[510]
-    - This avoids overwriting kernel mappings
+    PML4[0]        identity map of the first megabytes (boot.S), kernel only
+    PML4[1..255]   user programs (userBase .. userEnd)
+    PML4[256]      physmap: all physical memory at physmapBase + phys
+    PML4[511]      the kernel image and kernel pages (-2 GB .. top)
 
-    Recursive mapping effect:
-    - PML4[510] → points to the PML4 itself
-    - Enables virtual access to:
-        * PML4
-        * PDPTs
-        * PDs
-      without using physical addresses
+    Entries 0 and 256..511 point at the same tables in every address space.
 
-    Notes:
-    - PT (page table) level does NOT exist (2 MB pages)
-    - PD entry must have page_size = 1
-    - Only lower 48 bits are valid (canonical addresses)
-    - Bits 63..48 must be sign-extension of bit 47
+    The page tables hold physical addresses; the kernel reads and writes
+    them through the physmap. That is what lets an AddressSpace edit tables
+    that are not loaded in CR3 (a recursive mapping, used before, can only
+    reach the active ones).
 */
 
 namespace Memory {
-/// Enable / Disable logs
+
 static constexpr LogFlag dbgLog = LogFlag::Log;
 static constexpr LogFlag infLog = LogFlag::Log;
-static constexpr LogFlag errLog = LogFlag::Log;
 
-/// A 2 MB page entry in a page directory
-struct PageDirectoryEntry64 {
-    uint64_t present : 1; /**< Page table present in memory */
-    uint64_t rw : 1; /**< Read/write permission */
-    uint64_t user : 1; /**< User/supervisor permission */
-    uint64_t pwt : 1; /**< Page-level write-through */
-    uint64_t pcd : 1; /**< Page-level cache disable */
-    uint64_t accessed : 1; /**< Page table accessed */
-    uint64_t dirty : 1; /**< Dirty; indicates whether software has written to the 2-MByte page referenced by this entry */
-    uint64_t pageSize : 1; /**<  Page size; must be 1 */
-    uint64_t global : 1; /**< Global; if CR4.PGE = 1, determines whether the translation is global (see Section 4.10); ignored otherwise */
-    uint64_t ignored0 : 3; /**< Ignored bits */
-    uint64_t reserved0 : 9; /**< Reserved bits */
-    uint64_t frameAddr : 31; /**< 2MB aligned >> 21 */
-    uint64_t reserved1 : 11; /**< Reserved bits */
-    uint64_t nx : 1; /**< No-execute */
-};
+/// Page tables built in boot.S (in the boot sections: physical address == symbol address)
+extern "C" uint64_t pml4[512];
 
-/**
- * @brief Page tables defined and identity-mapped in boot.S
- */
-extern "C" PageDirectoryEntry64 pml4[512];
-extern "C" PageDirectoryEntry64 high_pdpt[512];
-extern "C" PageDirectoryEntry64 high_page_directory_table[512];
-extern "C" PageDirectoryEntry64 low_page_directory_table[512];
-extern "C" PageDirectoryEntry64 low_pdpt[512];
+/// Physical address bits of an entry pointing to a 4 KB table (51..12)
+static constexpr uint64_t tableAddrMask = 0x000FFFFFFFFFF000ULL;
 
-/**
- * Recursive mapping slot.
- * Kernel occupies PML4[511], so recursive MUST NOT use 511.
- */
-constexpr uint64_t recursiveSlot = 510;
+/// Physical address bits of a 2 MB page entry (51..21)
+static constexpr uint64_t page2MbAddrMask = 0x000FFFFFFFE00000ULL;
+
+/// Bit 9 is ignored by the CPU: atlOS marks pages whose block this address space owns
+static constexpr uint64_t entryOwned = 1ULL << 9;
+
+static constexpr uint64_t physmapSlot = 256;
+static constexpr uint64_t kernelHalfSlot = 256; // PML4[256..511] are shared
+static constexpr uint64_t gigabyte = 1ULL << 30;
+static constexpr uint64_t physmapGigabytes = physmapSize / gigabyte;
+
+// The physmap's own tables live in the kernel image: they must exist before
+// the physmap does, and the kernel image is mapped already
+alignas(4096) static uint64_t s_physmapPdpt[512];
+alignas(4096) static uint64_t s_physmapPds[physmapGigabytes][512];
 
 // ------------------------------------------------------------
-// CR3 helpers
+// Helpers
 // ------------------------------------------------------------
 
 static inline uint64_t readCr3()
@@ -100,274 +76,16 @@ static inline void writeCr3(uint64_t v)
                  : "memory");
 }
 
-constexpr uint64_t recursivePrefix = 0xFFFF000000000000ULL;
-
-// ------------------------------------------------------------
-// Recursive mapping virtual address helpers
-// ------------------------------------------------------------
-
-/**
- * @brief Virtual address of the PML4 itself via recursive mapping
- *
- * VA bits:
- *   [510][510][510][0]
- */
-inline PageDirectoryEntry64* getPML4Virt()
+/// A table, by the physical address in an entry pointing at it
+static uint64_t* table(uint64_t entryOrPhys)
 {
-    return (PageDirectoryEntry64*)(recursivePrefix | (recursiveSlot << 39) | (recursiveSlot << 30) | (recursiveSlot << 21) | (recursiveSlot << 12));
+    return static_cast<uint64_t*>(physToVirt(entryOrPhys & tableAddrMask));
 }
 
-/**
- * @brief Get PDPT virtual address for a given PML4 index
- *
- * VA bits:
- *   [510][pml4_index][510][0]
- */
-inline PageDirectoryEntry64* getPDPTVirt(uint64_t pml4Index)
+/// Physical address of something in the kernel image (linked at KERNEL_VIRTUAL_LOAD_OFFSET + phys)
+static uint64_t imagePhys(const void* p)
 {
-    return (PageDirectoryEntry64*)(recursivePrefix | (recursiveSlot << 39) | (recursiveSlot << 30) | (recursiveSlot << 21) | (pml4Index << 12));
-}
-
-/**
- * @brief Get PD virtual address for a given PML4 + PDPT index
- *
- * VA bits:
- *   [510][pml4_index][pdpt_index][0]
- *
- * This is the FINAL level for 2 MB pages.
- */
-inline PageDirectoryEntry64* getPDVirt(uint64_t pml4Index, uint64_t pdptIndex)
-{
-    return (PageDirectoryEntry64*)(recursivePrefix | (recursiveSlot << 39) | (recursiveSlot << 30) | (pml4Index << 21) | (pdptIndex << 12));
-}
-
-// ------------------------------------------------------------
-// Page index helpers (2 MB pages)
-// ------------------------------------------------------------
-
-static inline uint64_t getPageIndexFromVirtAddr(const void* virtAddr)
-{
-    uintptr_t addr = (uintptr_t)virtAddr;
-    if (addr < KERNEL_VIRTUAL_LOAD_OFFSET)
-        kernelPanic("VMM: invalid kernel virtual address");
-
-    return (addr - KERNEL_VIRTUAL_LOAD_OFFSET) >> 21;
-}
-
-static inline void* getVirtAddrFromPageIndex(uint64_t index)
-{
-    return (void*)(KERNEL_VIRTUAL_LOAD_OFFSET + (index << 21));
-}
-
-// ------------------------------------------------------------
-// Raw entry helpers
-//
-// PageDirectoryEntry64 describes a 2 MB page entry only (frame_addr
-// starts at bit 21). PML4/PDPT entries point to 4 KB tables, so they
-// are written as raw 64-bit values.
-// ------------------------------------------------------------
-
-/// Physical address bits of an entry pointing to a 4 KB table (51..12)
-constexpr uint64_t tableAddrMask = 0x000FFFFFFFFFF000ULL;
-
-/// Physical address bits of a 2 MB page entry (51..21)
-constexpr uint64_t page2MbAddrMask = 0x000FFFFFFFE00000ULL;
-
-/// 2 MB pages from KERNEL_VIRTUAL_LOAD_OFFSET to the top of the address space (2 GB)
-constexpr uint64_t maxPageIndex = (0ULL - KERNEL_VIRTUAL_LOAD_OFFSET) / pageSize2Mb;
-
-/**
- * @brief Get the PD entry mapping a virtual address, via recursive mapping
- *
- * @return nullptr if the PML4 or PDPT entry is not present (no PD exists yet)
- */
-static uint64_t* getPDEntry(uintptr_t vAddr)
-{
-    uint64_t pml4Idx = (vAddr >> 39) & 0x1FF;
-    uint64_t pdptIdx = (vAddr >> 30) & 0x1FF;
-    uint64_t pdIdx = (vAddr >> 21) & 0x1FF;
-
-    uint64_t* pml4Table = (uint64_t*)getPML4Virt();
-    if (!(pml4Table[pml4Idx] & MMU_PRESENT))
-        return nullptr;
-
-    uint64_t* pdptTable = (uint64_t*)getPDPTVirt(pml4Idx);
-    if (!(pdptTable[pdptIdx] & MMU_PRESENT))
-        return nullptr;
-
-    return (uint64_t*)getPDVirt(pml4Idx, pdptIdx) + pdIdx;
-}
-
-// ------------------------------------------------------------
-// Initialization
-// ------------------------------------------------------------
-
-AddressSpace::AddressSpace(PhysicalMemoryManager& pmm)
-    : m_pmm(pmm)
-{
-    logMsg(infLog, "VMM: init start. Setting up recursive mapping...\n");
-
-    uint64_t currentCr3 = readCr3() & ~0xFFFULL;
-
-    uint64_t* pml4Raw = (uint64_t*)&pml4[0];
-    pml4Raw[recursiveSlot] = currentCr3 | 0x03;
-
-    // Full TLB flush is REQUIRED here
-    writeCr3(readCr3());
-
-    logMsg(infLog, "VMM: Recursive mapping set at PML4[%llu]: 0x%llx\n", recursiveSlot, *(uint64_t*)&pml4[recursiveSlot]);
-    logMsg(infLog, "VMM: init done.\n");
-}
-
-/**
- * @brief Get the PD entry mapping a virtual address, creating the PD if needed
- */
-uint64_t* AddressSpace::getOrCreatePdEntry(uintptr_t vAddr)
-{
-    uint64_t pml4Idx = (vAddr >> 39) & 0x1FF;
-    uint64_t pdptIdx = (vAddr >> 30) & 0x1FF;
-    uint64_t pdIdx = (vAddr >> 21) & 0x1FF;
-
-    uint64_t* pml4Table = (uint64_t*)getPML4Virt();
-
-    // PDPT check (PML4 entry)
-    if (!(pml4Table[pml4Idx] & MMU_PRESENT)) {
-        kernelPanic("Dynamic PDPT creation not implemented yet!");
-    }
-
-    uint64_t* pdptTable = (uint64_t*)getPDPTVirt(pml4Idx);
-
-    if (!(pdptTable[pdptIdx] & MMU_PRESENT)) {
-        uint64_t newPdPhys = (uintptr_t)m_pmm.allocateFrame();
-        if (newPdPhys == 0)
-            kernelPanic("VMM: out of physical memory for page directory");
-
-        pdptTable[pdptIdx] = (newPdPhys & tableAddrMask) | MMU_PRESENT | MMU_WRITABLE;
-
-        PageDirectoryEntry64* pdTable = getPDVirt(pml4Idx, pdptIdx);
-        asm volatile("invlpg (%0)"
-                     :
-                     : "r"(pdTable)
-                     : "memory");
-
-        memset(pdTable, 0, frameSize4Kb);
-    }
-
-    return (uint64_t*)getPDVirt(pml4Idx, pdptIdx) + pdIdx;
-}
-
-/**
- * @brief Clear a PD entry and give the PD back to the PMM once it is empty
- *
- * The boot PDs live in the kernel image, they are never freed.
- */
-void AddressSpace::clearPdEntry(uintptr_t vAddr, uint64_t* pdEntry)
-{
-    *pdEntry = 0;
-    asm volatile("invlpg (%0)"
-                 :
-                 : "r"((void*)vAddr)
-                 : "memory");
-
-    uint64_t* pdTable = (uint64_t*)((uintptr_t)pdEntry & ~(uintptr_t)(frameSize4Kb - 1));
-    for (uint64_t i = 0; i < 512; i++) {
-        if (pdTable[i] & MMU_PRESENT)
-            return;
-    }
-
-    uint64_t pml4Idx = (vAddr >> 39) & 0x1FF;
-    uint64_t pdptIdx = (vAddr >> 30) & 0x1FF;
-    uint64_t* pdptTable = (uint64_t*)getPDPTVirt(pml4Idx);
-    uint64_t pdPhys = pdptTable[pdptIdx] & tableAddrMask;
-
-    if (pdPhys == (uintptr_t)high_page_directory_table || pdPhys == (uintptr_t)low_page_directory_table)
-        return;
-
-    pdptTable[pdptIdx] = 0;
-    asm volatile("invlpg (%0)"
-                 :
-                 : "r"(pdTable)
-                 : "memory");
-
-    m_pmm.freeFrame((void*)pdPhys);
-    logMsg(dbgLog, "VMM: freed empty PD at 0x%llx (PML4=%llu, PDPT=%llu)\n", pdPhys, pml4Idx, pdptIdx);
-}
-
-void AddressSpace::mapPages(uint64_t pageIndex, uint64_t count)
-{
-    for (uint64_t i = 0; i < count; ++i) {
-        uintptr_t vAddr = (uintptr_t)getVirtAddrFromPageIndex(pageIndex + i);
-
-        logMsg(dbgLog, "VMM: Mapping page %llu: VA=0x%llx\n", pageIndex + i, vAddr);
-
-        uint64_t* pdEntry = getOrCreatePdEntry(vAddr);
-        if (*pdEntry & MMU_PRESENT)
-            kernelPanic("VMM: mapPages: page already mapped!");
-
-        uint64_t phys = (uintptr_t)m_pmm.allocateBlocks(1);
-        if (phys == 0)
-            kernelPanic("VMM: out of physical memory");
-
-        *pdEntry = (phys & page2MbAddrMask) | MMU_PRESENT | MMU_WRITABLE | MMU_PDE_TWO_MB;
-
-        asm volatile("invlpg (%0)"
-                     :
-                     : "r"((void*)vAddr)
-                     : "memory");
-    }
-}
-
-void AddressSpace::unmapPages(uint64_t pageIndex, uint64_t count)
-{
-    for (uint64_t i = 0; i < count; ++i) {
-        uintptr_t vAddr = (uintptr_t)getVirtAddrFromPageIndex(pageIndex + i);
-
-        uint64_t* pdEntry = getPDEntry(vAddr);
-        if (pdEntry == nullptr || !(*pdEntry & MMU_PRESENT))
-            kernelPanic("VMM: unmapPages: page not present!");
-
-        void* physAddr = (void*)(*pdEntry & page2MbAddrMask);
-        m_pmm.freeBlocks(physAddr, 1);
-
-        clearPdEntry(vAddr, pdEntry);
-    }
-}
-
-void AddressSpace::mapPhysical(const void* virtAddr, const void* physAddr)
-{
-    uintptr_t vAddr = (uintptr_t)virtAddr;
-    uint64_t phys = (uintptr_t)physAddr;
-
-    if ((vAddr | phys) & (pageSize2Mb - 1))
-        kernelPanic("VMM: mapPhysical: addresses must be 2 MB aligned");
-
-    uint64_t* pdEntry = getOrCreatePdEntry(vAddr);
-    if (*pdEntry & MMU_PRESENT)
-        kernelPanic("VMM: mapPhysical: page already mapped!");
-
-    *pdEntry = (phys & page2MbAddrMask) | MMU_PRESENT | MMU_WRITABLE | MMU_PDE_TWO_MB;
-
-    asm volatile("invlpg (%0)"
-                 :
-                 : "r"((void*)vAddr)
-                 : "memory");
-}
-
-void AddressSpace::unmapPhysical(const void* virtAddr)
-{
-    uintptr_t vAddr = (uintptr_t)virtAddr & ~(uintptr_t)(pageSize2Mb - 1);
-
-    uint64_t* pdEntry = getPDEntry(vAddr);
-    if (pdEntry == nullptr || !(*pdEntry & MMU_PRESENT))
-        kernelPanic("VMM: unmapPhysical: page not present!");
-
-    clearPdEntry(vAddr, pdEntry);
-}
-
-// Virtual address of the 4 KB page table under PD entry (pml4, pdpt, pd)
-static uint64_t* getPTVirt(uint64_t pml4Index, uint64_t pdptIndex, uint64_t pdIndex)
-{
-    return (uint64_t*)(recursivePrefix | (recursiveSlot << 39) | (pml4Index << 30) | (pdptIndex << 21) | (pdIndex << 12));
+    return (uint64_t)p - KERNEL_VIRTUAL_LOAD_OFFSET;
 }
 
 static uint64_t canonical(uint64_t address)
@@ -376,30 +94,297 @@ static uint64_t canonical(uint64_t address)
     return (address & (1ULL << 47)) ? (address | 0xFFFF000000000000ULL) : address;
 }
 
+static uint64_t index4(uint64_t v) { return (v >> 39) & 0x1FF; }
+static uint64_t index3(uint64_t v) { return (v >> 30) & 0x1FF; }
+static uint64_t index2(uint64_t v) { return (v >> 21) & 0x1FF; }
+
+// ------------------------------------------------------------
+// Construction
+// ------------------------------------------------------------
+
+AddressSpace::AddressSpace(PhysicalMemoryManager& pmm)
+    : m_pmm(pmm)
+    , m_pml4(readCr3() & tableAddrMask)
+    , m_isKernel(true)
+{
+    // Frames for new tables must be reachable through the physmap
+    if (pmm.capacity() * PhysicalMemoryManager::blockSize > physmapSize)
+        kernelPanic("VMM: the PMM manages more memory than the physmap covers");
+
+    // physmap: one PD per gigabyte, 2 MB pages, written through the kernel image mapping
+    for (uint64_t gb = 0; gb < physmapGigabytes; gb++) {
+        for (uint64_t i = 0; i < 512; i++)
+            s_physmapPds[gb][i] = (gb * gigabyte + i * pageSize2Mb) | MMU_PRESENT | MMU_WRITABLE | MMU_PDE_TWO_MB;
+        s_physmapPdpt[gb] = imagePhys(s_physmapPds[gb]) | MMU_PRESENT | MMU_WRITABLE;
+    }
+    pml4[physmapSlot] = imagePhys(s_physmapPdpt) | MMU_PRESENT | MMU_WRITABLE;
+    writeCr3(readCr3()); // flush the TLB
+
+    logMsg(infLog, "VMM: physmap: %llu GB of physical memory at 0x%llx\n", physmapGigabytes, physmapBase);
+}
+
+AddressSpace::AddressSpace(PhysicalMemoryManager& pmm, const AddressSpace& kernel)
+    : m_pmm(pmm)
+    , m_pml4(0)
+    , m_isKernel(false)
+{
+    m_pml4 = newTable();
+    if (!m_pml4)
+        kernelPanic("VMM: out of physical memory for a PML4");
+
+    // Share the identity mapping and the whole kernel half
+    uint64_t* mine = table(m_pml4);
+    const uint64_t* kernelPml4 = table(kernel.m_pml4);
+    mine[0] = kernelPml4[0];
+    for (uint64_t i = kernelHalfSlot; i < 512; i++)
+        mine[i] = kernelPml4[i];
+}
+
+AddressSpace::~AddressSpace()
+{
+    if (m_isKernel)
+        return;
+    if (isActive())
+        kernelPanic("VMM: destroying the active address space");
+
+    // Only the user range is this address space's own: its owned pages, its PDs and PDPTs
+    uint64_t* pml4Table = table(m_pml4);
+    for (uint64_t i = index4(userBase); i < kernelHalfSlot; i++) {
+        if (!(pml4Table[i] & MMU_PRESENT))
+            continue;
+        uint64_t* pdpt = table(pml4Table[i]);
+        for (uint64_t j = 0; j < 512; j++) {
+            if (!(pdpt[j] & MMU_PRESENT))
+                continue;
+            uint64_t* pd = table(pdpt[j]);
+            for (uint64_t k = 0; k < 512; k++) {
+                if ((pd[k] & MMU_PRESENT) && (pd[k] & entryOwned))
+                    m_pmm.freeBlocks((void*)(pd[k] & page2MbAddrMask), 1);
+            }
+            m_pmm.freeFrame((void*)(pdpt[j] & tableAddrMask));
+        }
+        m_pmm.freeFrame((void*)(pml4Table[i] & tableAddrMask));
+    }
+    m_pmm.freeFrame((void*)m_pml4);
+}
+
+// ------------------------------------------------------------
+// Tables
+// ------------------------------------------------------------
+
+/// A zeroed 4 KB frame for a page table, 0 when memory ran out
+uint64_t AddressSpace::newTable()
+{
+    uint64_t frame = (uintptr_t)m_pmm.allocateFrame();
+    if (frame)
+        memset(physToVirt(frame), 0, frameSize4Kb);
+    return frame;
+}
+
+/// Give a table back to the PMM, unless it is part of the kernel image (boot.S, the physmap)
+void AddressSpace::freeTableIfOwned(uint64_t tablePhys)
+{
+    if (tablePhys < (uintptr_t)&kernel_physical_end)
+        return;
+    m_pmm.freeFrame((void*)tablePhys);
+}
+
+/**
+ * @brief The PD entry for virtAddr. With create, missing PDPTs and PDs are
+ * made (nullptr if memory ran out); without, nullptr if there is none.
+ */
+uint64_t* AddressSpace::pdEntry(uint64_t virtAddr, bool create)
+{
+    // Tables below a user range entry must allow ring 3; the PD entry decides
+    uint64_t parentFlags = MMU_PRESENT | MMU_WRITABLE | (virtAddr < userEnd && virtAddr >= userBase ? MMU_USER_MEMORY : 0);
+
+    uint64_t& pml4Entry = table(m_pml4)[index4(virtAddr)];
+    if (!(pml4Entry & MMU_PRESENT)) {
+        if (!create)
+            return nullptr;
+        // A new kernel half PDPT would exist in this address space only
+        if (index4(virtAddr) >= kernelHalfSlot)
+            kernelPanic("VMM: the kernel half has a fixed set of PDPTs");
+        uint64_t frame = newTable();
+        if (!frame)
+            return nullptr;
+        pml4Entry = frame | parentFlags;
+    }
+
+    uint64_t& pdptEntry = table(pml4Entry)[index3(virtAddr)];
+    if (!(pdptEntry & MMU_PRESENT)) {
+        if (!create)
+            return nullptr;
+        uint64_t frame = newTable();
+        if (!frame)
+            return nullptr;
+        pdptEntry = frame | parentFlags;
+    }
+    if (pdptEntry & MMU_PDE_TWO_MB)
+        return nullptr; // a 1 GB page: not made by atlOS
+
+    return &table(pdptEntry)[index2(virtAddr)];
+}
+
+void AddressSpace::invalidate(uint64_t virtAddr) const
+{
+    // The kernel half is visible in every address space, so also in the active one
+    if (isActive() || virtAddr >= physmapBase)
+        asm volatile("invlpg (%0)"
+                     :
+                     : "r"((void*)virtAddr)
+                     : "memory");
+}
+
+bool AddressSpace::mapPage(uint64_t virtAddr, uint64_t entry)
+{
+    uint64_t* pd = pdEntry(virtAddr, true);
+    if (!pd || (*pd & MMU_PRESENT))
+        return false;
+    *pd = entry | MMU_PRESENT | MMU_PDE_TWO_MB;
+    invalidate(virtAddr);
+    return true;
+}
+
+void AddressSpace::unmapPage(uint64_t virtAddr, const char* caller)
+{
+    uint64_t* pd = pdEntry(virtAddr, false);
+    if (!pd || !(*pd & MMU_PRESENT)) {
+        logMsg(infLog, "VMM: %s: 0x%llx is not mapped\n", caller, virtAddr);
+        kernelPanic("VMM: unmapping a page that is not mapped");
+    }
+
+    uint64_t entry = *pd;
+    *pd = 0;
+    invalidate(virtAddr);
+    if (entry & entryOwned)
+        m_pmm.freeBlocks((void*)(entry & page2MbAddrMask), 1);
+
+    // An empty PD goes back to the PMM (not the ones in the kernel image)
+    uint64_t* pdTable = (uint64_t*)((uintptr_t)pd & ~(uintptr_t)(frameSize4Kb - 1));
+    for (uint64_t i = 0; i < 512; i++) {
+        if (pdTable[i] & MMU_PRESENT)
+            return;
+    }
+    uint64_t& pdptEntry = table(table(m_pml4)[index4(virtAddr)])[index3(virtAddr)];
+    uint64_t pdPhys = pdptEntry & tableAddrMask;
+    if (pdPhys < (uintptr_t)&kernel_physical_end)
+        return;
+    pdptEntry = 0;
+    freeTableIfOwned(pdPhys);
+    logMsg(dbgLog, "VMM: freed an empty PD at 0x%llx\n", pdPhys);
+}
+
+// ------------------------------------------------------------
+// Kernel pages
+// ------------------------------------------------------------
+
+/// First fit over the 2 MB pages from the end of the kernel image to the top
+uint64_t AddressSpace::findFreeKernelRange(uint64_t count)
+{
+    uint64_t start = ((uint64_t)&kernel_virtual_end + pageSize2Mb - 1) & ~(uint64_t)(pageSize2Mb - 1);
+    uint64_t run = 0;
+    for (uint64_t page = start; page >= start; page += pageSize2Mb) {
+        uint64_t* pd = pdEntry(page, false);
+        if (pd && (*pd & MMU_PRESENT)) {
+            run = 0;
+            continue;
+        }
+        if (++run == count)
+            return page - (count - 1) * pageSize2Mb;
+    }
+    kernelPanic("VMM: no free kernel virtual range");
+    return 0;
+}
+
+void* AddressSpace::allocatePages(uint64_t count)
+{
+    uint64_t base = findFreeKernelRange(count);
+    for (uint64_t i = 0; i < count; i++) {
+        uint64_t phys = (uintptr_t)m_pmm.allocateBlocks(1);
+        if (!phys)
+            kernelPanic("VMM: out of physical memory");
+        logMsg(dbgLog, "VMM: Mapping page: VA=0x%llx\n", base + i * pageSize2Mb);
+        if (!mapPage(base + i * pageSize2Mb, phys | MMU_WRITABLE | entryOwned))
+            kernelPanic("VMM: out of physical memory for page directory");
+    }
+    return (void*)base;
+}
+
+void AddressSpace::freePages(const void* base, uint64_t count)
+{
+    for (uint64_t i = 0; i < count; i++)
+        unmapPage((uint64_t)base + i * pageSize2Mb, "freePages");
+}
+
+void AddressSpace::mapPhysical(const void* virtAddr, const void* physAddr)
+{
+    uint64_t vAddr = (uintptr_t)virtAddr;
+    uint64_t phys = (uintptr_t)physAddr;
+    if ((vAddr | phys) & (pageSize2Mb - 1))
+        kernelPanic("VMM: mapPhysical: addresses must be 2 MB aligned");
+    if (!mapPage(vAddr, phys | MMU_WRITABLE))
+        kernelPanic("VMM: mapPhysical: page already mapped!");
+}
+
+void AddressSpace::unmapPhysical(const void* virtAddr)
+{
+    unmapPage((uintptr_t)virtAddr & ~(uintptr_t)(pageSize2Mb - 1), "unmapPhysical");
+}
+
+// ------------------------------------------------------------
+// User pages
+// ------------------------------------------------------------
+
+bool AddressSpace::allocateAt(uint64_t virtAddr, uint64_t count, uint64_t flags)
+{
+    if (virtAddr & (pageSize2Mb - 1) || virtAddr < userBase || virtAddr >= userEnd
+        || count > (userEnd - virtAddr) / pageSize2Mb)
+        return false;
+
+    for (uint64_t i = 0; i < count; i++) {
+        uint64_t phys = (uintptr_t)m_pmm.allocateBlocks(1);
+        if (!phys)
+            return false;
+        // A user program must never see what the page held before
+        memset(physToVirt(phys), 0, pageSize2Mb);
+        if (!mapPage(virtAddr + i * pageSize2Mb, phys | (flags & (Writable | User)) | entryOwned)) {
+            m_pmm.freeBlocks((void*)phys, 1);
+            return false;
+        }
+    }
+    return true;
+}
+
+void AddressSpace::freeAt(uint64_t virtAddr, uint64_t count)
+{
+    for (uint64_t i = 0; i < count; i++)
+        unmapPage(virtAddr + i * pageSize2Mb, "freeAt");
+}
+
+// ------------------------------------------------------------
+// Looking at the tables
+// ------------------------------------------------------------
+
 bool AddressSpace::translate(const void* virtAddr, uint64_t& physAddr) const
 {
-    uintptr_t vAddr = (uintptr_t)virtAddr;
+    uint64_t vAddr = (uintptr_t)virtAddr;
     if (canonical(vAddr & 0x0000FFFFFFFFFFFFULL) != vAddr)
         return false;
 
-    uint64_t pml4Idx = (vAddr >> 39) & 0x1FF;
-    uint64_t pdptIdx = (vAddr >> 30) & 0x1FF;
-    uint64_t pdIdx = (vAddr >> 21) & 0x1FF;
-    uint64_t ptIdx = (vAddr >> 12) & 0x1FF;
-
-    uint64_t pml4Entry = ((uint64_t*)getPML4Virt())[pml4Idx];
+    uint64_t pml4Entry = table(m_pml4)[index4(vAddr)];
     if (!(pml4Entry & MMU_PRESENT))
         return false;
 
-    uint64_t pdptEntry = ((uint64_t*)getPDPTVirt(pml4Idx))[pdptIdx];
+    uint64_t pdptEntry = table(pml4Entry)[index3(vAddr)];
     if (!(pdptEntry & MMU_PRESENT))
         return false;
     if (pdptEntry & MMU_PDE_TWO_MB) { // 1 GB page
-        physAddr = (pdptEntry & 0x000FFFFFC0000000ULL) | (vAddr & 0x3FFFFFFFULL);
+        physAddr = (pdptEntry & 0x000FFFFFC0000000ULL) | (vAddr & (gigabyte - 1));
         return true;
     }
 
-    uint64_t pdEntry = ((uint64_t*)getPDVirt(pml4Idx, pdptIdx))[pdIdx];
+    uint64_t pdEntry = table(pdptEntry)[index2(vAddr)];
     if (!(pdEntry & MMU_PRESENT))
         return false;
     if (pdEntry & MMU_PDE_TWO_MB) {
@@ -407,52 +392,12 @@ bool AddressSpace::translate(const void* virtAddr, uint64_t& physAddr) const
         return true;
     }
 
-    uint64_t ptEntry = getPTVirt(pml4Idx, pdptIdx, pdIdx)[ptIdx];
+    // A 4 KB page table: atlOS makes none, but a walk should not get it wrong
+    uint64_t ptEntry = table(pdEntry)[(vAddr >> 12) & 0x1FF];
     if (!(ptEntry & MMU_PRESENT))
         return false;
     physAddr = (ptEntry & tableAddrMask) | (vAddr & 0xFFF);
     return true;
-}
-
-void AddressSpace::forEachMapping(MappingCallback callback, void* arg) const
-{
-    constexpr uint64_t flagMask = 0xFFF | (1ULL << 63); // low flags and NX
-
-    uint64_t* pml4 = (uint64_t*)getPML4Virt();
-    for (uint64_t i = 0; i < 512; i++) {
-        if (i == recursiveSlot || !(pml4[i] & MMU_PRESENT))
-            continue;
-
-        uint64_t* pdpt = (uint64_t*)getPDPTVirt(i);
-        for (uint64_t j = 0; j < 512; j++) {
-            uint64_t pdptEntry = pdpt[j];
-            if (!(pdptEntry & MMU_PRESENT))
-                continue;
-            uint64_t base1Gb = canonical((i << 39) | (j << 30));
-            if (pdptEntry & MMU_PDE_TWO_MB) {
-                callback(base1Gb, pdptEntry & 0x000FFFFFC0000000ULL, 1ULL << 30, pdptEntry & flagMask, arg);
-                continue;
-            }
-
-            uint64_t* pd = (uint64_t*)getPDVirt(i, j);
-            for (uint64_t k = 0; k < 512; k++) {
-                uint64_t pdEntry = pd[k];
-                if (!(pdEntry & MMU_PRESENT))
-                    continue;
-                uint64_t base2Mb = base1Gb | (k << 21);
-                if (pdEntry & MMU_PDE_TWO_MB) {
-                    callback(base2Mb, pdEntry & page2MbAddrMask, pageSize2Mb, pdEntry & flagMask, arg);
-                    continue;
-                }
-
-                uint64_t* pt = getPTVirt(i, j, k);
-                for (uint64_t l = 0; l < 512; l++) {
-                    if (pt[l] & MMU_PRESENT)
-                        callback(base2Mb | (l << 12), pt[l] & tableAddrMask, 4096, pt[l] & flagMask, arg);
-                }
-            }
-        }
-    }
 }
 
 void* AddressSpace::virtToPhys(const void* virtAddr) const
@@ -463,40 +408,55 @@ void* AddressSpace::virtToPhys(const void* virtAddr) const
     return (void*)phys;
 }
 
-/// Simple contiguous page allocator
-static uint64_t findContiguousFreePages(uint64_t numPages)
+void AddressSpace::forEachMapping(MappingCallback callback, void* arg) const
 {
+    constexpr uint64_t flagMask = 0xFFF | (1ULL << 63); // low flags and NX
 
-    uint64_t startIndex = getPageIndexFromVirtAddr(&kernel_virtual_end);
+    const uint64_t* pml4Table = table(m_pml4);
+    for (uint64_t i = 0; i < 512; i++) {
+        if (!(pml4Table[i] & MMU_PRESENT))
+            continue;
 
-    for (uint64_t i = startIndex; i + numPages <= maxPageIndex; ++i) {
-        bool free = true;
-        for (uint64_t j = 0; j < numPages; ++j) {
-            // No PD yet means nothing in its 1 GB range is mapped
-            uint64_t* pdEntry = getPDEntry((uintptr_t)getVirtAddrFromPageIndex(i + j));
-            if (pdEntry != nullptr && (*pdEntry & MMU_PRESENT)) {
-                free = false;
-                i += j;
-                break;
+        const uint64_t* pdpt = table(pml4Table[i]);
+        for (uint64_t j = 0; j < 512; j++) {
+            uint64_t pdptEntry = pdpt[j];
+            if (!(pdptEntry & MMU_PRESENT))
+                continue;
+            uint64_t base1Gb = canonical((i << 39) | (j << 30));
+            if (pdptEntry & MMU_PDE_TWO_MB) {
+                callback(base1Gb, pdptEntry & 0x000FFFFFC0000000ULL, gigabyte, pdptEntry & flagMask, arg);
+                continue;
+            }
+
+            const uint64_t* pd = table(pdptEntry);
+            for (uint64_t k = 0; k < 512; k++) {
+                uint64_t pdEntry = pd[k];
+                if (!(pdEntry & MMU_PRESENT))
+                    continue;
+                uint64_t base2Mb = base1Gb | (k << 21);
+                if (pdEntry & MMU_PDE_TWO_MB) {
+                    callback(base2Mb, pdEntry & page2MbAddrMask, pageSize2Mb, pdEntry & flagMask, arg);
+                    continue;
+                }
+
+                const uint64_t* pt = table(pdEntry);
+                for (uint64_t l = 0; l < 512; l++) {
+                    if (pt[l] & MMU_PRESENT)
+                        callback(base2Mb | (l << 12), pt[l] & tableAddrMask, 4096, pt[l] & flagMask, arg);
+                }
             }
         }
-        if (free)
-            return i;
     }
-
-    kernelPanic("VMM: findContiguousFreePages: no free area!");
-    return 0;
 }
 
-void* AddressSpace::allocatePages(uint64_t count)
+void AddressSpace::activate() const
 {
-    uint64_t startIndex = findContiguousFreePages(count);
-    mapPages(startIndex, count);
-    return getVirtAddrFromPageIndex(startIndex);
+    writeCr3(m_pml4);
 }
 
-void AddressSpace::freePages(const void* base, uint64_t count)
+bool AddressSpace::isActive() const
 {
-    unmapPages(getPageIndexFromVirtAddr(base), count);
+    return (readCr3() & tableAddrMask) == m_pml4;
 }
-}; // namespace Memory
+
+} // namespace Memory

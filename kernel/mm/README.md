@@ -43,7 +43,8 @@ The **heap** cuts pages into small allocations.
 | Question | Options |
 |---|---|
 | Page size | 4 KB (fine grained, 4 table levels) · **2 MB** (3 levels, fewer tables) · 1 GB |
-| How the kernel edits page tables | identity map them · **recursive mapping** (a PML4 entry points at the PML4 itself) · *physmap*: map all physical memory at a fixed offset (Linux) |
+| How the kernel edits page tables | identity map them · recursive mapping (a PML4 entry points at the PML4 itself) · temporary window (map one table at a time) · **physmap**: map all physical memory at a fixed offset (Linux, FreeBSD) |
+| Page size for user programs | **2 MB like the kernel** (simple, few tables; coarse protection) · 4 KB (fine grained, needed for copy-on-write, `fork`, `mmap`) |
 
 ### Heap
 
@@ -70,26 +71,60 @@ so the self tests build managers over a fake 128 MB "machine".
 - Page tables are 4 KB, a whole 2 MB block for each would waste 2044 KB. So
   the PMM also hands out **4 KB frames**, cut from 2 MB blocks ("frame pools").
 
-**VMM: 2 MB pages + recursive mapping** (`vmm.cpp`). With 2 MB pages there are
-only three table levels (PML4 → PDPT → PD) and far fewer tables to manage.
-To *edit* a table the kernel needs a virtual address for it; recursive mapping
-gives one for free: `PML4[510]` points back at the PML4, so walking through
-slot 510 lands on the tables themselves.
+**VMM: 2 MB pages + a physmap** (`vmm.cpp`). With 2 MB pages there are only
+three table levels (PML4 → PDPT → PD) and far fewer tables to manage; user
+programs use 2 MB pages too.
+
+To *edit* a table the kernel needs a virtual address for it, but entries hold
+*physical* addresses. The **physmap** solves that once: all physical memory
+(up to 64 GB) is mapped at `physmapBase` (`0xFFFF800000000000`, `PML4[256]`),
+so the table at physical `p` is at `physmapBase + p`, whichever address space
+it belongs to and whether it is loaded or not. Its own 64 page directories
+live in the kernel image (`.bss`, 256 KB): they have to exist before the
+physmap does.
+
+Every address space has the same layout:
 
 ```
-Virtual address of the PD for (i, j):   [510][510][i][j]
-  PML4[510] -> PML4 used as a PDPT
-  PDPT[510] -> PML4 used as a PD
-  PD[i]     -> the PDPT of slot i, used as a page table
-  PT[j]     -> the PD we want, seen as a 4 KB page
+PML4[0]        identity map of the first megabytes (boot)    kernel only, shared
+PML4[1..255]   user programs: userBase 0x0000008000000000     per address space
+PML4[256]      physmap: physical memory at 0xFFFF800000000000 shared
+PML4[511]      kernel image, heap, thread stacks (-2 GB)       shared
 ```
 
-`Memory::AddressSpace` owns this: `allocatePages(n)` finds `n` free virtual
-pages above the kernel, backs each with a PMM block and creates missing page
-directories from 4 KB frames. `translate(virt, phys)` walks the tables
-without faulting (also through 4 KB tables: via the recursive slot the tables
-themselves look like 4 KB pages) and `forEachMapping` reports every mapped
-page; the shell's `md`, `mw` and `vmmap` use them.
+A new address space copies the kernel's entries 0 and 256..511, so they point
+at the same PDPTs: a kernel page mapped later shows up everywhere. That is
+also why the kernel half can not get a new PDPT later (it would exist in one
+address space only); the two it needs are there from boot.
+
+`Memory::AddressSpace` holds just the physical address of its PML4:
+
+- `AddressSpace(pmm)` is the kernel's: it takes over boot.S's tables and
+  builds the physmap. `AddressSpace(pmm, kernel)` is a new, empty one for a
+  user program; `activate()` loads it into CR3.
+- Kernel pages: `allocatePages(n)` finds `n` free virtual pages above the
+  kernel image and backs each with a PMM block; `mapPhysical` maps a given
+  physical page (MMIO) without the PMM.
+- User pages: `allocateAt(virt, n, flags)` maps zeroed blocks in the user
+  range, `Writable` and `User` (ring 3) as asked; the tables above get the
+  user bit, the PD entry decides.
+- An unused bit of the entry (bit 9) marks pages whose block the address
+  space owns: unmapping or destroying it gives those back, never a
+  `mapPhysical` page. The destructor also frees its PDs and PDPTs.
+- `translate(virt, phys)` walks the tables without faulting and
+  `forEachMapping` reports every mapped page; the shell's `md`, `mw` and
+  `vmmap` use them.
+
+#### Why not the recursive mapping any more
+
+Earlier atlOS reached its tables through a recursive slot: `PML4[510]` pointed
+back at the PML4, so addresses through slot 510 landed on the tables
+themselves (`[510][510][i][j]` was the PD for `(i, j)`). It needs no
+memory and no physical address mapping, but it only shows the tables loaded
+in CR3. Building a second address space for a program would mean switching
+CR3 to it (and back) for every edit, or a second recursive slot pointing at
+the other PML4. The physmap costs 256 KB of tables and makes every table, of
+every address space, one addition away.
 
 **Heap: liballoc 1.1.** Writing a good general allocator is a project of its
 own; liballoc is small, public domain and needs only four hooks
@@ -99,10 +134,11 @@ own; liballoc is small, public domain and needs only four hooks
 
 ### Deliberately not done
 
-- No 4 KB pages: fine for a kernel, not enough for user programs.
-- Recursive mapping only reaches the **active** tables (CR3). A second address
-  space (a process) needs another approach; Linux maps all physical memory
-  (physmap) instead.
+- No 4 KB pages: user programs use 2 MB pages as well, so even a tiny program
+  takes a few MB (code, data and stack need separate pages: protection is per
+  page). 4 KB come with copy-on-write, `fork` or `mmap`.
+- The physmap covers 64 GB; the PMM manages no more than that.
+- No NX (no-execute) bit yet; no `PCID`, so a CR3 switch flushes the TLB.
 - No buddy allocator, no NUMA, no swapping, no copy-on-write.
 - The PMM scan is linear; with 256 blocks (512 MB) nobody notices.
 
@@ -137,7 +173,7 @@ flowchart TD
     A[GRUB: multiboot2 memory map] --> B[PhysicalMemoryManager: everything used]
     B --> C[addRegion for each AVAILABLE range]
     C --> D[reserveRegion: kernel image, multiboot info]
-    D --> E[AddressSpace: install recursive mapping in PML4]
+    D --> E[AddressSpace: physmap in PML4 256]
     E --> F[setHeapAddressSpace: kmalloc can now get pages]
 ```
 
@@ -149,6 +185,11 @@ flowchart TD
   exhaustion, double frees, first fit, frame pools and their limit.
 - *PMM from a multiboot memory map*: a hand built multiboot2 structure.
 - *VMM*: allocate, write, free, translate, map the same physical page twice.
+- *VMM translate and mappings*: the physmap, physical 0 vs unmapped, the
+  mapping list.
+- *Address spaces*: a second one shares the kernel half and the identity
+  map, user pages only in the user range, zeroed, built while inactive and
+  seen after `activate()`, flags, everything given back by the destructor.
 - *Heap*: sizes from 1 byte to 3 MB, `krealloc`, `kcalloc`.
 
 ## References

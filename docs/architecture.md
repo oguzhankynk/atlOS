@@ -46,8 +46,9 @@ at their physical address and everything else at
 
 | Virtual range | Contents |
 |---|---|
-| `0x0 .. kernel_physical_end` | identity map from boot (multiboot info, boot tables) |
-| `0xFFFFFF0000000000` (PML4[510]) | recursive mapping of the page tables |
+| `0x0 .. kernel_physical_end` | identity map from boot (multiboot info, boot tables), kernel only |
+| `0x0000008000000000 .. 0x00007FFFFFFFFFFF` (PML4[1..255]) | user programs (per address space) |
+| `0xFFFF800000000000 .. + 64 GB` (PML4[256]) | physmap: all physical memory, how page tables are edited |
 | `0xFFFFFFFF80000000 .. kernel_virtual_end` | kernel image |
 | `kernel_virtual_end .. 0xFFFFFFFFFFFFFFFF` | kernel heap, thread stacks, `mapPhysical` mappings (2 MB pages) |
 

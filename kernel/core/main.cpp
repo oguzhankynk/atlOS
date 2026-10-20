@@ -80,7 +80,8 @@ static Cxx::Uninitialized<Shell::Interpreter> s_shell;
 static Cxx::Uninitialized<Fs::Vfs> s_vfs;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
-static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL * 1024 * 1024 * 1024)];
+// As much memory as the physmap covers: page tables are written through it
+static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(Memory::physmapSize)];
 
 /**
  * @brief entry point of atlOS
