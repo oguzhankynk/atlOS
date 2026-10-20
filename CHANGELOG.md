@@ -7,6 +7,12 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+User programs: static ELF64 files from the disk run in ring 3, each in an
+address space of its own (physmap, shared kernel half), with `int 0x80`
+system calls; a guide to writing them; a new banner.
+
 ### Added
 
 - Physmap: all physical memory (up to 64 GB) at `0xFFFF800000000000`, with
@@ -176,6 +182,7 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzhankynk/atlOS/releases/tag/v0.1.0

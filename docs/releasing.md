@@ -50,6 +50,8 @@ same binary). Doxygen gets the version through `ATLOS_VERSION`.
    git tag -a vX.Y.Z -m "atlOS X.Y.Z"
    git push origin master development vX.Y.Z
    git checkout development
+   git merge --ff-only master     # the tag is then reachable from development:
+   git push origin development     # git describe says vX.Y.Z-N-g<hash>, not just <hash>
    ```
 
 Pushing the tag starts the release workflow (`.github/workflows/release.yml`).

@@ -54,14 +54,7 @@ cmake --build --preset default --target run
 ```
 
 `scripts/build.sh run` shows the boot messages, then the shell, on the
-terminal:
-
-<details>
-<summary>Screenshot: boot and the shell over the serial port</summary>
-
-<img src="docs/images/ss.png" alt="atlOS booting in QEMU: boot messages, the banner, help and version in the shell" width="600">
-
-</details>
+terminal (see the [screenshot](#screenshot) below).
 
 ## Source layout
 
