@@ -21,24 +21,19 @@
 #include <stdio.h>
 
 // ANSI colors: serial terminals show them, VGATextConsole understands them too
-#define PICTURE "\x1b[93m" // bright yellow
-#define NAME "\x1b[97m" // bright white
+#define NAME "\x1b[93m" // bright yellow
+#define BRIGHT "\x1b[97m" // bright white
 #define DIM "\x1b[37m"
 #define RESET "\x1b[0m"
 
-// Made by scripts/make-banner.py (half blocks: two pixels per character cell)
+// Plain ASCII: the same on the VGA screen and on any serial terminal
 static const char* const s_banner[] = {
-    PICTURE "          ▄▄▄▄          " NAME "" RESET,
-    PICTURE "         ▄██▀▀█▄▄       " NAME "" RESET,
-    PICTURE "       ▄███▀   ▀▀▀█▄▄   " NAME "" RESET,
-    PICTURE "    ▄▄█▀▀▄▄      ▄▄ █▄  " NAME "             ▄█     █▄     ▄▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄" RESET,
-    PICTURE "  ▄█▀▄▄ ▀▀       ▀▀▀ █▄ " NAME "   ████████▄ █████▄ ██    ██▀▀▀▀▀▀██▄▄██▀▀▀▀▀▀▀▀" RESET,
-    PICTURE "   ▄ ▀▄█              ██" NAME "    ▄▄▄▄▄▄██ ██▀▀▀  ██   ███       ██▀██▄▄▄▄▄▄▄" RESET,
-    PICTURE "  ▀▀▄▄                █▀" NAME "  ▄██▀▀▀▀▀██ ██▄    ██   ███       ██ ▀▀▀▀▀▀▀▀██" RESET,
-    PICTURE " ▄▀ ▀         ▄▄██▄▄▄█▀ " NAME "   █████████ ▀█████ █████ ██████████▀ █████████▀" RESET,
-    PICTURE "            ▄██    ██▀  " NAME "" RESET,
-    PICTURE "             ▀▀█        " NAME "" RESET,
-    PICTURE "                ▀       " NAME "" RESET,
+    NAME "          _   _  _____  _____ " RESET,
+    NAME "         | | | ||  _  |/  ___|" RESET,
+    NAME "     __ _| |_| || | | |\\ `--. " RESET,
+    NAME "    / _` | __| || | | | `--. \\" RESET,
+    NAME "   | (_| | |_| |\\ \\_/ //\\__/ /" RESET,
+    NAME "    \\__,_|\\__|_| \\___/ \\____/ " RESET,
 };
 
 void atlOSBootLine()
@@ -51,6 +46,6 @@ void atlOSBanner()
     printf("\n");
     for (const char* line : s_banner)
         printf("%s\n", line);
-    printf("\n  " NAME "atlOS %s" RESET DIM " (%s)  x86_64, a small kernel to learn how an OS works" RESET "\n\n",
+    printf("\n  " BRIGHT "atlOS %s" RESET DIM " (%s)  x86_64, a small kernel to learn how an OS works" RESET "\n\n",
         ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
 }

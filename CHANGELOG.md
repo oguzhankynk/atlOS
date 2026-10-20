@@ -32,10 +32,9 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ### Changed
 
-- A new banner, drawn with half block characters in color
-  (`scripts/make-banner.py`); the shell clears the screen and shows it with
-  the version, free memory and mounted disks; the boot starts with a
-  one line version message
+- A new banner in plain ASCII, in color; the shell clears the screen and
+  shows it with the version, free memory and mounted disks; the boot starts
+  with a one line version message
 - `VGATextConsole` understands ANSI colors and UTF-8 block characters, so
   the screen and a serial terminal show the same output
 - `tasks` and `vmmap` lines fit 80 columns
