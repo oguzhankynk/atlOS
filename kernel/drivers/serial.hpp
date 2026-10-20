@@ -22,7 +22,9 @@
 
 #pragma once
 
+#include <drivers/character_queue.hpp>
 #include <drivers/character_sink.hpp>
+#include <drivers/interrupt_controller.hpp>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -42,13 +44,21 @@ public:
     /// False if the loopback test failed; writes are dropped then
     bool isPresent() const { return m_present; }
 
+    /// Write data; "\n" goes out as "\r\n", what serial terminals expect.
     void write(const char* data, size_t size) override;
 
-    /// Wait for and return one received byte
-    char read();
+    /**
+     * @brief Push every received byte into queue, from the port's IRQ
+     * (Irq::COM1 or Irq::COM2). Does nothing if the port is not present.
+     */
+    void startReceiving(InterruptController& controller, CharacterQueue& queue);
 
 private:
+    static void onInterrupt(void* port);
     bool isTransmitEmpty() const;
+    void writeByte(char c);
+
+    CharacterQueue* m_queue {};
 
     uint16_t m_port;
     bool m_present { false };

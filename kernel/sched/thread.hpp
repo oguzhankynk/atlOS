@@ -50,6 +50,11 @@ struct TCB {
     Registers regs; // Must stay first, switchTask takes &regs
     ThreadState state;
     uint64_t wakeTick; // Scheduler::ticks() value to leave Sleeping at
+
+    // For task listings (the shell's "tasks")
+    const char* name;
+    uintptr_t stackBase; // 0: not a Thread's stack (the boot flow)
+    uint64_t stackSize;
 };
 
 class ThreadImpl;

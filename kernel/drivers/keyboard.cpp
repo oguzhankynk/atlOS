@@ -7,7 +7,6 @@
 #include <drivers/keyboard.hpp>
 
 #include <arch/x86_64/io/ioport.hpp>
-#include <sync/interrupt_guard.hpp>
 
 namespace Drivers {
 
@@ -16,8 +15,8 @@ static constexpr uint16_t dataPort = 0x60;
 static constexpr uint16_t statusPort = 0x64;
 static constexpr uint8_t outputFull = 1 << 0; // status: a byte is waiting at dataPort
 
-PS2Keyboard::PS2Keyboard(InterruptController& controller, Threading::Scheduler& scheduler)
-    : m_available(scheduler, 0, bufferSize)
+PS2Keyboard::PS2Keyboard(InterruptController& controller, CharacterQueue& queue)
+    : m_queue(queue)
 {
     // Bytes left over from the firmware would otherwise keep IRQ 1 from firing again
     while (IOPort::inportb(statusPort) & outputFull)
@@ -32,48 +31,39 @@ void PS2Keyboard::onInterrupt(void* keyboard)
     static_cast<PS2Keyboard*>(keyboard)->handleScancode(IOPort::inportb(dataPort));
 }
 
+// Extended make code of an arrow key -> the last byte of its ANSI sequence
+static char arrowFinalByte(uint8_t code)
+{
+    switch (code) {
+    case 0x48:
+        return 'A'; // up
+    case 0x50:
+        return 'B'; // down
+    case 0x4D:
+        return 'C'; // right
+    case 0x4B:
+        return 'D'; // left
+    default:
+        return 0;
+    }
+}
+
 void PS2Keyboard::handleScancode(uint8_t byte)
 {
     KeyEvent event;
-    if (!m_decoder.feed(byte, event) || !event.character)
+    if (!m_decoder.feed(byte, event) || !event.pressed)
         return;
 
-    // Also called by threads in the self tests: the buffer is shared with the IRQ
-    Sync::InterruptGuard guard;
-
-    if (m_count == bufferSize) {
-        m_dropped++;
+    if (event.character) {
+        m_queue.push(event.character);
         return;
     }
 
-    m_buffer[(m_head + m_count) % bufferSize] = event.character;
-    m_count++;
-    m_available.give();
-}
-
-char PS2Keyboard::pop()
-{
-    Sync::InterruptGuard guard;
-
-    char c = m_buffer[m_head];
-    m_head = (m_head + 1) % bufferSize;
-    m_count--;
-    return c;
-}
-
-char PS2Keyboard::read()
-{
-    // A unit means a character is in the buffer and nobody else will pop it
-    m_available.take();
-    return pop();
-}
-
-bool PS2Keyboard::tryRead(char& c)
-{
-    if (!m_available.tryTake())
-        return false;
-    c = pop();
-    return true;
+    char arrow = event.extended ? arrowFinalByte(event.code) : static_cast<char>(0);
+    if (arrow) {
+        const char sequence[3] = { '\x1b', '[', arrow };
+        m_queue.push(sequence, sizeof(sequence));
+    }
 }
 
 } // namespace Drivers

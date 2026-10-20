@@ -30,8 +30,8 @@
    9. constructs the `Threading::Scheduler` on the PIT (the boot flow becomes
       task 0, 1 ms tick)
    10. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
-       or the demo: lists the mounted disks, constructs the
-       `Drivers::PS2Keyboard` and echoes what is typed
+       or the shell: a `CharacterQueue` fed by the keyboard and COM1, and
+       `Shell::Interpreter` running in the boot flow (see `kernel/shell/README.md`)
 
    `kernelMain` is the composition root: driver objects live in
    `Cxx::Uninitialized<T>` storage, are constructed there explicitly in

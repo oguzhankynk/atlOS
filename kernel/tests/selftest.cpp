@@ -41,6 +41,9 @@
 #include <mm/vmm.hpp>
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
+#include <shell/interpreter.hpp>
+#include <shell/line_editor.hpp>
+#include <shell/parser.hpp>
 #include <sync/atomic.hpp>
 #include <sync/condition_variable.hpp>
 #include <sync/interrupt_guard.hpp>
@@ -587,9 +590,23 @@ public:
     }
 
     const char* text() const { return m_text; }
+    bool contains(const char* part) const
+    {
+        size_t length = strlen(part);
+        for (size_t i = 0; i + length <= m_length; i++) {
+            if (!memcmp(m_text + i, part, length))
+                return true;
+        }
+        return false;
+    }
+    void clear()
+    {
+        m_length = 0;
+        m_text[0] = '\0';
+    }
 
 private:
-    char m_text[64] {};
+    char m_text[8192] {};
     size_t m_length {};
 };
 
@@ -1016,6 +1033,7 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
     scheduler.sleep(20);
     uint64_t waited = scheduler.ticks() - t0;
     CHECK(waited >= 20);
+    CHECK(scheduler.current().state == ThreadState::Running); // not left Ready after waking up
     CHECK(waited < 120);
 
     // A sleeping thread is skipped until its time is up
@@ -1601,8 +1619,8 @@ static void testScancodeDecoder()
 static void typeText(Drivers::PS2Keyboard& keyboard, const char* text)
 {
     // Only lowercase letters and space, enough for the tests
-    static const uint8_t s_letters[] = { 0x1E, 0x30, 0x2E, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32,
-        0x31, 0x18, 0x19, 0x10, 0x13, 0x1F, 0x14, 0x16, 0x2F, 0x11, 0x2D, 0x15, 0x2C };
+    static const uint8_t s_letters[] = { 0x1E, 0x30, 0x2E, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26,
+        0x32, 0x31, 0x18, 0x19, 0x10, 0x13, 0x1F, 0x14, 0x16, 0x2F, 0x11, 0x2D, 0x15, 0x2C };
     for (; *text; text++) {
         uint8_t code = *text == ' ' ? 0x39 : s_letters[*text - 'a'];
         keyboard.handleScancode(code);
@@ -1610,36 +1628,53 @@ static void typeText(Drivers::PS2Keyboard& keyboard, const char* text)
     }
 }
 
-static Drivers::PS2Keyboard* s_keyboard {};
+static Drivers::CharacterQueue* s_queue {};
 static char s_line[8] {};
 
 static void lineReader(Scheduler& scheduler)
 {
     for (int i = 0; i < 3; i++)
-        s_line[i] = s_keyboard->read();
+        s_line[i] = s_queue->read();
 }
 
 static void testKeyboard(AddressSpace& space)
 {
-    group("PS/2 keyboard (fake interrupt controller)");
+    group("PS/2 keyboard and the character queue (fake interrupt controller)");
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
     FakeInterruptController controller;
-    Drivers::PS2Keyboard keyboard(controller, scheduler);
+    Drivers::CharacterQueue queue(scheduler);
+    Drivers::PS2Keyboard keyboard(controller, queue);
     CHECK(controller.attachedIrq == Drivers::Irq::Keyboard);
     CHECK(controller.unmaskedIrq == Drivers::Irq::Keyboard);
     CHECK(controller.attachedArg == &keyboard);
 
     char c = 0;
-    CHECK(!keyboard.tryRead(c));
+    CHECK(!queue.tryRead(c));
     typeText(keyboard, "hi");
-    CHECK(keyboard.tryRead(c) && c == 'h');
-    CHECK(keyboard.tryRead(c) && c == 'i');
-    CHECK(!keyboard.tryRead(c));
+    CHECK(queue.tryRead(c) && c == 'h');
+    CHECK(queue.tryRead(c) && c == 'i');
+    CHECK(!queue.tryRead(c));
+
+    // Arrow keys arrive as the ANSI sequences a serial terminal sends
+    const uint8_t up[] = { 0xE0, 0x48, 0xE0, 0xC8 };
+    for (uint8_t byte : up)
+        keyboard.handleScancode(byte);
+    char sequence[3] {};
+    CHECK(queue.size() == 3);
+    CHECK(queue.tryRead(sequence[0]) && queue.tryRead(sequence[1]) && queue.tryRead(sequence[2]));
+    CHECK(sequence[0] == '\x1b' && sequence[1] == '[' && sequence[2] == 'A');
+    keyboard.handleScancode(0xE0);
+    keyboard.handleScancode(0x4B); // left
+    CHECK(queue.size() == 3);
+    while (queue.tryRead(c)) {
+    }
+    keyboard.handleScancode(0x3B); // F1: nothing
+    CHECK(queue.size() == 0);
 
     // A reader waits without spinning until the "interrupt" brings characters
-    s_keyboard = &keyboard;
+    s_queue = &queue;
     memset(s_line, 0, sizeof(s_line));
     Thread* t = new Thread(scheduler, space, lineReader);
     scheduler.yield();
@@ -1650,23 +1685,25 @@ static void testKeyboard(AddressSpace& space)
     scheduler.yield();
     CHECK(s_line[0] == 'o' && s_line[1] == 'k');
     CHECK(t->getTCB().state == ThreadState::Blocked);
-    typeText(keyboard, "x");
+    CHECK(queue.push('x')); // the serial port pushes into the same queue
     CHECK(waitForExit(scheduler, *t, 1000));
     CHECK(s_line[2] == 'x');
     delete t;
 
-    // Full buffer: new characters are dropped, the typed ones keep their order
-    for (uint32_t i = 0; i < Drivers::PS2Keyboard::bufferSize + 5; i++)
-        typeText(keyboard, i % 2 ? "b" : "a");
-    CHECK(keyboard.droppedCount() == 5);
+    // Full: new characters are dropped, the queued ones keep their order;
+    // a sequence goes in whole or not at all
+    for (uint32_t i = 0; i < Drivers::CharacterQueue::capacity - 1; i++)
+        queue.push(i % 2 ? 'b' : 'a');
+    CHECK(!queue.push("\x1b[A", 3));
+    CHECK(queue.push('z'));
+    CHECK(!queue.push('!'));
+    CHECK(queue.droppedCount() == 4);
     bool inOrder = true;
-    for (uint32_t i = 0; i < Drivers::PS2Keyboard::bufferSize; i++)
-        inOrder = inOrder && keyboard.tryRead(c) && c == (i % 2 ? 'b' : 'a');
+    for (uint32_t i = 0; i < Drivers::CharacterQueue::capacity - 1; i++)
+        inOrder = inOrder && queue.tryRead(c) && c == (i % 2 ? 'b' : 'a');
     CHECK(inOrder);
-    CHECK(!keyboard.tryRead(c));
-
-    // The IRQ handler the driver registered reads the data port; just check it is ours
-    CHECK(controller.attachedHandler != nullptr);
+    CHECK(queue.tryRead(c) && c == 'z');
+    CHECK(!queue.tryRead(c));
 }
 
 // ------------------------------------------------------------
@@ -2232,6 +2269,313 @@ static void testAtaDisk(Fs::Vfs& vfs)
     CHECK(vfs.removeDirectory("/disk0/KERNEL/TMP"));
 }
 
+// ------------------------------------------------------------
+// Address translation and the mapping list (used by md, mw, vmmap)
+// ------------------------------------------------------------
+
+static void countMapping(uint64_t virtAddr, uint64_t physAddr, uint64_t size, uint64_t flags, void* arg)
+{
+    auto* found = static_cast<uint64_t*>(arg);
+    found[0]++;
+    uint64_t text = (uint64_t)&_text_start;
+    if (text >= virtAddr && text < virtAddr + size)
+        found[1] = physAddr + (text - virtAddr);
+    if (virtAddr == 0)
+        found[2] = 1; // the identity mapping of the first megabytes
+}
+
+static void testTranslate(AddressSpace& space)
+{
+    group("VMM translate and mappings");
+
+    uint64_t phys = 1;
+    uint64_t text = (uint64_t)&_text_start;
+    CHECK(space.translate(&_text_start, phys) && phys == text - KERNEL_VIRTUAL_LOAD_OFFSET);
+    CHECK(space.translate((const void*)0, phys) && phys == 0); // mapped at physical 0: not nullptr
+    CHECK(space.virtToPhys((const void*)0) == nullptr); // which is why translate exists
+    CHECK(!space.translate((const void*)0xDEAD0000, phys));
+    CHECK(!space.translate((const void*)0x0000800000000000ULL, phys)); // not canonical
+
+    // The page tables themselves through the recursive slot: 4 KB "pages"
+    CHECK(space.translate((const void*)0xFFFFFF7FBFDFE000ULL, phys)); // PML4 at [510][510][510][510]
+
+    uint64_t found[3] {};
+    space.forEachMapping(countMapping, found);
+    CHECK(found[0] > 2);
+    CHECK(found[1] == text - KERNEL_VIRTUAL_LOAD_OFFSET);
+    CHECK(found[2] == 1);
+}
+
+// ------------------------------------------------------------
+// Shell
+// ------------------------------------------------------------
+
+static void testShellParser()
+{
+    group("Shell parser");
+    using Shell::parseNumber;
+    using Shell::splitWords;
+
+    char* words[4];
+    char line1[] = "  ls   /disk0\t-l ";
+    CHECK(splitWords(line1, words, 4) == 3);
+    CHECK(!strcmp(words[0], "ls") && !strcmp(words[1], "/disk0") && !strcmp(words[2], "-l"));
+
+    char line2[] = "echo \"two words\" x\"y z\"w";
+    CHECK(splitWords(line2, words, 4) == 3);
+    CHECK(!strcmp(words[1], "two words") && !strcmp(words[2], "xy zw"));
+
+    char empty[] = "   ";
+    CHECK(splitWords(empty, words, 4) == 0);
+    char unterminated[] = "echo \"oops";
+    CHECK(splitWords(unterminated, words, 4) == -1);
+    char tooMany[] = "a b c d e";
+    CHECK(splitWords(tooMany, words, 4) == -1);
+    char emptyQuotes[] = "a \"\" b";
+    CHECK(splitWords(emptyQuotes, words, 4) == 3 && words[1][0] == '\0');
+
+    uint64_t value = 0;
+    CHECK(parseNumber("0", value) && value == 0);
+    CHECK(parseNumber("1234", value) && value == 1234);
+    CHECK(parseNumber("0xb8000", value) && value == 0xB8000);
+    CHECK(parseNumber("0XFFFFFFFF80000000", value) && value == 0xFFFFFFFF80000000ULL);
+    CHECK(parseNumber("0xffffffffffffffff", value) && value == UINT64_MAX);
+    CHECK(!parseNumber("0x10000000000000000", value)); // overflow
+    CHECK(!parseNumber("18446744073709551616", value));
+    CHECK(!parseNumber("", value));
+    CHECK(!parseNumber("0x", value));
+    CHECK(!parseNumber("12a", value));
+    CHECK(!parseNumber("-1", value));
+}
+
+static Shell::LineEditor::Result feedText(Shell::LineEditor& editor, const char* text)
+{
+    Shell::LineEditor::Result result = Shell::LineEditor::Result::Continue;
+    for (; *text; text++)
+        result = editor.feed(*text);
+    return result;
+}
+
+static void testLineEditor()
+{
+    group("Shell line editor");
+    using Result = Shell::LineEditor::Result;
+
+    static Shell::LineEditor s_editor;
+    s_editor = {};
+    FakeSink sink;
+    Drivers::CharacterSink* previous = Core::setConsole(sink);
+
+    s_editor.start();
+    CHECK(feedText(s_editor, "lx") == Result::Continue);
+    CHECK(feedText(s_editor, "\bs") == Result::Continue); // backspace
+    bool echoed = sink.contains("lx\b \bs");
+    Result result = s_editor.feed('\r');
+    bool line = !strcmp(s_editor.line(), "ls");
+
+    // DEL (what terminals send for Backspace) and "\r\n" as one Enter
+    s_editor.start();
+    CHECK(feedText(s_editor, "pwdd\x7f") == Result::Continue);
+    Result crlf = feedText(s_editor, "\r");
+    bool pwd = !strcmp(s_editor.line(), "pwd");
+    s_editor.start();
+    Result afterCrlf = s_editor.feed('\n'); // the \n of \r\n: ignored
+
+    // Ctrl+C drops the line; other escape sequences are skipped
+    s_editor.start();
+    Result cancelled = feedText(s_editor, "junk\x03");
+    s_editor.start();
+    feedText(s_editor, "a\x1b[3~b\x1b[Cc\r"); // Delete and right arrow: ignored
+    bool skipped = !strcmp(s_editor.line(), "abc");
+
+    // History: up goes back, down forward, then to an empty line
+    s_editor.start();
+    feedText(s_editor, "\x1b[A");
+    bool up1 = !strcmp(s_editor.line(), "abc");
+    feedText(s_editor, "\x1b[A");
+    bool up2 = !strcmp(s_editor.line(), "pwd");
+    feedText(s_editor, "\x1b[A\x1b[A\x1b[A"); // past the oldest: stays
+    bool oldest = !strcmp(s_editor.line(), "ls");
+    feedText(s_editor, "\x1b[B");
+    bool down = !strcmp(s_editor.line(), "pwd");
+    feedText(s_editor, "\x1b[B\x1b[B");
+    bool back = s_editor.line()[0] == '\0';
+    uint32_t count = s_editor.historyCount();
+
+    // The same line twice is kept once; the history drops the oldest when full
+    s_editor.start();
+    feedText(s_editor, "abc\r");
+    uint32_t noDuplicate = s_editor.historyCount();
+    for (int i = 0; i < 20; i++) {
+        char text[8];
+        snprintf(text, sizeof(text), "c%d\r", i);
+        s_editor.start();
+        feedText(s_editor, text);
+    }
+    s_editor.start();
+    feedText(s_editor, "\x1b[A");
+    bool newest = !strcmp(s_editor.line(), "c19");
+
+    // Overlong input stops at maxLength
+    s_editor.start();
+    for (uint32_t i = 0; i < Shell::LineEditor::maxLength + 10; i++)
+        s_editor.feed('x');
+    bool capped = strlen(s_editor.line()) == Shell::LineEditor::maxLength;
+
+    Core::setConsole(*previous);
+    CHECK(echoed && result == Result::Done && line);
+    CHECK(crlf == Result::Done && pwd && afterCrlf == Result::Continue);
+    CHECK(cancelled == Result::Cancelled && sink.contains("^C"));
+    CHECK(skipped);
+    CHECK(up1 && up2 && oldest && down && back && count == 3);
+    CHECK(noDuplicate == 3);
+    CHECK(newest && s_editor.historyCount() == Shell::LineEditor::historySize);
+    CHECK(capped);
+}
+
+static void longSleeper(Scheduler& scheduler)
+{
+    scheduler.sleep(100000);
+}
+
+// Run one command line, return what it printed
+static const char* runCommand(Shell::Interpreter& shell, FakeSink& sink, const char* command)
+{
+    char line[Shell::LineEditor::maxLength + 1];
+    strncpy(line, command, sizeof(line) - 1);
+    line[sizeof(line) - 1] = '\0';
+    sink.clear();
+    shell.execute(line);
+    return sink.text();
+}
+
+static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler& scheduler)
+{
+    group("Shell commands (RAM disk)");
+
+    auto* image = static_cast<uint8_t*>(kmalloc((size_t)fatTotalSectors * sectorSize));
+    CHECK(image != nullptr);
+    if (!image)
+        return;
+    buildFat16(image, fatTotalSectors);
+    Drivers::MemoryBlockDevice volume(image, fatTotalSectors);
+    Fs::Fat16 fat(volume);
+    CHECK(fat.mount());
+    Fs::Vfs vfs;
+    CHECK(vfs.mount("ram", fat));
+
+    FakeTickSource ticks;
+    Scheduler isolated(ticks);
+    Drivers::CharacterQueue input(isolated);
+    Shell::Context context { pmm, space, scheduler, vfs, nullptr, nullptr };
+    static Cxx::Uninitialized<Shell::Interpreter> s_shell;
+    Shell::Interpreter& shell = s_shell.construct(input, context);
+
+    // Paths are made absolute against the current directory
+    char path[Shell::Interpreter::maxPath];
+    CHECK(shell.resolvePath("a/b", path, sizeof(path)) && !strcmp(path, "/a/b"));
+    CHECK(shell.resolvePath("/x/./y//z/", path, sizeof(path)) && !strcmp(path, "/x/y/z"));
+    CHECK(shell.resolvePath("/x/../..", path, sizeof(path)) && !strcmp(path, "/"));
+    CHECK(shell.changeDirectory("/ram/SUBDIR"));
+    CHECK(shell.resolvePath("NESTED.TXT", path, sizeof(path)) && !strcmp(path, "/ram/SUBDIR/NESTED.TXT"));
+    CHECK(shell.resolvePath("..", path, sizeof(path)) && !strcmp(path, "/ram"));
+    CHECK(!shell.resolvePath("/a", path, 2));
+    CHECK(!shell.changeDirectory("/ram/HELLO.TXT"));
+    CHECK(!shell.changeDirectory("/nope"));
+    CHECK(!strcmp(shell.currentDirectory(), "/ram/SUBDIR"));
+
+    FakeSink sink;
+    Drivers::CharacterSink* previous = Core::setConsole(sink);
+
+    bool pwd = !strcmp(runCommand(shell, sink, "pwd"), "/ram/SUBDIR\n");
+    bool cdUp = runCommand(shell, sink, "cd ..")[0] == '\0' && !strcmp(shell.currentDirectory(), "/ram");
+    bool ls;
+    runCommand(shell, sink, "ls");
+    ls = sink.contains("HELLO.TXT") && sink.contains("SUBDIR/") && sink.contains("1300");
+    bool lsRoot = (runCommand(shell, sink, "ls /"), sink.contains("ram/"));
+    bool cat = !strcmp(runCommand(shell, sink, "cat HELLO.TXT"), "Hello, FAT16!");
+    bool catNested = !strcmp(runCommand(shell, sink, "cat SUBDIR/NESTED.TXT"), "nested\n");
+    bool catMissing = (runCommand(shell, sink, "cat NOPE.TXT"), sink.contains("can not read"));
+
+    // Writing files and directories
+    runCommand(shell, sink, "mkdir NOTES");
+    runCommand(shell, sink, "echo first line > NOTES/A.TXT");
+    runCommand(shell, sink, "echo \"second  line\" >> NOTES/A.TXT");
+    bool appended = !strcmp(runCommand(shell, sink, "cat /ram/NOTES/A.TXT"), "first line\nsecond  line\n");
+    runCommand(shell, sink, "echo replaced > NOTES/A.TXT");
+    bool replaced = !strcmp(runCommand(shell, sink, "cat NOTES/A.TXT"), "replaced\n");
+    runCommand(shell, sink, "touch NOTES/B.TXT");
+    bool touched = (runCommand(shell, sink, "ls NOTES"), sink.contains("B.TXT"));
+    bool notEmpty = (runCommand(shell, sink, "rmdir NOTES"), sink.contains("not an empty directory"));
+    runCommand(shell, sink, "rm NOTES/A.TXT");
+    runCommand(shell, sink, "rm NOTES/B.TXT");
+    bool removed = runCommand(shell, sink, "rmdir NOTES")[0] == '\0';
+    Fs::FileInfo info;
+    bool gone = !vfs.stat("/ram/NOTES", info);
+    bool echo = !strcmp(runCommand(shell, sink, "echo  a   b "), "a b\n");
+    bool mount = (runCommand(shell, sink, "mount"), sink.contains("/ram") && sink.contains("fat16"));
+
+    // Memory: dump and write a buffer of our own; unmapped memory is refused
+    static uint8_t s_bytes[32];
+    for (uint32_t i = 0; i < sizeof(s_bytes); i++)
+        s_bytes[i] = (uint8_t)('A' + i);
+    char command[64];
+    snprintf(command, sizeof(command), "md 0x%lx 20", (uint64_t)s_bytes);
+    runCommand(shell, sink, command);
+    bool dump = sink.contains("41 42 43 44 45 46 47 48  49 4a") && sink.contains("|ABCDEFGHIJKLMNOP|")
+        && sink.contains("|QRST|");
+    snprintf(command, sizeof(command), "mw 0x%lx 0x7a", (uint64_t)s_bytes);
+    runCommand(shell, sink, command);
+    snprintf(command, sizeof(command), "mw 0x%lx 0x1122334455667788 8", (uint64_t)(s_bytes + 8));
+    runCommand(shell, sink, command);
+    uint64_t wide;
+    memcpy(&wide, s_bytes + 8, 8);
+    bool written = s_bytes[0] == 'z' && wide == 0x1122334455667788ULL;
+    snprintf(command, sizeof(command), "mw 0x%lx 0x100", (uint64_t)s_bytes);
+    bool tooWide = (runCommand(shell, sink, command), sink.contains("does not fit")) && s_bytes[1] == 'B';
+    snprintf(command, sizeof(command), "mw 0x%lx 1 4", (uint64_t)(s_bytes + 1));
+    bool unaligned = (runCommand(shell, sink, command), sink.contains("aligned"));
+    bool unmapped = (runCommand(shell, sink, "md 0xdead0000 16"), sink.contains("0x00000000dead0000: not mapped"));
+    bool unmappedWrite = (runCommand(shell, sink, "mw 0xdead0000 1"), sink.contains("not mapped"));
+    bool badNumber = (runCommand(shell, sink, "md zzz"), sink.contains("are numbers"));
+    bool mem = (runCommand(shell, sink, "mem"), sink.contains("physical:") && sink.contains(".text"));
+    bool vmmap = (runCommand(shell, sink, "vmmap"), sink.contains("ffffffff80000000") && sink.contains("2M"));
+
+    // System and errors
+    // A second task, asleep on the kernel scheduler, shows up with its name and wake up time
+    Thread* sleeper = new Thread(scheduler, space, longSleeper);
+    scheduler.yield();
+    runCommand(shell, sink, "tasks");
+    bool threads = sink.contains("*0") && sink.contains("kernel") && sink.contains("running")
+        && sink.contains(sleeper->getName()) && sink.contains("sleeping") && sink.contains(" ms")
+        && sink.contains("+2048 KB") && sink.contains("2 task(s)");
+    bool ps = (runCommand(shell, sink, "ps"), sink.contains("sleeping"));
+    scheduler.removeTask(*sleeper);
+    delete sleeper;
+    bool help = (runCommand(shell, sink, "help"), sink.contains("md addr [len]") && sink.contains("vmmap"));
+    bool version = (runCommand(shell, sink, "version"), sink.contains("atlOS 0."));
+    bool unknown = (runCommand(shell, sink, "frobnicate"), sink.contains("unknown command"));
+    bool usageShown = (runCommand(shell, sink, "cat"), sink.contains("usage: cat file"));
+    bool quote = (runCommand(shell, sink, "echo \"open"), sink.contains("missing \""));
+    bool nothing = runCommand(shell, sink, "   ")[0] == '\0';
+
+    Core::setConsole(*previous);
+    CHECK(pwd && cdUp && ls && lsRoot);
+    CHECK(cat && catNested && catMissing);
+    CHECK(appended && replaced && touched && notEmpty && removed && gone);
+    CHECK(echo && mount);
+    CHECK(dump && written && tooWide && unaligned);
+    CHECK(unmapped && unmappedWrite && badNumber);
+    CHECK(mem && vmmap);
+    CHECK(threads);
+    CHECK(ps);
+    CHECK(help);
+    CHECK(version);
+    CHECK(unknown && usageShown && quote && nothing);
+
+    kfree(image);
+}
+
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs)
 {
     printf("[SELFTEST] start\n");
@@ -2276,6 +2620,10 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testFat16();
     testFat16Write();
     testAtaDisk(vfs);
+    testTranslate(space);
+    testShellParser();
+    testLineEditor();
+    testShell(pmm, space, scheduler);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;

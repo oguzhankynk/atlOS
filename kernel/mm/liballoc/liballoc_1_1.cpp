@@ -782,3 +782,9 @@ void *PREFIX(realloc)(void *p, size_t size)
 
 	return ptr;
 }
+// atlOS addition: the running totals, for Memory::heapStatistics
+void liballoc_statistics(unsigned long long* allocated, unsigned long long* inuse)
+{
+	*allocated = l_allocated;
+	*inuse = l_inuse;
+}

@@ -54,24 +54,46 @@ bool SerialPort::isTransmitEmpty() const
     return IOPort::inportb(m_port + 5) & 0x20;
 }
 
+void SerialPort::writeByte(char c)
+{
+    // Wait for every byte: the FIFO only holds 16
+    while (!isTransmitEmpty())
+        ;
+    IOPort::outportb(m_port, c);
+}
+
 void SerialPort::write(const char* data, size_t size)
 {
     if (!m_present)
         return;
 
-    // Wait for every byte: the FIFO only holds 16
     for (size_t i = 0; i < size; i++) {
-        while (!isTransmitEmpty())
-            ;
-        IOPort::outportb(m_port, data[i]);
+        if (data[i] == '\n')
+            writeByte('\r');
+        writeByte(data[i]);
     }
 }
 
-char SerialPort::read()
+void SerialPort::startReceiving(InterruptController& controller, CharacterQueue& queue)
 {
-    while (!(IOPort::inportb(m_port + 5) & 0x01))
-        ;
-    return static_cast<char>(IOPort::inportb(m_port));
+    if (!m_present)
+        return;
+
+    m_queue = &queue;
+    controller.attach(m_port == com1 ? Irq::COM1 : Irq::COM2, onInterrupt, this);
+    controller.unmask(m_port == com1 ? Irq::COM1 : Irq::COM2);
+
+    // IER bit 0: interrupt when a byte has arrived (MCR OUT2, set above, routes it to the PIC)
+    IOPort::outportb(m_port + 1, 0x01);
+}
+
+void SerialPort::onInterrupt(void* port)
+{
+    auto* self = static_cast<SerialPort*>(port);
+
+    // LSR bit 0: a received byte is waiting. The FIFO may hold several
+    while (IOPort::inportb(self->m_port + 5) & 0x01)
+        self->m_queue->push(static_cast<char>(IOPort::inportb(self->m_port)));
 }
 
 } // namespace Drivers

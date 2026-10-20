@@ -68,6 +68,7 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     fs/*.cpp
     mm/*.cpp
     sched/*.cpp
+    shell/*.cpp
     sync/*.cpp
     tests/*.cpp
     ${ARCHDIR}/gdt/*.cpp

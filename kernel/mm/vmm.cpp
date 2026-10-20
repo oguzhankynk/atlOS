@@ -364,32 +364,103 @@ void AddressSpace::unmapPhysical(const void* virtAddr)
     clearPdEntry(vAddr, pdEntry);
 }
 
-void* AddressSpace::virtToPhys(const void* virtAddr) const
+// Virtual address of the 4 KB page table under PD entry (pml4, pdpt, pd)
+static uint64_t* getPTVirt(uint64_t pml4Index, uint64_t pdptIndex, uint64_t pdIndex)
+{
+    return (uint64_t*)(recursivePrefix | (recursiveSlot << 39) | (pml4Index << 30) | (pdptIndex << 21) | (pdIndex << 12));
+}
+
+static uint64_t canonical(uint64_t address)
+{
+    // Bits 63..48 must copy bit 47
+    return (address & (1ULL << 47)) ? (address | 0xFFFF000000000000ULL) : address;
+}
+
+bool AddressSpace::translate(const void* virtAddr, uint64_t& physAddr) const
 {
     uintptr_t vAddr = (uintptr_t)virtAddr;
+    if (canonical(vAddr & 0x0000FFFFFFFFFFFFULL) != vAddr)
+        return false;
+
     uint64_t pml4Idx = (vAddr >> 39) & 0x1FF;
     uint64_t pdptIdx = (vAddr >> 30) & 0x1FF;
+    uint64_t pdIdx = (vAddr >> 21) & 0x1FF;
+    uint64_t ptIdx = (vAddr >> 12) & 0x1FF;
 
-    uint64_t* pml4Table = (uint64_t*)getPML4Virt();
-    if (!(pml4Table[pml4Idx] & MMU_PRESENT))
-        return nullptr;
+    uint64_t pml4Entry = ((uint64_t*)getPML4Virt())[pml4Idx];
+    if (!(pml4Entry & MMU_PRESENT))
+        return false;
 
-    // 1 GB page
     uint64_t pdptEntry = ((uint64_t*)getPDPTVirt(pml4Idx))[pdptIdx];
     if (!(pdptEntry & MMU_PRESENT))
+        return false;
+    if (pdptEntry & MMU_PDE_TWO_MB) { // 1 GB page
+        physAddr = (pdptEntry & 0x000FFFFFC0000000ULL) | (vAddr & 0x3FFFFFFFULL);
+        return true;
+    }
+
+    uint64_t pdEntry = ((uint64_t*)getPDVirt(pml4Idx, pdptIdx))[pdIdx];
+    if (!(pdEntry & MMU_PRESENT))
+        return false;
+    if (pdEntry & MMU_PDE_TWO_MB) {
+        physAddr = (pdEntry & page2MbAddrMask) | (vAddr & (pageSize2Mb - 1));
+        return true;
+    }
+
+    uint64_t ptEntry = getPTVirt(pml4Idx, pdptIdx, pdIdx)[ptIdx];
+    if (!(ptEntry & MMU_PRESENT))
+        return false;
+    physAddr = (ptEntry & tableAddrMask) | (vAddr & 0xFFF);
+    return true;
+}
+
+void AddressSpace::forEachMapping(MappingCallback callback, void* arg) const
+{
+    constexpr uint64_t flagMask = 0xFFF | (1ULL << 63); // low flags and NX
+
+    uint64_t* pml4 = (uint64_t*)getPML4Virt();
+    for (uint64_t i = 0; i < 512; i++) {
+        if (i == recursiveSlot || !(pml4[i] & MMU_PRESENT))
+            continue;
+
+        uint64_t* pdpt = (uint64_t*)getPDPTVirt(i);
+        for (uint64_t j = 0; j < 512; j++) {
+            uint64_t pdptEntry = pdpt[j];
+            if (!(pdptEntry & MMU_PRESENT))
+                continue;
+            uint64_t base1Gb = canonical((i << 39) | (j << 30));
+            if (pdptEntry & MMU_PDE_TWO_MB) {
+                callback(base1Gb, pdptEntry & 0x000FFFFFC0000000ULL, 1ULL << 30, pdptEntry & flagMask, arg);
+                continue;
+            }
+
+            uint64_t* pd = (uint64_t*)getPDVirt(i, j);
+            for (uint64_t k = 0; k < 512; k++) {
+                uint64_t pdEntry = pd[k];
+                if (!(pdEntry & MMU_PRESENT))
+                    continue;
+                uint64_t base2Mb = base1Gb | (k << 21);
+                if (pdEntry & MMU_PDE_TWO_MB) {
+                    callback(base2Mb, pdEntry & page2MbAddrMask, pageSize2Mb, pdEntry & flagMask, arg);
+                    continue;
+                }
+
+                uint64_t* pt = getPTVirt(i, j, k);
+                for (uint64_t l = 0; l < 512; l++) {
+                    if (pt[l] & MMU_PRESENT)
+                        callback(base2Mb | (l << 12), pt[l] & tableAddrMask, 4096, pt[l] & flagMask, arg);
+                }
+            }
+        }
+    }
+}
+
+void* AddressSpace::virtToPhys(const void* virtAddr) const
+{
+    uint64_t phys;
+    if (!translate(virtAddr, phys))
         return nullptr;
-    if (pdptEntry & MMU_PDE_TWO_MB)
-        return (void*)((pdptEntry & 0x000FFFFFC0000000ULL) | (vAddr & 0x3FFFFFFFULL));
-
-    uint64_t* pdEntry = getPDEntry(vAddr);
-    if (!(*pdEntry & MMU_PRESENT))
-        return nullptr;
-
-    // Only 2 MB pages are used, there are no 4 KB page tables
-    if (!(*pdEntry & MMU_PDE_TWO_MB))
-        kernelPanic("VMM: virtToPhys: 4 KB pages are not supported");
-
-    return (void*)((*pdEntry & page2MbAddrMask) | (vAddr & (pageSize2Mb - 1)));
+    return (void*)phys;
 }
 
 /// Simple contiguous page allocator

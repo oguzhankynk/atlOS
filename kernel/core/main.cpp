@@ -52,9 +52,12 @@
 #include <arch/x86_64/idt/handlers.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/character_queue.hpp>
 #include <drivers/keyboard.hpp>
 #include <drivers/pic.hpp>
 #include <drivers/pit.hpp>
+#include <drivers/tee_sink.hpp>
+#include <shell/interpreter.hpp>
 
 #include <core/halt.hpp>
 #include <tests/crashtest.hpp>
@@ -70,7 +73,10 @@ static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
 static Cxx::Uninitialized<Threading::Scheduler> s_scheduler;
+static Cxx::Uninitialized<Drivers::TeeSink> s_console;
+static Cxx::Uninitialized<Drivers::CharacterQueue> s_input;
 static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
+static Cxx::Uninitialized<Shell::Interpreter> s_shell;
 static Cxx::Uninitialized<Fs::Vfs> s_vfs;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
@@ -80,32 +86,16 @@ static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL 
  * @brief entry point of atlOS
  *
  */
-static void printEntry(const Fs::FileInfo& entry, void*)
-{
-    if (entry.isDirectory)
-        printf("  %s/\n", entry.name);
-    else
-        printf("  %-12s %lu bytes\n", entry.name, entry.size);
-}
-
-static void printMount(const Fs::FileInfo& mount, void* vfs)
-{
-    char path[Fs::Vfs::maxMountNameLength + 2];
-    snprintf(path, sizeof(path), "/%s", mount.name);
-    printf("%s:\n", path);
-    static_cast<Fs::Vfs*>(vfs)->listDirectory(path, printEntry, nullptr);
-}
-
 extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 {
 
-    // Console: the VGA screen for the first messages, then COM1
+    // Console: the VGA screen, and COM1 too when there is one
     Drivers::VGATextConsole& vga = s_vga.construct();
     Core::setConsole(vga);
 
     Drivers::SerialPort& serial = s_serial.construct(Drivers::SerialPort::com1);
     if (serial.isPresent())
-        Core::setConsole(serial);
+        Core::setConsole(s_console.construct(vga, serial));
     else
         printf("COM1 not found, the console stays on the screen\n");
 
@@ -162,18 +152,12 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     CrashTest::run();
 #endif
 
-    // Demo: echo what is typed. read() blocks this flow (task 0) on the
-    // keyboard's semaphore; with nothing else to run the CPU sleeps in hlt.
-    Drivers::PS2Keyboard& keyboard = s_keyboard.construct(pic, scheduler);
-    // Demo: what is on the disks
-    vfs.listDirectory("/", printMount, &vfs);
+    // The shell reads the keyboard and COM1 through one queue
+    Drivers::CharacterQueue& input = s_input.construct(scheduler);
+    s_keyboard.construct(pic, input);
+    serial.startReceiving(pic, input);
 
-    printf("Type something:\n");
-    while (true) {
-        char c = keyboard.read();
-        if (c == '\b')
-            printf("\b \b");
-        else
-            printf("%c", c);
-    }
+    // Runs in the boot flow (task 0) for good; reading sleeps in hlt
+    static Shell::Context s_context { pmm, kernelSpace, scheduler, vfs, &vga, serial.isPresent() ? &serial : nullptr };
+    s_shell.construct(input, s_context).run();
 }

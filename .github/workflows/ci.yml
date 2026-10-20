@@ -35,6 +35,9 @@ jobs:
       - name: Crash test (fault report)
         run: scripts/build.sh crashtest
 
+      - name: Shell test (serial port)
+        run: scripts/build.sh shelltest
+
       - name: Format
         run: scripts/build.sh format-check
 
@@ -50,5 +53,6 @@ jobs:
             build/default/atlOS.iso
             build/selftest/selftest.log
             build/crashtest/crashtest.log
+            build/default/shelltest.log
           if-no-files-found: ignore
           retention-days: 14

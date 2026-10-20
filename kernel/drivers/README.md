@@ -32,8 +32,8 @@ Small interfaces, concrete drivers as objects, created and wired in
 |---|---|---|
 | `InterruptController` (`interrupt_controller.hpp`) | `PIC` (8259 pair) | PIT, keyboard, the ISR dispatcher |
 | `TickSource` (`tick_source.hpp`) | `PIT` (8253/8254 channel 0) | `Threading::Scheduler` |
-| `CharacterSink` (`character_sink.hpp`) | `SerialPort`, `VGATextConsole` | the console behind `printf` |
-| `CharacterSource` (`character_source.hpp`) | `PS2Keyboard` | the keyboard demo in `kernelMain` |
+| `CharacterSink` (`character_sink.hpp`) | `SerialPort`, `VGATextConsole`, `TeeSink` (both at once) | the console behind `printf` |
+| `CharacterSource` (`character_source.hpp`) | `CharacterQueue` (fed by `PS2Keyboard` and `SerialPort`) | the shell |
 | `BlockDevice` (`disk/block_device.hpp`) | `ATAPioDevice`, `PartitionDevice`, `MemoryBlockDevice` | the file systems (`kernel/fs/`) |
 
 - **PIC**: the constructor remaps the 16 IRQs to vectors `0x20..0x2F` (by
@@ -44,7 +44,11 @@ Small interfaces, concrete drivers as objects, created and wired in
   divisor is 16 bits, so periods above ~55 ms are refused.
 - **SerialPort**: 16550 UART at 38400 8N1. A loopback test in the constructor
   tells whether the port exists; a missing port drops writes instead of
-  waiting forever for its transmitter.
+  waiting forever for its transmitter. Writes turn `\n` into `\r\n`.
+  `startReceiving(controller, queue)` turns on the "data received" interrupt
+  (IRQ 4 for COM1) and pushes every byte into a `CharacterQueue`.
+- **TeeSink**: writes to two sinks; with a COM1 the console is
+  `TeeSink(screen, serial)`, so output shows on both.
 - **VGATextConsole**: 80×25 cells of `char | color << 8`. The buffer pointer is
   a constructor argument (the real screen by default), so the tests run it on
   RAM.
@@ -96,11 +100,14 @@ Bytes become characters in three steps:
    without and with Shift) gives the character; Caps Lock flips letters
    only, Ctrl+letter gives the control characters 1..26 (Ctrl+C = 3). Only
    US QWERTY exists; another layout is two more tables.
-3. `PS2Keyboard` keeps characters in a **64 byte ring buffer**; a counting
-   `Sync::Semaphore` counts them. The IRQ handler `give`s, `read()` `take`s,
-   so a reader sleeps until a key arrives (see `kernel/sync/README.md`).
-   When the buffer is full the new character is dropped and counted
-   (`droppedCount`), so what was typed first keeps its order.
+3. `PS2Keyboard` pushes the character into a **`CharacterQueue`** (a 128
+   byte ring buffer; a counting `Sync::Semaphore` counts the characters, the
+   IRQ handler `give`s, `read()` `take`s, so a reader sleeps until a key
+   arrives, see `kernel/sync/README.md`). The serial port pushes into the
+   same queue: the shell reads both. A full queue drops new characters
+   (counted in `droppedCount`), so what was typed first keeps its order.
+   The arrow keys become the ANSI sequences of a terminal (`ESC [ A` up,
+   `B` down, `C` right, `D` left), pushed whole or not at all.
 
 The constructor empties the controller's output buffer first: a byte left by
 the firmware that nobody reads keeps IRQ 1 from firing again. It does not
@@ -111,16 +118,15 @@ sequenceDiagram
     participant K as keyboard
     participant C as 8042 controller
     participant H as PS2Keyboard::onInterrupt (IRQ 1)
-    participant S as Semaphore
-    participant T as kernelMain (reader)
+    participant S as CharacterQueue (semaphore)
+    participant T as the shell (reader)
     T->>S: read(): take() -> waits, CPU in hlt
     K->>C: key press
     C->>H: IRQ 1
     H->>C: inb 0x60 -> 0x1E
-    H->>H: decode -> 'a', put in the buffer
-    H->>S: give(): the reader is runnable
+    H->>S: decode -> 'a', push: give(), the reader is runnable
     S-->>T: take() returns
-    T->>T: pop 'a' from the buffer, print it
+    T->>T: pop 'a', the line editor echoes it
 ```
 
 ### Deliberately not done
@@ -156,9 +162,8 @@ sequenceDiagram
 
 *PIT (fake interrupt controller)* drives the PIT against a fake controller and
 checks what it attaches and unmasks. *Scancode decoder* feeds byte sequences
-(Shift, Caps Lock, Ctrl, extended keys, Pause); *PS/2 keyboard* injects
-scancodes the way the IRQ handler does and checks blocking reads and a full
-buffer. *Console (fake sink)*, *VGA text console
+(Shift, Caps Lock, Ctrl, extended keys, Pause); *PS/2 keyboard and the character queue* injects scancodes the way the IRQ
+handler does and checks arrow sequences, blocking reads and a full queue. *Console (fake sink)*, *VGA text console
 (RAM buffer)* and *Serial port (missing COM2)* test the output side.
 
 ## References

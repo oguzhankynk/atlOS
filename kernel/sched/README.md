@@ -53,6 +53,8 @@ thread must cooperate.
   timer tick that wakes a sleeper). If the caller had interrupts off (a
   thread waiting under a `Sync::InterruptGuard`), they are turned off again
   before it continues.
+- Each TCB has a name (`kernel` for task 0, `t0`, `t1`, ... for threads) and
+  its stack range, for the shell's `tasks` command.
 - Waiting for an event (not a time) goes through `kernel/sync/`: a
   `WaitQueue` blocks threads and `unblock`s them, see `sync/README.md`.
 - **No global scheduler**: a thread's entry point receives its scheduler,

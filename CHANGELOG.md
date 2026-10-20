@@ -44,6 +44,20 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   `removeDirectory`, also through `Fs::Vfs`; fixed 1980-01-01 timestamps
 - `scripts/check-test-disk.sh`: after the self tests, `fsck.fat` and mtools
   check on the host what the kernel wrote to the test disk (577 checks)
+- Kernel shell (`kernel/shell/`), started by the normal kernel: line editor
+  (Backspace, Ctrl+C, history on Up/Down), quoted words, a command table:
+  `help`, `clear`, `echo` (with `>`/`>>`), `version`, `uptime`, `pwd`, `cd`,
+  `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount`, `mem`, `md`, `mw`,
+  `vmmap`, `tasks`/`ps`, `cpuinfo`, `panic`, `fault`, `reboot`
+- `Drivers::CharacterQueue`: the keyboard and COM1 (receive interrupt, new)
+  feed one queue; the arrow keys arrive as ANSI sequences
+- `Drivers::TeeSink`: the console writes to the screen and COM1
+- `AddressSpace::translate` (no fault, physical 0 told apart from unmapped,
+  4 KB tables followed) and `forEachMapping`; `Memory::heapStatistics`
+- TCBs carry a name and their stack range
+- `scripts/run-shelltest.py` / `scripts/build.sh shelltest`: the shell driven
+  over the serial port in CI; self tests for the parser, line editor and
+  commands (651 checks)
 
 ### Changed
 
@@ -58,10 +72,17 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - `Spinlock` uses `Sync::Atomic`
 - The default kernel echoes keyboard input instead of running the A/B demo
   threads, and lists the mounted disks first
+- The serial port sends `\r\n` for `\n`; the console no longer leaves the
+  screen when COM1 exists
+- The default kernel starts the shell instead of the keyboard echo demo
+- `PS2Keyboard` pushes into a `CharacterQueue` instead of its own buffer
 - Removed the old `DeviceManager`, `Device`/`Disk` classes, the untested FAT16
   write code and the `sudo` based disk scripts
 
 ### Fixed
+
+- A task that kept the CPU after a sleep (nothing else to run) stayed in the
+  Ready state instead of Running
 
 - Exception names for vectors 10..21 were off by one (a page fault was
   reported as "IntelReserved")

@@ -52,6 +52,22 @@ public:
      */
     void* virtToPhys(const void* virtAddr) const;
 
+    /**
+     * @brief Like virtToPhys, but tells "not mapped" apart from "mapped at
+     * physical 0", and also follows 4 KB page tables (the recursive mapping
+     * makes the tables themselves look like 4 KB pages).
+     */
+    bool translate(const void* virtAddr, uint64_t& physAddr) const;
+
+    /// Called once per mapped page: its size is 4 KB, 2 MB or 1 GB; flags are the entry's low bits.
+    using MappingCallback = void (*)(uint64_t virtAddr, uint64_t physAddr, uint64_t size, uint64_t flags, void* arg);
+
+    /**
+     * @brief Walk the active page tables and report every mapped page, in
+     * ascending virtual order. The recursive slot itself is skipped.
+     */
+    void forEachMapping(MappingCallback callback, void* arg) const;
+
 private:
     uint64_t* getOrCreatePdEntry(uintptr_t vAddr);
     void clearPdEntry(uintptr_t vAddr, uint64_t* pdEntry);

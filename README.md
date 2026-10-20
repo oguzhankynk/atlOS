@@ -20,14 +20,15 @@ Working:
 - Kernel heap (`kmalloc`/`kfree`, based on liballoc 1.1)
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
-- PS/2 keyboard (US layout); the default kernel echoes what is typed
+- PS/2 keyboard (US layout) and serial input
+- A kernel shell (keyboard or serial terminal): files, `md`/`mw` memory dump and write, `vmmap`, `tasks`, ...
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
 The CPUID helpers are built and tested but not called at
-boot. There is no user mode, no system calls and no shell; atlOS runs on a
-single CPU.
+boot. There is no user mode and no system calls (the shell runs in the kernel);
+atlOS runs on a single CPU.
 
 ## Quick start
 
@@ -38,9 +39,10 @@ builds one), CMake 3.22+, Ninja, `grub-mkrescue` (with xorriso) and QEMU. See
 
 ```sh
 scripts/build.sh            # libc, kernel and build/default/atlOS.iso
-scripts/build.sh run        # boot in QEMU, serial output on the terminal
+scripts/build.sh run        # boot in QEMU, the shell on the terminal
 scripts/build.sh selftest   # build and run the self tests
 scripts/build.sh crashtest  # a kernel that faults on purpose: check the report
+scripts/build.sh shelltest  # drive the shell over the serial port
 ```
 
 The same with CMake directly:
@@ -59,6 +61,7 @@ kernel/
   cxx/           C++ runtime support (global constructors, new/delete)
   mm/            pmm, vmm, heap (liballoc)
   sched/         scheduler, threads
+  shell/         the kernel shell: line editor, parser, commands
   sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
   drivers/       pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR)
   fs/            file system interface, fat16, vfs, mounting the disks

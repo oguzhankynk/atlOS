@@ -17,6 +17,7 @@ static bool isRunnable(const TCB* tcb)
 Scheduler::Scheduler(Drivers::TickSource& ticks)
 {
     m_bootTcb.state = ThreadState::Running;
+    m_bootTcb.name = "kernel"; // the flow that constructed the scheduler (kernelMain)
     m_readyQueue[0] = &m_bootTcb;
     m_threadCount = 1;
     m_currentThreadIndex = 0;
@@ -89,8 +90,11 @@ void Scheduler::schedule()
             }
         }
 
-        if (isRunnable(m_readyQueue[m_currentThreadIndex]))
+        // Keep running the current thread; after a sleep it is only Ready
+        if (isRunnable(m_readyQueue[m_currentThreadIndex])) {
+            m_readyQueue[m_currentThreadIndex]->state = ThreadState::Running;
             return;
+        }
 
         asm volatile("sti; hlt");
         if (!interruptsWereEnabled)

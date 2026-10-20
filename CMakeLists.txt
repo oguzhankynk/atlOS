@@ -34,6 +34,7 @@ find_program(QEMU qemu-system-x86_64)
 find_program(SFDISK sfdisk PATHS /usr/sbin /sbin)
 find_program(MKFS_FAT mkfs.fat PATHS /usr/sbin /sbin)
 find_program(MCOPY mcopy)
+find_program(PYTHON3 python3)
 
 set(ATLOS_ISO_DIR ${CMAKE_BINARY_DIR}/isodir)
 set(ATLOS_ISO ${CMAKE_BINARY_DIR}/atlOS.iso)
@@ -104,6 +105,16 @@ if(GRUB_MKRESCUE AND QEMU)
         USES_TERMINAL
         VERBATIM
     )
+
+    # The normal kernel's shell, driven over the serial port
+    if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST AND PYTHON3 AND ATLOS_DISK_TARGET)
+        add_custom_target(shelltest
+            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log
+            DEPENDS iso ${ATLOS_DISK_TARGET}
+            USES_TERMINAL
+            VERBATIM
+        )
+    endif()
 
     if(ATLOS_SELFTEST)
         add_custom_target(selftest

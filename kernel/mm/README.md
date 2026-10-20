@@ -86,7 +86,10 @@ Virtual address of the PD for (i, j):   [510][510][i][j]
 
 `Memory::AddressSpace` owns this: `allocatePages(n)` finds `n` free virtual
 pages above the kernel, backs each with a PMM block and creates missing page
-directories from 4 KB frames.
+directories from 4 KB frames. `translate(virt, phys)` walks the tables
+without faulting (also through 4 KB tables: via the recursive slot the tables
+themselves look like 4 KB pages) and `forEachMapping` reports every mapped
+page; the shell's `md`, `mw` and `vmmap` use them.
 
 **Heap: liballoc 1.1.** Writing a good general allocator is a project of its
 own; liballoc is small, public domain and needs only four hooks

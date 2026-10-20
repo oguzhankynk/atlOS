@@ -81,6 +81,12 @@ public:
     /// Number of queued tasks, including the flow that constructed the scheduler.
     uint32_t taskCount() const { return m_threadCount; }
 
+    /// TCB of queued task index (0 .. taskCount() - 1), for listings.
+    const TCB& task(uint32_t index) const { return *m_readyQueue[index]; }
+
+    /// Index of the running task in the queue.
+    uint32_t currentIndex() const { return m_currentThreadIndex; }
+
 private:
     static void onTick(void* scheduler);
 

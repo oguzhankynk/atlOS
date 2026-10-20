@@ -27,10 +27,17 @@ VGATextConsole::VGATextConsole(volatile uint16_t* buffer)
     : m_buffer(buffer)
     , m_color(vgaEntryColor(VgaColorLightGrey, VgaColorBlack))
 {
+    clear();
+}
+
+void VGATextConsole::clear()
+{
     for (size_t y = 0; y < height; y++) {
         for (size_t x = 0; x < width; x++)
             putEntryAt(' ', m_color, x, y);
     }
+    m_row = 0;
+    m_column = 0;
 }
 
 void VGATextConsole::write(const char* data, size_t size)

@@ -57,6 +57,9 @@ ThreadImpl::ThreadImpl(Scheduler& scheduler, Memory::AddressSpace& addressSpace,
 
     // Set up the TCB (Thread Control Block)
     m_tcb.state = ThreadState::Ready;
+    m_tcb.name = m_name;
+    m_tcb.stackBase = reinterpret_cast<uintptr_t>(m_stack);
+    m_tcb.stackSize = stackSize;
     m_tcb.regs.rax = 0;
     m_tcb.regs.rbx = 0;
     m_tcb.regs.rcx = 0;
