@@ -60,6 +60,20 @@ The kernel is clean: new warnings should be fixed, not suppressed. Code inside
 `kernel/mm/liballoc` (liballoc 1.1) and `libc/stdio/printf.cpp`
 (mpaland/printf) are kept as upstream: no reformatting, no renaming.
 
+## Subsystem READMEs
+
+Each subsystem directory has a `README.md` with the same sections:
+
+1. **What is it for?** the problem, without assuming OS background
+2. **How could it be designed?** the usual approaches, with pros, cons and
+   who uses them (Linux, xv6, ...)
+3. **How atlOS does it** and why; what is deliberately left out
+4. **Flow** diagrams (mermaid, rendered by GitHub)
+5. **Tests** that cover it, and **references** (OSDev Wiki, Intel SDM, xv6,
+   OSTEP)
+
+A change to a subsystem updates its README in the same commit series.
+
 ## Design
 
 Agreed direction, introduced subsystem by subsystem. Done: the interrupt

@@ -73,6 +73,11 @@ docs/            documentation
 Headers live next to their sources; includes are relative to `kernel/`, for
 example `#include <mm/vmm.hpp>`.
 
+The subsystem directories have a README that explains the concept, the usual ways to design it, what atlOS chose and why,
+with diagrams and references:
+[mm](kernel/mm/README.md), [sched](kernel/sched/README.md),
+[drivers](kernel/drivers/README.md), [interrupts](kernel/arch/x86_64/idt/README.md).
+
 ## Documentation
 
 - [Building and running](docs/building.md)
