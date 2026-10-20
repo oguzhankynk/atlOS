@@ -30,7 +30,9 @@
    9. constructs the `Threading::Scheduler` on the PIT (the boot flow becomes
       task 0, 1 ms tick)
    10. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
-       or the shell: a `CharacterQueue` fed by the keyboard and COM1, and
+       or the shell (after constructing the `Process::Runtime` for user
+       programs, bound with `Process::setRuntime`): a `CharacterQueue` fed by
+       the keyboard and COM1, and
        `Shell::Interpreter` running in the boot flow (see `kernel/shell/README.md`)
 
    `kernelMain` is the composition root: driver objects live in
@@ -46,8 +48,9 @@ at their physical address and everything else at
 
 | Virtual range | Contents |
 |---|---|
-| `0x0 .. kernel_physical_end` | identity map from boot (multiboot info, boot tables) |
-| `0xFFFFFF0000000000` (PML4[510]) | recursive mapping of the page tables |
+| `0x0 .. kernel_physical_end` | identity map from boot (multiboot info, boot tables), kernel only |
+| `0x0000008000000000 .. 0x00007FFFFFFFFFFF` (PML4[1..255]) | user programs (per address space) |
+| `0xFFFF800000000000 .. + 64 GB` (PML4[256]) | physmap: all physical memory, how page tables are edited |
 | `0xFFFFFFFF80000000 .. kernel_virtual_end` | kernel image |
 | `kernel_virtual_end .. 0xFFFFFFFFFFFFFFFF` | kernel heap, thread stacks, `mapPhysical` mappings (2 MB pages) |
 

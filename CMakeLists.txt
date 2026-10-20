@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # The one place the version is written; see docs/releasing.md
-project(atlOS VERSION 0.2.0 LANGUAGES C CXX ASM)
+project(atlOS VERSION 0.3.0 LANGUAGES C CXX ASM)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "atlOS")
     message(FATAL_ERROR "Configure with the cross toolchain: cmake --preset default")
@@ -24,6 +24,7 @@ set(ATLOS_NO_SIMD_FLAGS -mno-mmx -mno-sse -mno-sse2)
 
 add_subdirectory(libc)
 add_subdirectory(kernel)
+add_subdirectory(user)
 
 # ------------------------------------------------------------
 # Bootable ISO
@@ -70,8 +71,8 @@ if(SFDISK AND MKFS_FAT AND MCOPY)
     file(GLOB_RECURSE ATLOS_DISK_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tools/disk/files/*)
     add_custom_command(
         OUTPUT ${ATLOS_DISK}
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK}
-        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK_FILES}
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK} ${ATLOS_USER_PROGRAMS}
+        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK_FILES} ${ATLOS_USER_TARGETS}
         COMMENT "Creating disk.img"
         VERBATIM
     )
@@ -109,7 +110,7 @@ if(GRUB_MKRESCUE AND QEMU)
     # The normal kernel's shell, driven over the serial port
     if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST AND PYTHON3 AND ATLOS_DISK_TARGET)
         add_custom_target(shelltest
-            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log
+            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log ${CMAKE_BINARY_DIR}/user
             DEPENDS iso ${ATLOS_DISK_TARGET}
             USES_TERMINAL
             VERBATIM
@@ -155,6 +156,7 @@ find_program(RUN_CLANG_TIDY NAMES run-clang-tidy run-clang-tidy-14)
 file(GLOB_RECURSE ATLOS_FORMAT_FILES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/kernel/*.cpp ${CMAKE_SOURCE_DIR}/kernel/*.hpp ${CMAKE_SOURCE_DIR}/kernel/*.h
     ${CMAKE_SOURCE_DIR}/libc/*.cpp ${CMAKE_SOURCE_DIR}/libc/*.h
+    ${CMAKE_SOURCE_DIR}/user/*.c ${CMAKE_SOURCE_DIR}/user/*.h
 )
 
 if(CLANG_FORMAT)

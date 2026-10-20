@@ -23,6 +23,10 @@ namespace Fs {
 class Vfs;
 }
 
+namespace Process {
+class Runtime;
+}
+
 namespace SelfTest {
 /**
  * @brief Run all tests. Needs the memory managers and the scheduler to be set up.
@@ -32,9 +36,11 @@ namespace SelfTest {
  * @param kernelSpace The kernel's address space (VMM tests, thread stacks).
  * @param scheduler The kernel's scheduler, which the calling flow is task 0 of.
  * @param vfs The kernel's VFS; the disk tests use /disk0 if the test disk is attached.
+ * @param runtime Runs the user programs from the test disk (/disk0/BIN).
  *
  * @return Number of failed checks.
  */
-int run(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler, Fs::Vfs& vfs);
+int run(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
+    Process::Runtime& runtime);
 
 } // namespace SelfTest

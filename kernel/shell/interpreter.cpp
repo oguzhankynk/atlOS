@@ -9,8 +9,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <core/banner.hpp>
 #include <drivers/character_source.hpp>
+#include <drivers/vga_console.hpp>
 #include <fs/vfs.hpp>
+#include <mm/pmm.hpp>
+#include <proc/process.hpp>
 #include <shell/parser.hpp>
 
 namespace Shell {
@@ -21,11 +25,28 @@ Interpreter::Interpreter(Drivers::CharacterSource& input, Context& context)
 {
 }
 
+static void printMount(const Fs::FileInfo& mount, void*)
+{
+    printf(" /%s", mount.name);
+}
+
 void Interpreter::run()
 {
-    printf("atlOS shell, \"help\" lists the commands\n");
+    // A clean screen with the banner; the serial log keeps the boot messages
+    if (m_context.screen)
+        m_context.screen->clear();
+    atlOSBanner();
+
+    Memory::PhysicalMemoryManager& pmm = m_context.pmm;
+    printf("  memory: %lu MB free   disks:", pmm.freeBlockCount() * Memory::PhysicalMemoryManager::blockSize >> 20);
+    if (!m_context.vfs.mountCount())
+        printf(" none");
+    m_context.vfs.listDirectory("/", printMount, nullptr);
+    printf("\n  \"help\" lists the commands, \"run /disk0/BIN/HELLO.ELF\" starts a user program\n\n");
 
     while (true) {
+        // Programs that exited since the last prompt give their memory back
+        m_context.runtime.reap();
         printf("atlOS:%s> ", m_cwd);
         m_editor.start();
 

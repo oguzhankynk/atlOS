@@ -27,6 +27,10 @@ extern "C" {
  * @brief Prints banner and version infoormation
  *
  */
+/// One line at the very start of the boot: version and git state.
+void atlOSBootLine();
+
+/// The banner with the version, shown when the shell starts.
 void atlOSBanner();
 
 #if defined(__cplusplus)

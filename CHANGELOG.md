@@ -7,6 +7,54 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+User programs: static ELF64 files from the disk run in ring 3, each in an
+address space of its own (physmap, shared kernel half), with `int 0x80`
+system calls; a guide to writing them; a new banner.
+
+### Added
+
+- Physmap: all physical memory (up to 64 GB) at `0xFFFF800000000000`, with
+  its tables in the kernel image; page tables are edited through it
+- User programs (`kernel/proc/`, `user/`): static ELF64 files from the disk
+  (`/disk0/BIN`), loaded into an address space of their own and run in ring 3
+  on a kernel thread (`iretq`, `TSS.rsp0` set by the scheduler on every
+  switch); `int 0x80` system calls `exit` and `write` with user pointer
+  checks; a fault in ring 3 ends the program with 128 + vector instead of a
+  panic; the shell's `run` command; `HELLO.ELF`, `FAULT.ELF`, `BADPTR.ELF`
+- `AddressSpace::isUserAccessible`; `GDT::setKernelStack`; TCB `owner`
+- `user/README.md`: a guide to writing user programs (environment, memory
+  layout, system calls, exit codes, a first program, debugging a crash, build
+  rules); `COUNT.ELF`, its example; user programs are built with `-g`
+- `scripts/symbolize.sh` resolves `RIP=` of a register dump too, against any
+  ELF file: the kernel or a user program
+- Self tests for ELF parsing and the user programs (706 checks); the shell
+  test runs programs
+- Several address spaces: `AddressSpace(pmm, kernel)` shares the kernel's
+  `PML4[0]` and `PML4[256..511]`; `allocateAt`/`freeAt` map zeroed 2 MB user
+  pages in `PML4[1..255]`; `activate()`, `isActive()`; the destructor gives
+  back pages and tables (owned pages are marked in entry bit 9)
+
+### Changed
+
+- A new banner in plain ASCII, in color; the shell clears the screen and
+  shows it with the version, free memory and mounted disks; the boot starts
+  with a one line version message
+- `VGATextConsole` understands ANSI colors and UTF-8 block characters, so
+  the screen and a serial terminal show the same output
+- `tasks` and `vmmap` lines fit 80 columns
+- `scripts/take-screenshots.py`: the VGA screen after boot and in the shell
+- The PMM and VMM no longer log every allocation
+- The recursive page table mapping (`PML4[510]`) is gone
+- The PMM manages at most the 64 GB the physmap covers
+
+### Fixed
+
+- `InterruptFrame` had `rsi` and `rdi` swapped: register dumps showed them
+  the wrong way round, and system call arguments would have been read from
+  the wrong registers
+
 ## [0.2.0] - 2026-10-20
 
 Fault handling, synchronization, the keyboard, disks with FAT16 and a VFS,
@@ -134,6 +182,7 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzhankynk/atlOS/releases/tag/v0.1.0

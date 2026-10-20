@@ -67,6 +67,7 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     firmware/*.cpp
     fs/*.cpp
     mm/*.cpp
+    proc/*.cpp
     sched/*.cpp
     shell/*.cpp
     sync/*.cpp
@@ -77,6 +78,7 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     ${ARCHDIR}/io/*.cpp
     ${ARCHDIR}/cpu/*.cpp
     ${ARCHDIR}/cpu/context.S
+    ${ARCHDIR}/cpu/usermode.S
 )
 
 # Linked in a fixed order around the other objects, see the link rule below

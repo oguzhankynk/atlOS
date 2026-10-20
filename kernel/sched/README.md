@@ -53,8 +53,12 @@ thread must cooperate.
   timer tick that wakes a sleeper). If the caller had interrupts off (a
   thread waiting under a `Sync::InterruptGuard`), they are turned off again
   before it continues.
-- Each TCB has a name (`kernel` for task 0, `t0`, `t1`, ... for threads) and
-  its stack range, for the shell's `tasks` command.
+- Each TCB has a name (`kernel` for task 0, `t0`, `t1`, ... for threads, the
+  file name for a user program's thread), its stack range, and an `owner`
+  (the user program, if any).
+- On every switch the scheduler puts the next thread's stack top into the
+  TSS (`rsp0`): interrupts and system calls from ring 3 use it. The saved
+  `cr3` switches the address space with the thread.
 - Waiting for an event (not a time) goes through `kernel/sync/`: a
   `WaitQueue` blocks threads and `unblock`s them, see `sync/README.md`.
 - **No global scheduler**: a thread's entry point receives its scheduler,

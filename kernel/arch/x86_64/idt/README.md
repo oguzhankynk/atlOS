@@ -35,8 +35,10 @@ error code) on the stack and jumps there; `iretq` returns.
 isr.S          INT_<n> stubs: push a dummy error code if the CPU did not,
                push n, push rax..r15, call intHandler(frame), pop, iretq
 idt.cpp        builds the IDT: 0..31 trap gates, 32..255 interrupt gates,
-               vector 8 (double fault) on IST1;
-               intHandler: vector < 32 -> Fault::reportException,
+               vector 8 (double fault) on IST1, 0x80 (system calls) DPL 3;
+               intHandler: int 0x80 from ring 3 -> Process::Runtime::systemCall,
+               vector < 32 from ring 3 -> report, end the program,
+               vector < 32 in the kernel -> Fault::reportException (panic),
                everything else -> Handlers::interruptHandler(vector)
 fault.cpp      decodes the error code (and CR2), prints the report and panics
                with a backtrace of the faulting code
@@ -141,9 +143,16 @@ noticed while IRQs were off; the first timer interrupt corrupted the stack. The
 *Interrupts* self test now puts known values in `rax` and `r12`, waits for an
 interrupt with `hlt` and checks they survived.
 
+`InterruptFrame` listed `rsi` before `rdi`, but `isr.S` pushes `rsi` first,
+so `rdi` is at the lower address: every register dump showed the two
+swapped, and nobody read them closely. The first system call, whose first
+argument is in `rdi`, made it obvious (`write` saw the buffer as the file
+descriptor). The user program tests depend on the order now.
+
 ### Deliberately not done
 
-- Exceptions only report and halt; nothing is recovered (no demand paging).
+- Exceptions in the kernel report and halt; nothing is recovered (no demand
+  paging). In ring 3 they end the program (`kernel/proc/README.md`).
 - Only the double fault has its own stack. NMI and machine check would want
   IST stacks too once they can happen in the middle of anything.
 - No symbol names at run time; the kernel prints addresses only.

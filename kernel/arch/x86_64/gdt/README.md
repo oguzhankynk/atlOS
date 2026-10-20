@@ -65,7 +65,10 @@ flowchart LR
   not something to pass around.
 - **IST1 = a 16 KB static stack** (`s_doubleFaultStack`, 16 byte aligned), used
   only by vector 8. No guard page: the double fault handler only reports.
-- `rsp0` stays 0 until there is a user mode.
+- **`rsp0`** is the kernel stack for interrupts and system calls from ring 3.
+  The scheduler sets it to the top of the next thread's kernel stack on every
+  switch (`GDT::setKernelStack`), so a user program's thread lands on its own
+  stack (`kernel/proc/README.md`).
 - `GDT::init()` runs before `IDT::init()` in `kernelMain`.
 
 ### Deliberately not done

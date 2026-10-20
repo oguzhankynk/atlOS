@@ -45,7 +45,7 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 |---|---|
 | `scripts/build.sh` / `scripts/build.sh all` | build libc, kernel and `build/default/atlOS.iso` |
 | `scripts/build.sh iso` | build the ISO |
-| `scripts/build.sh run` | boot the ISO in QEMU, serial output on the terminal (Ctrl-C quits) |
+| `scripts/build.sh run` | boot the ISO in QEMU with the test disk, the serial console (boot messages, then the shell) on the terminal (Ctrl-C quits); see the [screenshot](images/ss.png) |
 | `scripts/build.sh debug` | boot the ISO in QEMU halted, waiting for gdb on `localhost:1234`; serial on `telnet localhost 4321` |
 | `scripts/build.sh selftest` | build the self test kernel in `build/selftest/` and run it, see [testing.md](testing.md) |
 | `scripts/build.sh crashtest` | build a kernel that faults on purpose in `build/crashtest/` and check its report |
@@ -112,3 +112,17 @@ configuration (`.vscode/launch.json`).
 drivers are not wired up yet, so the image is not attached by the run targets.
 Details, requirements and how to attach it to QEMU by hand:
 [`tools/disk/README.md`](../tools/disk/README.md).
+
+## User programs
+
+The programs in `user/` (ring 3, see [user/README.md](../user/README.md)) are
+built with every preset into `build/<preset>/user/*.elf` and copied to the
+test disk as `/BIN/<NAME>.ELF`. Run one from the shell:
+`run /disk0/BIN/HELLO.ELF`.
+
+## Screenshots
+
+`scripts/take-screenshots.py <iso> <disk.img> <dir>` boots the normal kernel,
+types a few shell commands over the serial port and saves the VGA screen
+(QEMU's `screendump`) as `boot.png` and `shell.png`, e.g. for the wiki.
+

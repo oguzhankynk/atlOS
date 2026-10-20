@@ -26,7 +26,7 @@
 namespace Memory {
 
 /// Enable / Disable logs
-static constexpr LogFlag dbgLog = LogFlag::Log;
+static constexpr LogFlag dbgLog = LogFlag::NoLog; // every allocation: very chatty
 static constexpr LogFlag infLog = LogFlag::Log;
 static constexpr LogFlag errLog = LogFlag::Log;
 
@@ -57,7 +57,7 @@ void PhysicalMemoryManager::unsetBlock(uint64_t block)
 
 int64_t PhysicalMemoryManager::firstFreeBlock(uint64_t count) const
 {
-    logMsg(infLog, "PMM: firstFreeBlock: number of requested blocks:%u free block:%u \n", count, m_freeBlocks);
+    logMsg(dbgLog, "PMM: firstFreeBlock: number of requested blocks:%u free block:%u \n", count, m_freeBlocks);
 
     if (count == 0)
         return -1; // Can't return no memory, error
@@ -145,7 +145,7 @@ void PhysicalMemoryManager::reserveRegion(const void* base, uint64_t size)
 
 void* PhysicalMemoryManager::allocateBlocks(uint64_t count)
 {
-    logMsg(infLog, "PMM: allocateBlocks: num_blocks:%u \n", count);
+    logMsg(dbgLog, "PMM: allocateBlocks: num_blocks:%u \n", count);
 
     // If # of free blocks left is not enough, return
     if (count == 0 || m_freeBlocks < count)

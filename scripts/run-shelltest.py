@@ -5,7 +5,9 @@ QEMU's COM1 is a TCP socket; the script types commands (with the same bytes
 a terminal sends: '\\r' for Enter, DEL for Backspace, ESC [ A for Up) and
 checks what comes back. Used by the "shelltest" target.
 
-Usage: scripts/run-shelltest.py <atlOS.iso> <disk.img> [serial.log]
+Usage: scripts/run-shelltest.py <atlOS.iso> <disk.img> [serial.log] [user build dir]
+  With the build directory of the user programs, the fault report of
+  FAULT.ELF is also symbolized against fault.elf.
 Exit code: 0 = every check passed, 1 = a check failed, 2 = boot/timeout problem.
 """
 
@@ -64,6 +66,7 @@ def main():
         return 2
     iso, disk = sys.argv[1], sys.argv[2]
     log_path = sys.argv[3] if len(sys.argv) > 3 else "shelltest.log"
+    user_dir = sys.argv[4] if len(sys.argv) > 4 else None
 
     # The shell writes to the disk: use a copy
     work = tempfile.mkdtemp()
@@ -168,6 +171,27 @@ def main():
             check("up " in out, "uptime", out)
             out = serial.command("mount\r")
             check("/disk0" in out and "fat16" in out, "mount", out)
+            # User programs: ring 3 on their own thread, the shell prompt comes back first
+            out = serial.command("run /disk0/BIN/HELLO.ELF\r")
+            out += serial.read_until(b"exited with 0]")
+            check("started pid" in out and "Hello from user mode!" in out, "run a user program", out)
+            out = serial.command("run /disk0/BIN/FAULT.ELF\r")
+            out += serial.read_until(b"exited with 142]")
+            check("Page fault (in user mode)" in out and "KERNEL PANIC" not in out, "a fault in ring 3 ends only the program", out)
+            out = serial.command("pwd\r")
+            check("/disk0\n" in out, "the shell goes on after the fault", out)
+            out = serial.command("run /disk0/BIN/COUNT.ELF\r")
+            out += serial.read_until(b"exited with 15]")
+            check("1 2 3 4 5\n" in out, "the example program of user/README.md", out)
+
+            # The fault report resolves to the program's source line (scripts/symbolize.sh)
+            if user_dir:
+                log.flush()
+                symbols = subprocess.run([os.path.join(os.path.dirname(__file__), "symbolize.sh"),
+                                          os.path.join(user_dir, "fault.elf"), log_path],
+                                         capture_output=True, text=True).stdout
+                check("main at" in symbols and "fault.c:" in symbols, "symbolize.sh on a user program", symbols)
+
             out = serial.command("nonsense\r")
             check("unknown command" in out, "unknown command", out)
 

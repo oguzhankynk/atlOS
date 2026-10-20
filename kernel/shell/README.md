@@ -2,7 +2,10 @@
 
 A command line inside the kernel: type `ls /disk0`, `md 0xb8000 64` or
 `tasks` on the keyboard or a serial terminal, and the kernel answers. It runs
-in the boot flow (task 0) once everything is set up.
+in the boot flow (task 0) once everything is set up. When it starts it clears
+the screen (the serial log keeps the boot messages) and prints the banner,
+the version, the free memory and the mounted disks. Every line it prints fits
+80 columns, the VGA screen's width.
 
 ```
 atlOS:/disk0> help
@@ -68,7 +71,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap` |
-| system | `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
+| system | `run program.elf`, `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
 
@@ -84,17 +87,19 @@ atlOS:/> md 0xdead0000
 0x00000000dead0000: not mapped
 ```
 
-`translate` differs from `virtToPhys` in two ways: "not mapped" is not
+`translate` differs from `virtToPhys` in one way: "not mapped" is not
 confused with "mapped at physical 0" (the first megabytes are identity
-mapped), and it follows 4 KB page tables too: through the recursive slot the
-page tables themselves look like 4 KB pages.
+mapped). Physical memory itself can be looked at through the physmap:
+`md 0xffff800000007000` shows physical address `0x7000`.
 
 `vmmap` walks the active tables (`AddressSpace::forEachMapping`) and joins
 neighbouring pages with the same flags into one line:
 
 ```
-0000000000000000-0000000000e00000 -> 000000000000   14 MB  rw kernel 7 x 2M   identity map of boot
-ffffffff80000000-ffffffff80e00000 -> 000000000000   14 MB  rw kernel 7 x 2M   the higher half kernel
+  virtual                           physical     size access    pages
+  0000000000000000-0000000000e00000 0000000000  14 MB rw kernel 7x2M        identity map of boot
+  ffff800000000000-ffff801000000000 0000000000  64 GB rw kernel 32768x2M    the physmap
+  ffffffff80000000-ffffffff80e00000 0000000000  14 MB rw kernel 7x2M        the higher half kernel
 ```
 
 `mw` writes 1, 2, 4 or 8 bytes. It is a sharp tool: writing over kernel data

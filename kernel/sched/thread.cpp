@@ -106,8 +106,6 @@ void ThreadImpl::threadStartPoint(void* obj)
 {
     // Cast the object pointer back to ThreadImpl
     auto* thread = static_cast<ThreadImpl*>(obj);
-    printf("Thread %s is running.\n", thread->m_name);
-
     // Set the thread state to Running
     thread->m_tcb.state = ThreadState::Running;
 
@@ -115,8 +113,6 @@ void ThreadImpl::threadStartPoint(void* obj)
     thread->m_entry(thread->m_scheduler);
 
     // Thread has finished execution, leave the run queue for good
-    printf("Thread %s finished execution.\n", thread->m_name);
-
     thread->m_scheduler.exit();
 }
 
@@ -131,7 +127,6 @@ Thread::Thread(Scheduler& scheduler, Memory::AddressSpace& addressSpace, EntryPo
 Thread::~Thread()
 {
     // Destructor to clean up resources
-    printf("Thread %s dtor called.\n", m_impl->m_name);
 
     // The scheduler must not keep a pointer to the TCB we are about to free
     m_impl->m_scheduler.removeTask(*this);

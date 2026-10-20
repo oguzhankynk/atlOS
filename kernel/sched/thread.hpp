@@ -55,6 +55,8 @@ struct TCB {
     const char* name;
     uintptr_t stackBase; // 0: not a Thread's stack (the boot flow)
     uint64_t stackSize;
+
+    void* owner; // the user program this thread runs, nullptr for kernel threads
 };
 
 class ThreadImpl;
