@@ -47,6 +47,7 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 | `scripts/build.sh run` | boot the ISO in QEMU, serial output on the terminal (Ctrl-C quits) |
 | `scripts/build.sh debug` | boot the ISO in QEMU halted, waiting for gdb on `localhost:1234`; serial on `telnet localhost 4321` |
 | `scripts/build.sh selftest` | build the self test kernel in `build/selftest/` and run it, see [testing.md](testing.md) |
+| `scripts/build.sh crashtest` | build a kernel that faults on purpose in `build/crashtest/` and check its report |
 | `scripts/build.sh docs` | Doxygen API docs into `build/docs/html` |
 | `scripts/build.sh format` / `format-check` | clang-format the sources / check them, see [style.md](style.md) |
 | `scripts/build.sh tidy` | clang-tidy on the kernel sources |
@@ -72,9 +73,15 @@ ctest --preset selftest                       # the same test through CTest
 | Preset | Build directory | Notes |
 |---|---|---|
 | `default` | `build/default/` | normal kernel with the demo threads |
-| `selftest` | `build/selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and exits QEMU |
+| `selftest` | `build/selftest/` | `ATLOS_SELFTEST=ON`: the kernel runs the self tests and halts with the result |
+| `crashtest` | `build/crashtest/` | `ATLOS_CRASHTEST=ON`: the kernel page faults on purpose after boot |
 
-Both presets export `compile_commands.json` for editors and clangd.
+`selftest` and `crashtest` also set `ATLOS_DEBUG_EXIT_PORT=0xf4`: the exit
+status is written to that port when the kernel halts, see
+[testing.md](testing.md). Leave it empty (`-DATLOS_DEBUG_EXIT_PORT=`) for a
+test kernel meant for real hardware.
+
+All presets export `compile_commands.json` for editors and clangd.
 
 ### Outputs
 

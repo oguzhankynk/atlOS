@@ -89,7 +89,9 @@ ThreadImpl::ThreadImpl(Scheduler& scheduler, Memory::AddressSpace& addressSpace,
     push(sp, reinterpret_cast<uintptr_t>(nullptr));
 
     m_tcb.regs.rsp = reinterpret_cast<uint64_t>(sp);
-    m_tcb.regs.rbp = m_tcb.regs.rsp;
+
+    // No caller frame: rbp = 0 ends a backtrace at threadStartPoint
+    m_tcb.regs.rbp = 0;
 }
 
 ThreadImpl::~ThreadImpl()

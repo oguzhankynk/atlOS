@@ -13,10 +13,29 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   and pull request; tagged releases are built and published automatically
 - `scripts/build-toolchain.sh` builds the cross toolchain (pinned versions,
   verified downloads)
+- TSS with an IST stack for the double fault handler: a broken kernel stack
+  is reported instead of resetting the machine (triple fault)
+- Exception reports decode the page fault (CR2, read/write/fetch, present,
+  user/kernel) and selector error codes (#TS, #NP, #SS, #GP)
+- Panic backtrace through the frame pointer chain; `scripts/symbolize.sh`
+  turns its addresses into functions and lines
+- `crashtest` preset and `scripts/run-crashtest.sh`: a kernel that page faults
+  on purpose, its report is checked in CI
+- Self tests for fault decoding, the TSS and the backtrace (175 checks)
 
 ### Changed
 
 - clang-tidy findings are errors (`WarningsAsErrors`)
+- One panic path: exceptions and `kernelPanic` print a backtrace and halt with
+  `cli; hlt`; the exit status goes to an optional debug exit port
+  (`ATLOS_DEBUG_EXIT_PORT`, set by the test presets) instead of a hard coded
+  test device, so test kernels also run on real hardware
+- New threads and the boot flow start with `rbp = 0`
+
+### Fixed
+
+- Exception names for vectors 10..21 were off by one (a page fault was
+  reported as "IntelReserved")
 
 ## [0.1.0] - 2026-10-20
 

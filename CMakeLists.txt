@@ -10,6 +10,13 @@ endif()
 # Run the in-kernel self tests instead of the demo threads (preset "selftest")
 option(ATLOS_SELFTEST "Build the kernel in self test mode" OFF)
 
+# Fault on purpose after boot to test the fault report (preset "crashtest")
+option(ATLOS_CRASHTEST "Build a kernel that page faults on purpose" OFF)
+
+# I/O port that receives the exit status when the kernel halts (Core::haltWithStatus),
+# so a test machine can end the run with it. Empty: nothing is written.
+set(ATLOS_DEBUG_EXIT_PORT "" CACHE STRING "I/O port for the exit status at halt, empty for none")
+
 # No MMX/SSE/AVX anywhere in the kernel image (kernel and libc): boot does not
 # enable SSE in CR4, and neither the context switch nor the ISRs save SIMD state.
 # kernel/CMakeLists.txt checks the linked image for SIMD instructions.
@@ -78,6 +85,19 @@ if(GRUB_MKRESCUE AND QEMU)
         enable_testing()
         add_test(NAME selftest
             COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log)
+    endif()
+
+    if(ATLOS_CRASHTEST)
+        add_custom_target(crashtest
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>
+            DEPENDS iso
+            USES_TERMINAL
+            VERBATIM
+        )
+
+        enable_testing()
+        add_test(NAME crashtest
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>)
     endif()
 elseif(NOT QEMU)
     message(WARNING "qemu-system-x86_64 not found: the run, debug and selftest targets are not available")

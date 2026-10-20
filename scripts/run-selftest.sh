@@ -25,7 +25,8 @@ QEMU_STATUS=$?
 
 grep -a "\[SELFTEST\]" "$LOG"
 
-# isa-debug-exit: QEMU exits with (code << 1) | 1
+# isa-debug-exit: QEMU exits with (code << 1) | 1, code = Core::ExitStatus
+# written to ATLOS_DEBUG_EXIT_PORT (0 success, 1 failure, 2 panic)
 case $QEMU_STATUS in
     1)
         echo "SELFTEST PASSED"
@@ -35,8 +36,12 @@ case $QEMU_STATUS in
         echo "SELFTEST FAILED"
         exit 1
         ;;
+    5)
+        echo "SELFTEST PANIC, see $LOG"
+        exit 2
+        ;;
     124)
-        echo "SELFTEST TIMEOUT after ${TIMEOUT}s (panic or hang?), see $LOG"
+        echo "SELFTEST TIMEOUT after ${TIMEOUT}s (hang?), see $LOG"
         exit 2
         ;;
     *)

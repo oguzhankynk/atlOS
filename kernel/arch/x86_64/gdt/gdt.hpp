@@ -45,10 +45,43 @@ struct GDTR {
 } __attribute__((packed));
 
 /**
+ * @brief The 64-bit Task State Segment (Intel SDM Vol. 3A, "Task Management in
+ * 64-bit Mode"). In long mode it holds no task state any more, only stack
+ * pointers: rsp0..2 for privilege changes and ist1..7 for IDT gates that ask
+ * for a stack of their own.
+ */
+struct TaskStateSegment {
+    uint32_t reserved0;
+    uint64_t rsp[3]; ///< Stack for an interrupt that enters ring 0..2 from a lower privilege (user mode)
+    uint64_t reserved1;
+    uint64_t ist[7]; ///< Interrupt Stack Table: ist[0] is IST1, used by gates whose ist field is 1
+    uint64_t reserved2;
+    uint16_t reserved3;
+    uint16_t ioMapBase; ///< Offset of the I/O permission bitmap; sizeof(TaskStateSegment) means "none"
+} __attribute__((packed));
+
+static_assert(sizeof(TaskStateSegment) == 104, "the CPU expects a 104 byte TSS");
+
+/// @brief IST slot of the double fault handler (the ist field of IDT entry 8).
+static constexpr uint8_t doubleFaultStack = 1;
+
+/// @brief Size of the double fault stack.
+static constexpr uint64_t doubleFaultStackSize = 16 * 1024ULL;
+
+/**
+ * @brief Points the TSS descriptor of the GDT at the TSS, gives IST1 its stack
+ * and loads the task register (`ltr`). Call once, before IDT::init.
+ */
+void init();
+
+/**
  * @brief Returns a reference to the GDTR.
  *
  * @return const GDTR&
  */
 const GDTR& getGDTR();
+
+/// @brief The TSS of this CPU (the only one).
+const TaskStateSegment& taskStateSegment();
 
 };

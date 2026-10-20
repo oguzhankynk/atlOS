@@ -56,7 +56,8 @@ thread must cooperate.
   build their own schedulers on a fake tick source.
 - Each `Thread` gets a 2 MB stack page from the `AddressSpace` it is given;
   the initial stack is laid out like "just after a `call`", as the System V ABI
-  requires (`rsp % 16 == 8` on entry).
+  requires (`rsp % 16 == 8` on entry). Its `rbp` starts at 0, which ends a
+  panic backtrace at the top of the thread.
 
 ### The context switch (`arch/x86_64/cpu/context.S`)
 

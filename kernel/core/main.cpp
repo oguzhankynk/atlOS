@@ -40,6 +40,7 @@
 #include <drivers/serial.hpp>
 
 #include <arch/x86_64/boot/multiboot2.inc>
+#include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/idt.hpp>
 
 #include <cxx/init.hpp>
@@ -53,6 +54,8 @@
 #include <drivers/pic.hpp>
 #include <drivers/pit.hpp>
 
+#include <core/halt.hpp>
+#include <tests/crashtest.hpp>
 #include <tests/selftest.hpp>
 
 extern void threadTaskA(Threading::Scheduler& scheduler);
@@ -95,7 +98,8 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // Call global constructors
     Cxx::callConstructors();
 
-    // Initialize IDT
+    // TSS first: the IDT gives the double fault handler a TSS (IST) stack
+    GDT::init();
     IDT::init();
 
     // Validate multiboot information
@@ -132,12 +136,11 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
 #ifdef ATLOS_SELFTEST
     int failed = SelfTest::run(pmm, kernelSpace, scheduler);
-    SelfTest::exitQemu(failed == 0 ? 0 : 1);
+    Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
+#endif
 
-    // Only reached when QEMU has no isa-debug-exit device
-    while (1) {
-        asm volatile("cli; hlt");
-    }
+#ifdef ATLOS_CRASHTEST
+    CrashTest::run();
 #endif
 
     printf("Creating threads...\n");

@@ -38,6 +38,7 @@ builds one), CMake 3.22+, Ninja, `grub-mkrescue` (with xorriso) and QEMU. See
 scripts/build.sh            # libc, kernel and build/default/atlOS.iso
 scripts/build.sh run        # boot in QEMU, serial output on the terminal
 scripts/build.sh selftest   # build and run the self tests
+scripts/build.sh crashtest  # a kernel that faults on purpose: check the report
 ```
 
 The same with CMake directly:
@@ -65,7 +66,7 @@ kernel/
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
 cmake/           cross toolchain file
-scripts/         build.sh, run-selftest.sh
+scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh
 tools/           grub.cfg, FAT disk image scripts
 docs/            documentation
 ```

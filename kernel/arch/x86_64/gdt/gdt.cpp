@@ -19,12 +19,14 @@
 
 #include <arch/x86_64/gdt/gdt.hpp>
 
+#include <arch/x86_64/cpu/cpu.hpp>
+
 namespace GDT {
 /**
  * @brief Global Descriptor Table (GDT) entries.
  *
  */
-__attribute__((section(".bootdata"), aligned(0x1000))) static GDTEntry s_gdtTable[5] = {
+__attribute__((section(".bootdata"), aligned(0x1000))) static GDTEntry s_gdtTable[7] = {
 
     { // 0: NULL
         0, 0, 0, 0, 0, 0
@@ -91,7 +93,13 @@ __attribute__((section(".bootdata"), aligned(0x1000))) static GDTEntry s_gdtTabl
       // G=1       : 4 KB granularity
         0xFFFF, 0x0000, 0x00, 0xF2, 0xA0, 0x00
 
-    }
+    },
+
+    // 5, 6: TSS descriptor (selector 0x28). A system descriptor is 16 bytes in
+    // long mode, so it takes two slots; init() fills it in, the TSS address is
+    // not known before the kernel is linked.
+    { 0, 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0, 0 }
 
 };
 
@@ -104,6 +112,53 @@ __attribute__((section(".bootdata"), used)) GDTR gdt_ptr = {
     sizeof(s_gdtTable) - 1,
     reinterpret_cast<uint64_t>(&s_gdtTable)
 };
+}
+
+/**
+ * @brief The TSS. One CPU, one TSS; a CPU's TSS is hardware state like the IDT,
+ * so it is a static table rather than an object.
+ */
+static TaskStateSegment s_tss;
+
+/**
+ * @brief Stack of the double fault handler. A double fault often means the
+ * current stack is broken (a kernel stack overflow), so the CPU switches to
+ * this one through IST1 before pushing anything.
+ */
+alignas(16) static uint8_t s_doubleFaultStack[doubleFaultStackSize];
+
+void init()
+{
+    // The stack grows down: IST1 is its top
+    s_tss.ist[doubleFaultStack - 1] = reinterpret_cast<uint64_t>(s_doubleFaultStack + doubleFaultStackSize);
+    s_tss.ioMapBase = sizeof(TaskStateSegment);
+
+    // 64-bit TSS descriptor (Intel SDM Vol. 3A, "TSS Descriptor in 64-bit mode"):
+    // a GDTEntry with type 9 (available 64-bit TSS), followed by base 32..63
+    uint64_t base = reinterpret_cast<uint64_t>(&s_tss);
+    uint32_t limit = sizeof(TaskStateSegment) - 1;
+    GDTEntry& low = s_gdtTable[static_cast<uint16_t>(SegmentSelect::TSS) / sizeof(GDTEntry)];
+    GDTEntry& high = (&low)[1];
+
+    low.limitLow = limit & 0xFFFF;
+    low.baseLow = base & 0xFFFF;
+    low.baseMiddle = (base >> 16) & 0xFF;
+    low.access = 0x89; // P=1, DPL=0, type 9
+    low.limitHighAndFlags = (limit >> 16) & 0x0F; // G=0: the limit is in bytes
+    low.baseHigh = (base >> 24) & 0xFF;
+
+    high.limitLow = (base >> 32) & 0xFFFF;
+    high.baseLow = (base >> 48) & 0xFFFF;
+
+    // The GDTR already points at the table (boot.S), loading TR reads the new descriptor
+    __asm__ volatile("ltr %0"
+                     :
+                     : "r"(static_cast<uint16_t>(SegmentSelect::TSS)));
+}
+
+const TaskStateSegment& taskStateSegment()
+{
+    return s_tss;
 }
 
 /**

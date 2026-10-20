@@ -32,13 +32,16 @@ jobs:
       - name: Self tests (QEMU)
         run: scripts/build.sh selftest
 
+      - name: Crash test (fault report)
+        run: scripts/build.sh crashtest
+
       - name: Format
         run: scripts/build.sh format-check
 
       - name: clang-tidy
         run: scripts/build.sh tidy
 
-      - name: Keep the ISO and the self test log
+      - name: Keep the ISO and the test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -46,5 +49,6 @@ jobs:
           path: |
             build/default/atlOS.iso
             build/selftest/selftest.log
+            build/crashtest/crashtest.log
           if-no-files-found: ignore
           retention-days: 14

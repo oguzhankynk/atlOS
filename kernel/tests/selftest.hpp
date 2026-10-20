@@ -4,7 +4,8 @@
  * @brief In-kernel self tests for the memory managers, heap and scheduler.
  *
  * Built with -DATLOS_SELFTEST=ON (scripts/build.sh selftest), kernelMain runs the tests
- * instead of the demo threads and reports the result to QEMU.
+ * instead of the demo threads, then halts with the result
+ * (Core::haltWithStatus).
  */
 
 #pragma once
@@ -30,11 +31,5 @@ namespace SelfTest {
  * @return Number of failed checks.
  */
 int run(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler);
-
-/**
- * @brief Exit QEMU through the isa-debug-exit device (iobase 0xf4).
- * QEMU exits with (code << 1) | 1. Does nothing without the device.
- */
-void exitQemu(int code);
 
 } // namespace SelfTest

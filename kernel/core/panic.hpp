@@ -21,18 +21,27 @@
  */
 #pragma once
 
+#include <stdint.h>
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
 /**
- * @brief Kernel panic function.
+ * @brief Kernel panic function: print the message and a backtrace of the
+ * caller, then halt (Core::haltWithStatus(Panic)).
  *
  * @param str Message to be displayed in case of a kernel panic.
  * Never returns, which lets the compiler and clang-tidy know that code after
  * a panic is unreachable.
  */
 [[noreturn]] void kernelPanic(const char* str);
+
+/**
+ * @brief Like kernelPanic, with the backtrace starting at rip and the frame
+ * chain at rbp (e.g. the faulting code of a CPU exception).
+ */
+[[noreturn]] void kernelPanicFrom(const char* str, uint64_t rip, uint64_t rbp);
 void kernelPanicAssert(bool condition);
 
 #if defined(__cplusplus)

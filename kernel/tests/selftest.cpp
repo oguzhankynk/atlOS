@@ -13,7 +13,11 @@
 #include <string.h>
 
 #include <arch/x86_64/boot/multiboot2.inc>
+#include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/gdt/gdt.hpp>
+#include <arch/x86_64/idt/fault.hpp>
+#include <arch/x86_64/idt/idt.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/console.hpp>
 #include <cxx/uninitialized.hpp>
@@ -253,7 +257,7 @@ static void testPmmMultiboot()
     mmap.entry_size = sizeof(multiboot_mmap_entry);
     memcpy(s_info + 8, &mmap, sizeof(mmap));
 
-    // Like QEMU: low memory, a hole, then 128 MB from 1 MB on
+    // A typical PC: low memory, a hole below 1 MB, then 128 MB from 1 MB on
     multiboot_mmap_entry map[entries] = {
         { 0x0, 0x9FC00, MULTIBOOT_MEMORY_AVAILABLE, 0 },
         { 0x9FC00, 0x400, MULTIBOOT_MEMORY_RESERVED, 0 },
@@ -654,12 +658,121 @@ static void testSerialPortMissing()
 {
     group("Serial port (missing COM2)");
 
-    // QEMU runs the self tests with one serial port, so COM2 fails its loopback
-    // test; writing to it must return instead of waiting for the transmitter.
+    // Writing to a port that failed its loopback test must return instead of
+    // waiting for the transmitter. Only testable on a machine without COM2.
     Drivers::SerialPort com2(Drivers::SerialPort::com2);
-    CHECK(!com2.isPresent());
+    if (com2.isPresent()) {
+        printf("[SELFTEST] skipped: this machine has a COM2\n");
+        return;
+    }
     writeText(com2, "dropped");
     CHECK(true); // reached
+}
+
+// ------------------------------------------------------------
+// Faults: decoding, TSS, backtrace
+// ------------------------------------------------------------
+
+static void testFaultDecoding()
+{
+    group("Fault decoding");
+    using namespace Fault;
+
+    PageFaultError pf = decodePageFault(0);
+    CHECK(!pf.present && !pf.write && !pf.user && !pf.reservedBit && !pf.instructionFetch);
+    pf = decodePageFault(0x7); // a user write to a present page
+    CHECK(pf.present && pf.write && pf.user && !pf.reservedBit && !pf.instructionFetch);
+    pf = decodePageFault(0x8);
+    CHECK(!pf.present && pf.reservedBit);
+    pf = decodePageFault(0x10);
+    CHECK(!pf.write && pf.instructionFetch);
+
+    SelectorError se = decodeSelectorError(0x28); // the TSS descriptor
+    CHECK(!se.external && se.table == DescriptorTable::GDT && se.index == 5);
+    se = decodeSelectorError((14 << 3) | 0x2 | 0x1); // IDT vector 14, external event
+    CHECK(se.external && se.table == DescriptorTable::IDT && se.index == 14);
+    se = decodeSelectorError((3 << 3) | 0x4);
+    CHECK(se.table == DescriptorTable::LDT && se.index == 3);
+    se = decodeSelectorError((3 << 3) | 0x6); // IDT wins, TI is ignored then
+    CHECK(se.table == DescriptorTable::IDT);
+    se = decodeSelectorError(0xFFF8);
+    CHECK(se.index == 0x1FFF);
+
+    CHECK(strcmp(exceptionName(0), "Divide error") == 0);
+    CHECK(strcmp(exceptionName(8), "Double fault") == 0);
+    CHECK(strcmp(exceptionName(13), "General protection fault") == 0);
+    CHECK(strcmp(exceptionName(14), "Page fault") == 0);
+    CHECK(exceptionName(32) == nullptr);
+
+    // The vector enum once had an extra entry, shifting 10..21 by one
+    CHECK((uint32_t)IDT::ExternalInterrupts::InvalidTSS == 10);
+    CHECK((uint32_t)IDT::ExternalInterrupts::PageFault == 14);
+    CHECK((uint32_t)IDT::ExternalInterrupts::ControlProtectionException == 21);
+}
+
+static void testTaskStateSegment()
+{
+    group("TSS and double fault stack");
+
+    uint16_t taskRegister;
+    __asm__ volatile("str %0"
+                     : "=r"(taskRegister));
+    CHECK(taskRegister == (uint16_t)SegmentSelect::TSS);
+
+    const GDT::TaskStateSegment& tss = GDT::taskStateSegment();
+    uint64_t top = tss.ist[GDT::doubleFaultStack - 1];
+    CHECK(top != 0 && top % 16 == 0);
+    CHECK(tss.ioMapBase == sizeof(GDT::TaskStateSegment));
+
+    // Only the double fault switches stacks
+    CHECK(IDT::entry(8).ist == GDT::doubleFaultStack);
+    CHECK(IDT::entry(14).ist == 0);
+    CHECK(IDT::entry(32).ist == 0);
+
+    // The descriptor's busy bit: ltr marks the TSS as in use (type 9 -> 11)
+    const GDT::GDTR& gdtr = GDT::getGDTR();
+    const GDT::GDTEntry* gdt = reinterpret_cast<const GDT::GDTEntry*>(gdtr.base);
+    const GDT::GDTEntry& descriptor = gdt[(uint16_t)SegmentSelect::TSS / sizeof(GDT::GDTEntry)];
+    CHECK(descriptor.access == 0x8B);
+    CHECK(gdtr.limit == 7 * sizeof(GDT::GDTEntry) - 1);
+}
+
+static bool inKernelText(uint64_t address)
+{
+    return address >= (uint64_t)&_text_start && address < (uint64_t)&_text_end;
+}
+
+__attribute__((noinline)) static int backtraceHere(uint64_t* addresses, int max)
+{
+    return Backtrace::collect((uint64_t)__builtin_frame_address(0), addresses, max);
+}
+
+static void testBacktrace()
+{
+    group("Backtrace");
+
+    // backtraceHere <- testBacktrace <- run <- kernelMain <- boot.S
+    uint64_t addresses[Backtrace::maxFrames] {};
+    int count = backtraceHere(addresses, Backtrace::maxFrames);
+    CHECK(count >= 4);
+    CHECK(count < Backtrace::maxFrames); // the chain ends at boot.S's rbp = 0
+    CHECK(inKernelText(addresses[0]));
+    CHECK(inKernelText(addresses[1]));
+
+    // The limit is respected
+    uint64_t two[3] {};
+    CHECK(backtraceHere(two, 2) == 2);
+    CHECK(two[2] == 0);
+
+    // Broken chains end the walk
+    CHECK(Backtrace::collect(0, addresses, Backtrace::maxFrames) == 0);
+    CHECK(Backtrace::collect(0x1003, addresses, Backtrace::maxFrames) == 0);
+
+    // A frame whose saved rbp points down the stack: one address, then stop
+    uint64_t loop[2] = { 0, 0x1234 };
+    loop[0] = (uint64_t)&loop[0];
+    CHECK(Backtrace::collect((uint64_t)&loop[0], addresses, Backtrace::maxFrames) == 1);
+    CHECK(addresses[0] == 0x1234);
 }
 
 // ------------------------------------------------------------
@@ -780,6 +893,27 @@ static void testThreadStack(Scheduler& scheduler, AddressSpace& space)
     CHECK(space.virtToPhys((void*)page) != nullptr);
     delete t;
     CHECK(space.virtToPhys((void*)page) == nullptr);
+}
+
+static int s_threadFrames {};
+
+static void backtraceInThread(Scheduler& scheduler)
+{
+    uint64_t addresses[Backtrace::maxFrames];
+    s_threadFrames = backtraceHere(addresses, Backtrace::maxFrames);
+}
+
+static void testThreadBacktrace(Scheduler& scheduler, AddressSpace& space)
+{
+    group("Backtrace in a thread");
+
+    // backtraceHere <- backtraceInThread <- threadStartPoint, then rbp = 0:
+    // the walk must stop at the top of the thread's stack
+    s_threadFrames = -1;
+    Thread* t = new Thread(scheduler, space, backtraceInThread);
+    CHECK(waitForExit(scheduler, *t, 1000));
+    CHECK(s_threadFrames >= 2 && s_threadFrames < Backtrace::maxFrames);
+    delete t;
 }
 
 static void testRoundRobin(AddressSpace& space)
@@ -967,7 +1101,11 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testVgaConsole();
     testSerialPortMissing();
     testCpu();
+    testFaultDecoding();
+    testTaskStateSegment();
+    testBacktrace();
     testThreadStack(scheduler, space);
+    testThreadBacktrace(scheduler, space);
     testRoundRobin(space);
     testSleepFakeTicks(space);
     testSleepRealTime(scheduler, space);
@@ -977,11 +1115,6 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;
-}
-
-void exitQemu(int code)
-{
-    IOPort::outportb(0xf4, (uint8_t)code);
 }
 
 } // namespace SelfTest
