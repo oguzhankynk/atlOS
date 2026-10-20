@@ -39,9 +39,10 @@ same binary). Doxygen gets the version through `ATLOS_VERSION`.
 1. On `development`, set the version in `CMakeLists.txt` and move the
    `[Unreleased]` entries of `CHANGELOG.md` under the new version with today's
    date (and update the links at the bottom).
-2. Check: `scripts/build.sh clean all selftest format-check tidy`.
+2. Check: `scripts/build.sh clean all selftest format-check tidy` (CI runs the
+   same on every push).
 3. Commit: `git commit -am "Release vX.Y.Z"`.
-4. Merge and tag:
+4. Merge, tag and push:
 
    ```sh
    git checkout master
@@ -51,11 +52,18 @@ same binary). Doxygen gets the version through `ATLOS_VERSION`.
    git checkout development
    ```
 
-5. Build the ISO from the tag (the banner then shows `vX.Y.Z`) and publish
-   the release with the changelog section as notes:
+Pushing the tag starts the release workflow (`.github/workflows/release.yml`).
+It checks that the tag matches `project(atlOS VERSION ...)`, builds and runs
+the self tests from the tag (so the banner shows `vX.Y.Z`), and publishes the
+GitHub release with the `CHANGELOG.md` section as notes
+(`scripts/release-notes.sh`) and the ISO attached.
 
-   ```sh
-   scripts/build.sh clean all
-   gh release create vX.Y.Z build/default/atlOS.iso#atlOS-X.Y.Z.iso \
-       --title "atlOS X.Y.Z" --notes-file <changelog section>
-   ```
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `development` and `master`
+and on pull requests: build, self tests in QEMU, `format-check` and `tidy`
+(any clang-tidy finding fails it). The ISO and the self test log are kept as
+artifacts for 14 days. Both workflows run on `ubuntu-22.04`, the same tool
+versions as the development machine, and share `.github/actions/setup`, which
+builds the cross toolchain with `scripts/build-toolchain.sh` once and then
+restores it from the cache (the key is the script's hash).

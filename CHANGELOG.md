@@ -7,6 +7,17 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- CI on GitHub Actions: build, self tests, format and clang-tidy on every push
+  and pull request; tagged releases are built and published automatically
+- `scripts/build-toolchain.sh` builds the cross toolchain (pinned versions,
+  verified downloads)
+
+### Changed
+
+- clang-tidy findings are errors (`WarningsAsErrors`)
+
 ## [0.1.0] - 2026-10-20
 
 First release.

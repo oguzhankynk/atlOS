@@ -10,7 +10,7 @@
 | `grub-mkrescue` + `xorriso` | GRUB 2 | bootable ISO |
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
 | Doxygen | optional | API docs |
-| clang-format, clang-tidy | 14 or newer, optional | `format`, `format-check`, `tidy` |
+| clang-format, clang-tidy | 14 (as in CI), optional | `format`, `format-check`, `tidy`; other versions may format differently |
 
 On Debian/Ubuntu:
 
@@ -21,49 +21,20 @@ sudo apt install cmake ninja-build grub-pc-bin grub-common xorriso mtools qemu-s
 ## Cross compiler
 
 atlOS has to be built with a cross compiler that targets `x86_64-elf`; the
-host compiler will not work. The steps below build one in `$HOME/opt/cross`.
-More background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.org/GCC_Cross-Compiler).
+host compiler will not work. `scripts/build-toolchain.sh` builds one
+(binutils 2.41, GCC 13.2.0 for C and C++, libgcc for the kernel code model);
+the downloaded sources are checked against pinned SHA-256 sums. CI builds its
+toolchain with the same script.
 
 ```sh
-export PREFIX="$HOME/opt/cross"
-export TARGET=x86_64-elf
-export PATH="$PREFIX/bin:$PATH"     # also add this to ~/.bashrc or ~/.zshrc
-
-sudo apt install build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo wget
-mkdir -p $HOME/src && cd $HOME/src
-```
-
-Binutils:
-
-```sh
-wget https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz
-tar -xf binutils-2.41.tar.xz
-mkdir build-binutils && cd build-binutils
-../binutils-2.41/configure --target=$TARGET --prefix=$PREFIX --with-sysroot --disable-nls --disable-werror
-make -j$(nproc)
-make install
-cd ..
-```
-
-GCC (C and C++, no headers, libgcc built for the kernel code model):
-
-```sh
-wget https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz
-tar -xf gcc-13.2.0.tar.xz
-mkdir build-gcc && cd build-gcc
-../gcc-13.2.0/configure --target=$TARGET --prefix=$PREFIX --disable-nls --enable-languages=c,c++ --without-headers
-make all-gcc -j$(nproc)
-make all-target-libgcc CFLAGS_FOR_TARGET='-g -O2 -mcmodel=large -mno-red-zone' -j$(nproc)
-make install-gcc
-make install-target-libgcc
-```
-
-Check:
-
-```sh
+sudo apt install build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo curl
+scripts/build-toolchain.sh              # into $HOME/opt/cross (takes 15-30 minutes)
+export PATH="$HOME/opt/cross/bin:$PATH" # also add this to ~/.bashrc or ~/.zshrc
 x86_64-elf-gcc --version
-x86_64-elf-g++ --version
 ```
+
+A different prefix can be given as the argument; `JOBS` sets the number of
+parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.org/GCC_Cross-Compiler).
 
 ## Building
 

@@ -2,6 +2,9 @@
 
 <img src="docs/images/logo.jpg" alt="atlOS logo" width="160" align="right">
 
+[![CI](https://github.com/oguzhankynk/atlOS/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/oguzhankynk/atlOS/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/oguzhankynk/atlOS)](https://github.com/oguzhankynk/atlOS/releases)
+
 atlOS is an experimental x86_64 operating system written in C++17 for learning
 and research. It boots with GRUB (multiboot2) into a higher half kernel and is
 small enough to read end to end.
@@ -26,9 +29,10 @@ single CPU.
 
 ## Quick start
 
-You need an `x86_64-elf` GCC cross compiler on `PATH`, CMake 3.22+, Ninja,
-`grub-mkrescue` (with xorriso) and QEMU. See [docs/building.md](docs/building.md)
-for building the toolchain.
+You need an `x86_64-elf` GCC cross compiler on `PATH` (`scripts/build-toolchain.sh`
+builds one), CMake 3.22+, Ninja, `grub-mkrescue` (with xorriso) and QEMU. See
+[docs/building.md](docs/building.md). Or boot a ready made ISO from the
+[releases](https://github.com/oguzhankynk/atlOS/releases).
 
 ```sh
 scripts/build.sh            # libc, kernel and build/default/atlOS.iso

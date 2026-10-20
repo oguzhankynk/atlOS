@@ -87,7 +87,7 @@ endif()
 # Code style (docs/style.md)
 # ------------------------------------------------------------
 
-find_program(CLANG_FORMAT clang-format)
+find_program(CLANG_FORMAT NAMES clang-format clang-format-14)
 find_program(RUN_CLANG_TIDY NAMES run-clang-tidy run-clang-tidy-14)
 
 file(GLOB_RECURSE ATLOS_FORMAT_FILES CONFIGURE_DEPENDS
