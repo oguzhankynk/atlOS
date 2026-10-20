@@ -39,8 +39,8 @@ same binary). Doxygen gets the version through `ATLOS_VERSION`.
 1. On `development`, set the version in `CMakeLists.txt` and move the
    `[Unreleased]` entries of `CHANGELOG.md` under the new version with today's
    date (and update the links at the bottom).
-2. Check: `scripts/build.sh clean all selftest format-check tidy` (CI runs the
-   same on every push).
+2. Check: `scripts/build.sh clean all selftest crashtest shelltest format-check tidy`
+   (CI runs the same on every push).
 3. Commit: `git commit -am "Release vX.Y.Z"`.
 4. Merge, tag and push:
 
@@ -61,9 +61,10 @@ GitHub release with the `CHANGELOG.md` section as notes
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to `development` and `master`
-and on pull requests: build, self tests in QEMU, `format-check` and `tidy`
-(any clang-tidy finding fails it). The ISO and the self test log are kept as
-artifacts for 14 days. Both workflows run on `ubuntu-22.04`, the same tool
+and on pull requests: build, self tests in QEMU (with the test disk, checked
+afterwards by `fsck.fat`), the crash test, the shell test over the serial
+port, `format-check` and `tidy` (any clang-tidy finding fails it). The ISO
+and the test logs are kept as artifacts for 14 days. Both workflows run on `ubuntu-22.04`, the same tool
 versions as the development machine, and share `.github/actions/setup`, which
 builds the cross toolchain with `scripts/build-toolchain.sh` once and then
 restores it from the cache (the key is the script's hash).

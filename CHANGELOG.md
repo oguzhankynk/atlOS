@@ -7,6 +7,11 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
+Fault handling, synchronization, the keyboard, disks with FAT16 and a VFS,
+and a kernel shell.
+
 ### Added
 
 - CI on GitHub Actions: build, self tests, format and clang-tidy on every push
@@ -129,5 +134,6 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzhankynk/atlOS/releases/tag/v0.1.0
