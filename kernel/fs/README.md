@@ -4,7 +4,7 @@ How "the bytes of `/disk0/DOCS/README.TXT`" become sector reads on a disk.
 
 ```
 Fs::Vfs              vfs.cpp          /disk0/DOCS/README.TXT -> the disk0 file system, "DOCS/README.TXT"
-Fs::FileSystem       file_system.hpp  interface: stat, read, listDirectory
+Fs::FileSystem       file_system.hpp  interface: stat, read, listDirectory, create, write, mkdir, remove, rmdir
 Fs::Fat16            fat16.cpp        directory entries, cluster chains -> sector numbers
 Drivers::BlockDevice drivers/disk/    PartitionDevice (+ offset) -> ATAPioDevice (I/O ports)
 ```
@@ -44,10 +44,10 @@ the rest of the kernel: that is the job of the **VFS** (virtual file system).
 
 ## How atlOS does it
 
-**FAT16, read only, 8.3 names.** FAT is the simplest real file system and
-tools on every host can create and inspect it (the test disk is made with
-mtools). Writing (allocating clusters, updating both FAT copies and the
-directory entry consistently) and long file names are left for later.
+**FAT16 with 8.3 names, read and write.** FAT is the simplest real file
+system and tools on every host can create and inspect it (the test disk is
+made with mtools, and checked with `fsck.fat` after the kernel wrote to it).
+Long file names are left for later.
 
 ### FAT16 on disk
 
@@ -101,6 +101,66 @@ sequenceDiagram
     F-->>C: 43
 ```
 
+### Writing
+
+Every change is a few sector writes; there is no cache, each one goes to the
+disk at once.
+
+| Operation | What changes on disk |
+|---|---|
+| `create("A.TXT")` | a free slot in the parent directory (a deleted entry or the end mark) gets an entry: name, archive attribute, first cluster 0, size 0 |
+| `write(path, offset, data)` | missing clusters are allocated (first fit, starting after the last allocation) and linked to the end of the chain in **every FAT copy**; the data sectors (a partly written sector is read first); the entry's size, first cluster and time |
+| `makeDirectory("D")` | a zeroed cluster with `.` (itself) and `..` (the parent, 0 for the root); an entry with the directory attribute |
+| `remove("A.TXT")` | the entry's first byte becomes `0xE5` (deleted); the chain's FAT entries become 0 (free) |
+| `removeDirectory("D")` | the same, only if `D` holds nothing but `.` and `..` |
+
+A full subdirectory gets one more cluster; the root directory has a fixed
+size and can not grow (512 entries on the test disk). There are no holes:
+`write` starts inside the file or right at its end. When the volume is full,
+`write` writes what fits and returns that count.
+
+No clock yet: every entry is dated 1980-01-01 00:00, the FAT epoch.
+
+```mermaid
+sequenceDiagram
+    participant C as caller
+    participant F as Fat16
+    participant FAT as FAT 1 + FAT 2
+    participant D as data area
+    participant E as directory entry
+    C->>F: write("NOTE.TXT", 0, 17 bytes)
+    F->>E: lookup: first cluster 0, size 0
+    F->>FAT: free cluster 57 -> FAT[57] = 0xFFFF (both copies)
+    F->>D: sector of cluster 57 (read, change 17 bytes, write)
+    F->>E: first cluster 57, size 17
+```
+
+### Write order (and why it matters)
+
+Writing a file touches three places: the FAT, the data and the directory
+entry. If the machine stops between two of those writes, the disk keeps a
+state in between. atlOS writes them in the order the code needs them (FAT,
+data, entry) and does not try to be crash safe. What a crash can leave:
+
+| Stopped after | State on disk | Effect |
+|---|---|---|
+| FAT, before the entry | clusters marked used, no entry points at them | **lost clusters**: space wasted until `fsck` frees them |
+| `remove`: entry deleted, before the FAT | the chain is still marked used | lost clusters again |
+| a FAT copy, before the other | FAT 1 and FAT 2 differ | `fsck` asks which copy to trust |
+
+Other orders and techniques, roughly from simple to robust:
+
+- **Careful order**: allocate and write the data first, update the entry
+  last, and free clusters only after the entry is gone. A crash then loses
+  at most some space, never points a file at foreign data.
+- **Dirty bit**: FAT16 has a "volume was not cleanly unmounted" bit in
+  `FAT[1]`; set at mount, cleared at unmount, so the next mount knows to
+  check. Needs an unmount.
+- **Journaling** (ext3/4, NTFS): write what is about to change to a log
+  first, then change it; after a crash the log is replayed. FAT has none.
+- **Copy-on-write** (ZFS, Btrfs, APFS): never overwrite, write new blocks and
+  switch one pointer at the end.
+
 ### Robustness
 
 A file system on a disk is input from outside: it may be damaged or made up.
@@ -124,7 +184,9 @@ nothing has to be closed, and a later `open` can be added on top.
 
 ### Deliberately not done
 
-- No writing, no long file names, no FAT12/FAT32, no exFAT.
+- No long file names (and removing a file that has one leaves its LFN parts
+  behind), no FAT12/FAT32, no exFAT, no rename or truncate.
+- Not crash safe (see *Write order*), no dirty bit, no real timestamps.
 - No open files / file descriptors, no caching: every call walks the path
   again and reads sectors one at a time (the FAT keeps one sector cached).
 - No permissions, timestamps or volume labels in the interface.
@@ -140,9 +202,19 @@ nothing has to be closed, and a later `open` can be added on top.
 - *FAT16 (RAM disk)*: a hand built volume: lookups, reads across clusters
   that are not in order, `..`, listings, the broken chains above, the VFS on
   top, and volumes that are not FAT16.
+- *FAT16 writing (RAM disk)*: create, append and overwrite in odd sized
+  pieces, files over several clusters, both FAT copies equal, remove gives
+  every cluster back, mkdir with `.`/`..`, a directory growing past one
+  cluster, rmdir only when empty, a full volume and a full root directory.
 - *ATA disk (test disk)*: the real driver and `/disk0` as mounted at boot,
   against the image from `scripts/make-disk-image.sh` (see `tools/disk/`).
-  Skipped when no disk is attached.
+  Then the kernel writes `KERNEL/NOTE.TXT` and an 11000 byte
+  `KERNEL/DATA.TXT`, and creates and removes a directory with a file. After
+  QEMU exits, `scripts/check-test-disk.sh` checks the disk on the host:
+  `fsck.fat -n` must find it consistent, and mtools must read what the kernel
+  wrote. A second FAT implementation catches what the kernel's own reader
+  would not (both sides could share a misunderstanding). Skipped when no disk
+  is attached.
 
 ## References
 

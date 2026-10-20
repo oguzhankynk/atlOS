@@ -20,7 +20,9 @@ the files with mtools (`mcopy -i disk.img@@1048576`). The image:
   (2000 lines `line 00001` .. `line 02000`, 22000 bytes, many clusters)
 
 The self tests (`kernel/tests/selftest.cpp`, *ATA disk*) compare the contents
-with what they expect: change both together.
+with what they expect, then write `KERNEL/NOTE.TXT` and `KERNEL/DATA.TXT` to
+a copy of the image; `scripts/check-test-disk.sh` checks that copy on the host
+with `fsck.fat` and mtools. Change them together.
 
 To look inside:
 

@@ -39,6 +39,11 @@ public:
     bool stat(const char* path, FileInfo& info);
     int64_t read(const char* path, uint64_t offset, void* buffer, uint64_t size);
     bool listDirectory(const char* path, DirectoryCallback callback, void* arg);
+    bool create(const char* path);
+    int64_t write(const char* path, uint64_t offset, const void* buffer, uint64_t size);
+    bool makeDirectory(const char* path);
+    bool remove(const char* path);
+    bool removeDirectory(const char* path);
 
 private:
     // "/disk0/a/b" -> the disk0 file system and "a/b"; nullptr for "/" or an unknown mount

@@ -39,6 +39,11 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - `scripts/make-disk-image.sh` and the `disk-image` target build the test disk
   without root (sfdisk, mkfs.fat, mtools); the self tests read it in CI
   (439 checks)
+- FAT16 writing: `create`, `write` (append and overwrite, clusters allocated
+  first fit, every FAT copy updated), `makeDirectory`, `remove`,
+  `removeDirectory`, also through `Fs::Vfs`; fixed 1980-01-01 timestamps
+- `scripts/check-test-disk.sh`: after the self tests, `fsck.fat` and mtools
+  check on the host what the kernel wrote to the test disk (577 checks)
 
 ### Changed
 

@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 439 passed, 0 failed
+[SELFTEST] done: 577 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -34,6 +34,9 @@ SELFTEST PASSED
 used on its own. With a disk image it attaches a copy as the primary ATA master
 (the test disk, `scripts/make-disk-image.sh`; the `selftest` target passes
 `build/selftest/disk.img`) and fails if the kernel then skips the disk tests.
+After a passing run `scripts/check-test-disk.sh` checks the written copy on
+the host: `fsck.fat -n` must find no errors and mtools must read the files the
+kernel wrote; a failing check keeps the copy for a look.
 Without one, or on a machine without that disk, the *ATA disk* group is
 skipped. Its exit code is 0 when all checks pass, 1 when a check fails and 2
 on a panic, crash or timeout (`SELFTEST_TIMEOUT`, default 60 s). A panic stops
@@ -77,7 +80,8 @@ backtrace in it into function names.
 | Block devices and the MBR (RAM disk) | range checks, partition table parsing (bad signature, entries beyond the disk), a partition as its own device |
 | FAT16 8.3 names | path component to the on disk 11 bytes and back |
 | FAT16 (RAM disk) | a hand built volume: lookup (case, deleted entries, labels, LFN parts, ".."), reads across clusters out of order, broken chains (too short, a free cluster, out of range, a looping directory), the VFS on top, volumes that are not FAT16 |
-| ATA disk (test disk) | IDENTIFY, the partition table, writing and reading back sector 1, and `/disk0` as mounted at boot: `HELLO.TXT`, `DOCS/README.TXT`, a 22000 byte `BIG.TXT` line by line |
+| FAT16 writing (RAM disk) | create, append, overwrite, files over several clusters, both FAT copies equal, remove frees every cluster, mkdir/rmdir, a directory growing past a cluster, a full volume, a full root directory, the VFS |
+| ATA disk (test disk) | IDENTIFY, the partition table, writing and reading back sector 1, `/disk0` as mounted at boot (`HELLO.TXT`, `DOCS/README.TXT`, a 22000 byte `BIG.TXT` line by line), then writing `KERNEL/NOTE.TXT` and `KERNEL/DATA.TXT` and creating/removing `KERNEL/TMP` |
 | PS/2 keyboard (fake interrupt controller) | IRQ 1 attached and unmasked, `tryRead`, a reader blocked until characters arrive, a full buffer drops new characters |
 
 ## Crash test

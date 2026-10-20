@@ -41,6 +41,26 @@ public:
     /// Call callback for each entry of the directory at path ("." and ".." excluded).
     virtual bool listDirectory(const char* path, DirectoryCallback callback, void* arg) = 0;
 
+    /// Create an empty file. false if path exists, its directory does not, or the name is invalid.
+    virtual bool create(const char* path) = 0;
+
+    /**
+     * @brief Write size bytes at offset of the file at path, growing it as needed.
+     * offset may be at most the current size (no holes).
+     * @return The number of bytes written (less than size when the volume is
+     * full), -1 on an error.
+     */
+    virtual int64_t write(const char* path, uint64_t offset, const void* buffer, uint64_t size) = 0;
+
+    /// Create an empty directory.
+    virtual bool makeDirectory(const char* path) = 0;
+
+    /// Delete a file (not a directory).
+    virtual bool remove(const char* path) = 0;
+
+    /// Delete an empty directory.
+    virtual bool removeDirectory(const char* path) = 0;
+
     /// e.g. "fat16"
     virtual const char* typeName() const = 0;
 

@@ -98,4 +98,43 @@ bool Vfs::listDirectory(const char* path, DirectoryCallback callback, void* arg)
     return fileSystem && fileSystem->listDirectory(rest, callback, arg);
 }
 
+// The root and the mount points themselves can not be changed: an empty
+// rest of the path ("/disk0") is refused by the file system (no parent)
+bool Vfs::create(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->create(rest);
+}
+
+int64_t Vfs::write(const char* path, uint64_t offset, const void* buffer, uint64_t size)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    if (!fileSystem)
+        return -1;
+    return fileSystem->write(rest, offset, buffer, size);
+}
+
+bool Vfs::makeDirectory(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->makeDirectory(rest);
+}
+
+bool Vfs::remove(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->remove(rest);
+}
+
+bool Vfs::removeDirectory(const char* path)
+{
+    const char* rest;
+    FileSystem* fileSystem = resolve(path, rest);
+    return fileSystem && fileSystem->removeDirectory(rest);
+}
+
 } // namespace Fs

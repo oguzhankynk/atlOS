@@ -21,7 +21,7 @@ Working:
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout); the default kernel echoes what is typed
-- ATA disks (PIO), MBR partitions, read only FAT16 and a VFS with mount points (`/disk0/...`)
+- ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
@@ -67,7 +67,7 @@ kernel/
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
 cmake/           cross toolchain file
-scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh, make-disk-image.sh
+scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh, make-disk-image.sh, check-test-disk.sh
 tools/           grub.cfg, files of the test disk
 docs/            documentation
 ```

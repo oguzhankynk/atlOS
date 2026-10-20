@@ -1966,6 +1966,174 @@ static void testFat16()
     kfree(image);
 }
 
+static bool fatCopiesMatch(const uint8_t* image)
+{
+    return !memcmp(image + sectorSize, image + (size_t)(1 + fatSectorsPerFat) * sectorSize,
+        (size_t)fatSectorsPerFat * sectorSize);
+}
+
+static bool readsBack(Fs::FileSystem& fs, const char* path, const void* expected, uint64_t size)
+{
+    static uint8_t s_readBack[4096];
+    if (size > sizeof(s_readBack))
+        return false;
+    return fs.read(path, 0, s_readBack, sizeof(s_readBack)) == (int64_t)size && !memcmp(s_readBack, expected, size);
+}
+
+static void testFat16Write()
+{
+    group("FAT16 writing (RAM disk)");
+
+    auto* image = static_cast<uint8_t*>(kmalloc((size_t)fatTotalSectors * sectorSize));
+    CHECK(image != nullptr);
+    if (!image)
+        return;
+    buildFat16(image, fatTotalSectors);
+
+    Drivers::MemoryBlockDevice volume(image, fatTotalSectors);
+    Fs::Fat16 fat(volume);
+    CHECK(fat.mount());
+    uint32_t freeAtStart = fat.freeClusterCount();
+    CHECK(freeAtStart < fatClusters && freeAtStart > fatClusters - 20);
+
+    // create: an empty file, once
+    Fs::FileInfo info;
+    CHECK(fat.create("new.txt"));
+    CHECK(!fat.create("NEW.TXT"));
+    CHECK(fat.stat("NEW.TXT", info) && info.size == 0 && !info.isDirectory);
+    char text[16] {};
+    CHECK(fat.read("NEW.TXT", 0, text, sizeof(text)) == 0);
+    CHECK(fat.freeClusterCount() == freeAtStart);
+
+    // write: append, overwrite, no holes
+    CHECK(fat.write("NEW.TXT", 0, "abc", 3) == 3);
+    CHECK(fat.write("NEW.TXT", 3, "def", 3) == 3);
+    CHECK(fat.write("NEW.TXT", 1, "X", 1) == 1);
+    CHECK(fat.write("NEW.TXT", 10, "late", 4) == -1);
+    CHECK(readsBack(fat, "NEW.TXT", "aXcdef", 6));
+    CHECK(fat.freeClusterCount() == freeAtStart - 1);
+
+    // A file over several clusters, written in odd sized pieces
+    static uint8_t s_data[3000];
+    for (uint32_t i = 0; i < sizeof(s_data); i++)
+        s_data[i] = (uint8_t)(i * 13 + 1);
+    CHECK(fat.create("DATA.BIN"));
+    for (uint32_t done = 0; done < sizeof(s_data); done += 333) {
+        uint32_t chunk = sizeof(s_data) - done < 333 ? sizeof(s_data) - done : 333;
+        CHECK(fat.write("DATA.BIN", done, s_data + done, chunk) == chunk);
+    }
+    CHECK(fat.stat("DATA.BIN", info) && info.size == sizeof(s_data));
+    CHECK(readsBack(fat, "DATA.BIN", s_data, sizeof(s_data)));
+    CHECK(fat.freeClusterCount() == freeAtStart - 1 - 6); // 3000 bytes: 6 clusters of 512
+    CHECK(fatCopiesMatch(image));
+
+    // An existing file keeps its other files intact
+    CHECK(readsBack(fat, "HELLO.TXT", s_helloText, sizeof(s_helloText) - 1));
+    CHECK(fat.write("SUBDIR", 0, "x", 1) == -1);
+    CHECK(fat.write("NOPE.TXT", 0, "x", 1) == -1);
+
+    // remove gives the clusters back
+    CHECK(fat.remove("DATA.BIN"));
+    CHECK(!fat.stat("DATA.BIN", info));
+    CHECK(!fat.remove("DATA.BIN"));
+    CHECK(fat.remove("NEW.TXT"));
+    CHECK(fat.freeClusterCount() == freeAtStart);
+    CHECK(!fat.remove("SUBDIR")); // a directory
+    CHECK(!fat.remove("/"));
+
+    // mkdir: "." and "..", files inside, growing past one cluster (16 entries)
+    CHECK(fat.makeDirectory("NEWDIR"));
+    CHECK(!fat.makeDirectory("NEWDIR"));
+    CHECK(fat.stat("NEWDIR", info) && info.isDirectory);
+    CHECK(fat.stat("NEWDIR/..", info) && info.isDirectory && !strcmp(info.name, "/"));
+    CHECK(fat.makeDirectory("NEWDIR/INNER"));
+    CHECK(fat.create("NEWDIR/INNER/DEEP.TXT"));
+    CHECK(fat.write("NEWDIR/INNER/../INNER/DEEP.TXT", 0, "deep", 4) == 4);
+    CHECK(readsBack(fat, "NEWDIR/INNER/DEEP.TXT", "deep", 4));
+    CHECK(fat.stat("NEWDIR/INNER/..", info) && info.isDirectory);
+    CHECK(fat.stat("NEWDIR/INNER/../INNER/DEEP.TXT", info) && info.size == 4);
+
+    for (int i = 0; i < 20; i++) {
+        char path[32];
+        snprintf(path, sizeof(path), "NEWDIR/F%02d.TXT", i);
+        CHECK(fat.create(path));
+    }
+    ListResult list {};
+    CHECK(fat.listDirectory("NEWDIR", collectEntry, &list));
+    CHECK(list.count == 21); // INNER + 20 files
+    CHECK(fat.stat("NEWDIR/F19.TXT", info));
+
+    // rmdir: only empty directories, never the root, ".", ".."
+    CHECK(!fat.removeDirectory("NEWDIR"));
+    CHECK(!fat.removeDirectory("/"));
+    CHECK(!fat.removeDirectory("NEWDIR/.."));
+    CHECK(!fat.removeDirectory("NEWDIR/INNER/."));
+    CHECK(!fat.removeDirectory("HELLO.TXT"));
+    CHECK(!fat.create("NEWDIR/.."));
+    CHECK(fat.remove("NEWDIR/INNER/DEEP.TXT"));
+    CHECK(fat.removeDirectory("NEWDIR/INNER"));
+    for (int i = 0; i < 20; i++) {
+        char path[32];
+        snprintf(path, sizeof(path), "NEWDIR/F%02d.TXT", i);
+        CHECK(fat.remove(path));
+    }
+    CHECK(fat.removeDirectory("NEWDIR"));
+    CHECK(!fat.stat("NEWDIR", info));
+    CHECK(fat.freeClusterCount() == freeAtStart);
+
+    // Names and parents that do not work
+    CHECK(!fat.create("NOPE/X.TXT"));
+    CHECK(!fat.create("BAD.NAME.X"));
+    CHECK(!fat.create("TOOLONGNAME.TXT"));
+    CHECK(!fat.create("HELLO.TXT/X"));
+    CHECK(!fat.makeDirectory(""));
+
+    // A full volume: the write stops at the last cluster, remove gives all back
+    uint32_t chunkSize = 64 * 1024;
+    auto* chunk = static_cast<uint8_t*>(kcalloc(1, chunkSize));
+    CHECK(fat.create("HUGE.BIN"));
+    uint64_t written = 0;
+    for (int i = 0; i < 64; i++) {
+        int64_t n = fat.write("HUGE.BIN", written, chunk, chunkSize);
+        if (n <= 0)
+            break;
+        written += n;
+    }
+    CHECK(fat.freeClusterCount() == 0);
+    CHECK(written == (uint64_t)freeAtStart * sectorSize);
+    CHECK(fat.write("HUGE.BIN", written, chunk, 1) == -1);
+    CHECK(!fat.makeDirectory("NOSPACE"));
+    CHECK(fat.remove("HUGE.BIN"));
+    CHECK(fat.freeClusterCount() == freeAtStart);
+    kfree(chunk);
+
+    // A full root directory can not grow (512 entries, 10 in use; deleted ones are reused)
+    int created = 0;
+    for (int i = 0; i < 600; i++) {
+        char path[16];
+        snprintf(path, sizeof(path), "R%03d.TXT", i);
+        if (!fat.create(path))
+            break;
+        created++;
+    }
+    CHECK(created == 512 - 10);
+    CHECK(fatCopiesMatch(image));
+
+    // The VFS forwards writes
+    Fs::Vfs vfs;
+    CHECK(vfs.mount("ram", fat));
+    CHECK(vfs.remove("/ram/R000.TXT"));
+    CHECK(vfs.create("/ram/V.TXT"));
+    CHECK(vfs.write("/ram/V.TXT", 0, "vfs", 3) == 3);
+    CHECK(vfs.makeDirectory("/ram/SUBDIR/VDIR"));
+    CHECK(vfs.removeDirectory("/ram/SUBDIR/VDIR"));
+    CHECK(!vfs.create("/ram"));
+    CHECK(!vfs.makeDirectory("/"));
+    CHECK(!vfs.create("/nope/X.TXT"));
+
+    kfree(image);
+}
+
 // The test disk, see scripts/make-disk-image.sh
 static const char s_diskHello[] = "Hello from the atlOS disk!\n";
 static const char s_diskReadme[] = "atlOS test disk: a file in a subdirectory.\n";
@@ -2031,6 +2199,37 @@ static void testAtaDisk(Fs::Vfs& vfs)
     ListResult list {};
     CHECK(vfs.listDirectory("/disk0", collectEntry, &list));
     CHECK(list.count == 3);
+
+    // Writing. The files stay: scripts/run-selftest.sh checks them on the host
+    // afterwards with fsck.fat and mtools (another FAT implementation)
+    CHECK(vfs.makeDirectory("/disk0/KERNEL"));
+    CHECK(vfs.create("/disk0/KERNEL/NOTE.TXT"));
+    static const char s_note[] = "written by atlOS\n";
+    CHECK(vfs.write("/disk0/KERNEL/NOTE.TXT", 0, s_note, sizeof(s_note) - 1) == (int64_t)sizeof(s_note) - 1);
+
+    // 1000 lines "data 00001\n", appended in pieces that do not match sectors
+    CHECK(vfs.create("/disk0/KERNEL/DATA.TXT"));
+    static char s_lines[1000 * diskBigLineLength + 1];
+    for (uint32_t i = 0; i < 1000; i++)
+        snprintf(s_lines + (size_t)i * diskBigLineLength, diskBigLineLength + 1, "data %05u\n", i + 1);
+    uint64_t total = 1000ULL * diskBigLineLength;
+    bool appended = true;
+    for (uint64_t done = 0; done < total; done += 333) {
+        uint64_t chunk = total - done < 333 ? total - done : 333;
+        appended = appended && vfs.write("/disk0/KERNEL/DATA.TXT", done, s_lines + done, chunk) == (int64_t)chunk;
+    }
+    CHECK(appended);
+    CHECK(vfs.stat("/disk0/KERNEL/DATA.TXT", info) && info.size == total);
+    auto* back = static_cast<char*>(kmalloc(total));
+    CHECK(vfs.read("/disk0/KERNEL/DATA.TXT", 0, back, total) == (int64_t)total && !memcmp(back, s_lines, total));
+    kfree(back);
+
+    // Created and removed again: must leave no trace for fsck
+    CHECK(vfs.makeDirectory("/disk0/KERNEL/TMP"));
+    CHECK(vfs.create("/disk0/KERNEL/TMP/GONE.TXT"));
+    CHECK(vfs.write("/disk0/KERNEL/TMP/GONE.TXT", 0, s_lines, 5000) == 5000);
+    CHECK(vfs.remove("/disk0/KERNEL/TMP/GONE.TXT"));
+    CHECK(vfs.removeDirectory("/disk0/KERNEL/TMP"));
 }
 
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs)
@@ -2075,6 +2274,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testBlockDevices();
     testFat16Names();
     testFat16();
+    testFat16Write();
     testAtaDisk(vfs);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);

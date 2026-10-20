@@ -3,8 +3,9 @@
 # Used by the "selftest" target (scripts/build.sh selftest, ctest --preset selftest).
 #
 # Usage: scripts/run-selftest.sh <atlOS.iso> [serial.log] [disk.img]
-#   With a disk image (scripts/make-disk-image.sh) it is attached as the
-#   primary master and the disk tests must run, not be skipped.
+#   With a disk image (scripts/make-disk-image.sh) a copy is attached as the
+#   primary master, the disk tests must run (not be skipped), and after a
+#   pass scripts/check-test-disk.sh checks what the kernel wrote to it.
 # Exit code: 0 = all tests passed, 1 = failures, 2 = crash, timeout or bad usage.
 
 ISO=$1
@@ -17,7 +18,7 @@ if [ -z "$ISO" ] || [ ! -f "$ISO" ]; then
     exit 2
 fi
 
-# A copy: the tests write to the disk (and put the sector back)
+# A copy: the tests write to the disk
 DISK_ARGS=
 if [ -n "$DISK" ]; then
     cp "$DISK" "$LOG.disk.img"
@@ -34,11 +35,23 @@ timeout "$TIMEOUT" qemu-system-x86_64 \
 QEMU_STATUS=$?
 
 grep -a "\[SELFTEST\]" "$LOG"
-rm -f "$LOG.disk.img"
 
-if [ -n "$DISK" ] && grep -aq "skipped: no ATA disk" "$LOG"; then
-    echo "SELFTEST FAILED: a disk was attached but the kernel did not find it"
-    exit 1
+if [ -n "$DISK" ]; then
+    if grep -aq "skipped: no ATA disk" "$LOG"; then
+        rm -f "$LOG.disk.img"
+        echo "SELFTEST FAILED: a disk was attached but the kernel did not find it"
+        exit 1
+    fi
+
+    # Only a passed run has written everything the check expects
+    if [ $QEMU_STATUS -eq 1 ]; then
+        echo "Checking the disk the kernel wrote:"
+        if ! "$(dirname "$0")/check-test-disk.sh" "$LOG.disk.img"; then
+            echo "SELFTEST FAILED: the disk is not as the kernel claims, kept as $LOG.disk.img"
+            exit 1
+        fi
+    fi
+    rm -f "$LOG.disk.img"
 fi
 
 # isa-debug-exit: QEMU exits with (code << 1) | 1, code = Core::ExitStatus
