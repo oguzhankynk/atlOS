@@ -129,3 +129,5 @@ configuration (`.vscode/launch.json`).
 128 MB image with four FAT partitions, and `tools/disk/copy.sh` copies
 `MY_HELLO.txt` onto the first one. Both use `sudo` and `/dev/loop0`. The disk
 drivers are not wired up yet, so the image is not attached by the run targets.
+Details, requirements and how to attach it to QEMU by hand:
+[`tools/disk/README.md`](../tools/disk/README.md).

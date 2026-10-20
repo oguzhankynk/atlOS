@@ -23,7 +23,7 @@ elif [ "$1" == "12" ]; then
   SELECTED_FORMAT="FAT12"
   echo "Selected format: FAT12"
 else
-  echo "Invalid or no format specified, defaulting to FAT12."
+  echo "Invalid or no format specified, defaulting to FAT16."
 fi
 
 # Output the selected format code
