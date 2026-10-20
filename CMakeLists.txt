@@ -31,6 +31,9 @@ add_subdirectory(kernel)
 
 find_program(GRUB_MKRESCUE NAMES grub2-mkrescue grub-mkrescue)
 find_program(QEMU qemu-system-x86_64)
+find_program(SFDISK sfdisk PATHS /usr/sbin /sbin)
+find_program(MKFS_FAT mkfs.fat PATHS /usr/sbin /sbin)
+find_program(MCOPY mcopy)
 
 set(ATLOS_ISO_DIR ${CMAKE_BINARY_DIR}/isodir)
 set(ATLOS_ISO ${CMAKE_BINARY_DIR}/atlOS.iso)
@@ -54,37 +57,65 @@ else()
 endif()
 
 # ------------------------------------------------------------
+# Test disk: MBR + one FAT16 partition, see scripts/make-disk-image.sh
+# ------------------------------------------------------------
+
+set(ATLOS_DISK ${CMAKE_BINARY_DIR}/disk.img)
+set(ATLOS_DISK_ARGS "")
+set(ATLOS_DISK_TARGET "")
+set(ATLOS_SELFTEST_DISK "")
+
+if(SFDISK AND MKFS_FAT AND MCOPY)
+    file(GLOB_RECURSE ATLOS_DISK_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tools/disk/files/*)
+    add_custom_command(
+        OUTPUT ${ATLOS_DISK}
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK}
+        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK_FILES}
+        COMMENT "Creating disk.img"
+        VERBATIM
+    )
+    add_custom_target(disk-image DEPENDS ${ATLOS_DISK})
+
+    # Primary master; boot from the CD (the disk has an MBR but no boot code)
+    set(ATLOS_DISK_ARGS -drive file=${ATLOS_DISK},format=raw,if=ide,index=0 -boot d)
+    set(ATLOS_DISK_TARGET disk-image)
+    set(ATLOS_SELFTEST_DISK ${ATLOS_DISK})
+else()
+    message(WARNING "sfdisk, mkfs.fat or mtools not found: no test disk (the disk self tests are skipped)")
+endif()
+
+# ------------------------------------------------------------
 # QEMU
 # ------------------------------------------------------------
 
 if(GRUB_MKRESCUE AND QEMU)
     # Serial output on the terminal; Ctrl-C quits
     add_custom_target(run
-        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} -m 512M -nographic -monitor none -serial stdio -no-shutdown
-        DEPENDS iso
+        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 512M -nographic -monitor none -serial stdio -no-shutdown
+        DEPENDS iso ${ATLOS_DISK_TARGET}
         USES_TERMINAL
         VERBATIM
     )
 
     # Waits for gdb on :1234, serial output on telnet localhost 4321
     add_custom_target(debug
-        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s
-        DEPENDS iso
+        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s
+        DEPENDS iso ${ATLOS_DISK_TARGET}
         USES_TERMINAL
         VERBATIM
     )
 
     if(ATLOS_SELFTEST)
         add_custom_target(selftest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log
-            DEPENDS iso
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK}
+            DEPENDS iso ${ATLOS_DISK_TARGET}
             USES_TERMINAL
             VERBATIM
         )
 
         enable_testing()
         add_test(NAME selftest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log)
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK})
     endif()
 
     if(ATLOS_CRASHTEST)

@@ -31,6 +31,14 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   `ScancodeDecoder`, US layout, a 64 character buffer, `read()` waits on a
   semaphore; self tests (333 checks)
 - The VGA console handles backspace
+- Storage: `BlockDevice` interface; `ATAPioDevice` (IDENTIFY, 28-bit LBA PIO
+  with polling and timeouts), `MemoryBlockDevice`, MBR partition table and
+  `PartitionDevice`; read only `Fs::Fat16` (8.3 names, subdirectories,
+  checks for broken cluster chains); `Fs::Vfs` with mount points (`/disk0`);
+  the ATA disks are probed and their FAT16 partitions mounted at boot
+- `scripts/make-disk-image.sh` and the `disk-image` target build the test disk
+  without root (sfdisk, mkfs.fat, mtools); the self tests read it in CI
+  (439 checks)
 
 ### Changed
 
@@ -44,7 +52,9 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   restores the caller's interrupt state
 - `Spinlock` uses `Sync::Atomic`
 - The default kernel echoes keyboard input instead of running the A/B demo
-  threads
+  threads, and lists the mounted disks first
+- Removed the old `DeviceManager`, `Device`/`Disk` classes, the untested FAT16
+  write code and the `sudo` based disk scripts
 
 ### Fixed
 

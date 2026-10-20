@@ -21,10 +21,11 @@ Working:
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout); the default kernel echoes what is typed
+- ATA disks (PIO), MBR partitions, read only FAT16 and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
-In the tree but not wired up yet: ATA, FAT16 and VFS code. The CPUID helpers are built and tested but not called at
+The CPUID helpers are built and tested but not called at
 boot. There is no user mode, no system calls and no shell; atlOS runs on a
 single CPU.
 
@@ -59,16 +60,15 @@ kernel/
   mm/            pmm, vmm, heap (liballoc)
   sched/         scheduler, threads
   sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
-  drivers/       pic, pit, serial, vga console, keyboard, disk/ (ATA)
-  dev/           device manager
-  fs/            vfs, fat16
+  drivers/       pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR)
+  fs/            file system interface, fat16, vfs, mounting the disks
   firmware/      bios, smbios
   lib/           small header-only helpers
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
 cmake/           cross toolchain file
-scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh
-tools/           grub.cfg, FAT disk image scripts
+scripts/         build.sh, run-selftest.sh, run-crashtest.sh, symbolize.sh, make-disk-image.sh
+tools/           grub.cfg, files of the test disk
 docs/            documentation
 ```
 

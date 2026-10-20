@@ -22,6 +22,9 @@
 #include <core/console.hpp>
 #include <cxx/uninitialized.hpp>
 #include <drivers/character_sink.hpp>
+#include <drivers/disk/ata.hpp>
+#include <drivers/disk/memory_block_device.hpp>
+#include <drivers/disk/partition.hpp>
 #include <drivers/interrupt_controller.hpp>
 #include <drivers/keyboard.hpp>
 #include <drivers/pit.hpp>
@@ -29,6 +32,8 @@
 #include <drivers/serial.hpp>
 #include <drivers/tick_source.hpp>
 #include <drivers/vga_console.hpp>
+#include <fs/fat16.hpp>
+#include <fs/vfs.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
 #include <mm/memory.hpp>
@@ -1664,7 +1669,371 @@ static void testKeyboard(AddressSpace& space)
     CHECK(controller.attachedHandler != nullptr);
 }
 
-int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler)
+// ------------------------------------------------------------
+// Storage: block devices, MBR, FAT16, VFS
+// ------------------------------------------------------------
+
+static constexpr uint32_t sectorSize = Drivers::BlockDevice::sectorSize;
+
+static void testBlockDevices()
+{
+    group("Block devices and the MBR (RAM disk)");
+
+    static uint8_t s_disk[100 * sectorSize];
+    memset(s_disk, 0, sizeof(s_disk));
+    for (uint32_t sector = 0; sector < 100; sector++)
+        s_disk[sector * sectorSize + 1] = (uint8_t)sector; // tag every sector
+
+    Drivers::MemoryBlockDevice disk(s_disk, 100);
+    uint8_t buffer[2 * sectorSize];
+    CHECK(disk.readSectors(98, 2, buffer) && buffer[1] == 98 && buffer[sectorSize + 1] == 99);
+    CHECK(!disk.readSectors(99, 2, buffer));
+    CHECK(!disk.readSectors(UINT64_MAX, 1, buffer)); // no overflow in the range check
+
+    // No 0x55AA: not an MBR
+    Drivers::PartitionInfo partitions[Drivers::mbrPartitionCount];
+    CHECK(Drivers::readPartitionTable(disk, partitions) == -1);
+
+    // Two partitions, one FAT16
+    auto setEntry = [](int index, uint8_t type, uint32_t first, uint32_t count) {
+        uint8_t* entry = s_disk + 446 + (size_t)index * 16;
+        entry[4] = type;
+        memcpy(entry + 8, &first, 4);
+        memcpy(entry + 12, &count, 4);
+    };
+    s_disk[510] = 0x55;
+    s_disk[511] = 0xAA;
+    setEntry(0, 0x06, 10, 50);
+    setEntry(2, 0x83, 60, 40);
+    CHECK(Drivers::readPartitionTable(disk, partitions) == 2);
+    CHECK(partitions[0].type == 0x06 && partitions[0].firstLba == 10 && partitions[0].sectorCount == 50);
+    CHECK(partitions[1].type == 0x83 && partitions[1].firstLba == 60);
+    CHECK(Drivers::isFat16PartitionType(0x06) && Drivers::isFat16PartitionType(0x0E));
+    CHECK(!Drivers::isFat16PartitionType(0x83) && !Drivers::isFat16PartitionType(0x0B));
+
+    // A partition is a device of its own, from its sector 0
+    Drivers::PartitionDevice partition(disk, 10, 50, "ramp1");
+    CHECK(partition.sectorCount() == 50 && !strcmp(partition.name(), "ramp1"));
+    CHECK(partition.readSectors(0, 1, buffer) && buffer[1] == 10);
+    CHECK(partition.readSectors(49, 1, buffer) && buffer[1] == 59);
+    CHECK(!partition.readSectors(49, 2, buffer));
+    memset(buffer, 0xAB, sectorSize);
+    CHECK(partition.writeSectors(5, 1, buffer));
+    CHECK(s_disk[15 * sectorSize + 1] == 0xAB);
+
+    // An entry beyond the end of the disk: not a partition table
+    setEntry(3, 0x06, 90, 20);
+    CHECK(Drivers::readPartitionTable(disk, partitions) == -1);
+}
+
+// A FAT16 volume built by hand: 1 reserved sector, 2 FATs of 17 sectors,
+// 512 root entries (32 sectors), 4200 clusters of one sector
+static constexpr uint32_t fatClusters = 4200;
+static constexpr uint32_t fatSectorsPerFat = 17;
+static constexpr uint32_t fatRootSectors = 32;
+static constexpr uint32_t fatFirstRoot = 1 + 2 * fatSectorsPerFat;
+static constexpr uint32_t fatFirstData = fatFirstRoot + fatRootSectors;
+static constexpr uint32_t fatTotalSectors = fatFirstData + fatClusters;
+static constexpr uint32_t bigSize = 1300;
+static const char s_helloText[] = "Hello, FAT16!";
+
+static uint8_t bigByte(uint32_t i)
+{
+    return (uint8_t)(i * 7 + 3);
+}
+
+static void buildFat16(uint8_t* image, uint32_t totalSectors)
+{
+    memset(image, 0, (size_t)totalSectors * sectorSize);
+
+    uint8_t* boot = image;
+    boot[0] = 0xEB;
+    uint16_t bytesPerSector = sectorSize;
+    memcpy(boot + 11, &bytesPerSector, 2);
+    boot[13] = 1; // sectors per cluster
+    boot[14] = 1; // reserved sectors
+    boot[16] = 2; // FATs
+    uint16_t rootEntries = fatRootSectors * 16;
+    memcpy(boot + 17, &rootEntries, 2);
+    uint16_t total16 = (uint16_t)totalSectors;
+    memcpy(boot + 19, &total16, 2);
+    uint16_t spf = fatSectorsPerFat;
+    memcpy(boot + 22, &spf, 2);
+    boot[510] = 0x55;
+    boot[511] = 0xAA;
+
+    auto fat = [&](uint16_t cluster, uint16_t value) {
+        for (int copy = 0; copy < 2; copy++)
+            memcpy(image + (size_t)(1 + copy * fatSectorsPerFat) * sectorSize + (size_t)cluster * 2, &value, 2);
+    };
+    auto cluster = [&](uint16_t c) { return image + (size_t)(fatFirstData + c - 2) * sectorSize; };
+    auto entry = [&](uint8_t* directory, int index, const char* name, uint8_t attributes, uint16_t first,
+                     uint32_t size) {
+        uint8_t* e = directory + (size_t)index * 32;
+        memcpy(e, name, 11);
+        e[11] = attributes;
+        memcpy(e + 26, &first, 2);
+        memcpy(e + 28, &size, 4);
+    };
+    fat(0, 0xFFF8);
+    fat(1, 0xFFFF);
+
+    uint8_t* root = image + (size_t)fatFirstRoot * sectorSize;
+    entry(root, 0, "ATLOSTEST  ", 0x08, 0, 0); // volume label
+    static const char s_longNamePart[11] = { 'A', 'h', 0, 'e', 0, 'l', 0, 'l', 0, 'o', 0 };
+    entry(root, 1, s_longNamePart, 0x0F, 0, 0); // a long name part (UTF-16)
+    entry(root, 2, "HELLO   TXT", 0x20, 2, sizeof(s_helloText) - 1);
+    entry(root, 3, "\xE5OLD    TXT", 0x20, 11, 5); // deleted
+    entry(root, 4, "SUBDIR     ", 0x10, 4, 0);
+    entry(root, 5, "BIG     BIN", 0x20, 3, bigSize);
+    entry(root, 6, "EMPTY   TXT", 0x20, 0, 0);
+    entry(root, 7, "SHORT   BIN", 0x20, 8, 1500); // chain ends after one cluster
+    entry(root, 8, "FREE    BIN", 0x20, 9, 1000); // chain runs into a free cluster
+    entry(root, 9, "OUTSIDE BIN", 0x20, 9999, 10); // beyond the last cluster
+    entry(root, 10, "LOOPDIR    ", 0x10, 10, 0); // a directory chain that loops
+
+    memcpy(cluster(2), s_helloText, sizeof(s_helloText) - 1);
+    fat(2, 0xFFFF);
+
+    // BIG.BIN: clusters 3 -> 7 -> 5, not in order on purpose
+    const uint16_t bigChain[] = { 3, 7, 5 };
+    for (uint32_t i = 0; i < bigSize; i++)
+        cluster(bigChain[i / sectorSize])[i % sectorSize] = bigByte(i);
+    fat(3, 7);
+    fat(7, 5);
+    fat(5, 0xFFF8);
+
+    uint8_t* subdir = cluster(4);
+    entry(subdir, 0, ".          ", 0x10, 4, 0);
+    entry(subdir, 1, "..         ", 0x10, 0, 0);
+    entry(subdir, 2, "NESTED  TXT", 0x20, 6, 7);
+    memcpy(cluster(6), "nested\n", 7);
+    fat(4, 0xFFFF);
+    fat(6, 0xFFFF);
+
+    fat(8, 0xFFFF);
+    fat(9, 0x0000);
+
+    // Full of entries, no end marker, and its chain points at itself
+    for (int i = 0; i < 16; i++) {
+        char name[12];
+        snprintf(name, sizeof(name), "F%02d     TXT", i);
+        entry(cluster(10), i, name, 0x20, 0, 0);
+    }
+    fat(10, 10);
+}
+
+struct ListResult {
+    char names[16][Fs::maxNameLength + 2];
+    int count;
+};
+
+static void collectEntry(const Fs::FileInfo& entry, void* arg)
+{
+    auto* result = static_cast<ListResult*>(arg);
+    if (result->count < 16)
+        snprintf(result->names[result->count], sizeof(result->names[0]), "%s%s", entry.name,
+            entry.isDirectory ? "/" : "");
+    result->count++;
+}
+
+static void testFat16Names()
+{
+    group("FAT16 8.3 names");
+    using Fs::Fat16;
+
+    uint8_t shortName[11];
+    CHECK(Fat16::toShortName("readme.txt", 10, shortName) && !memcmp(shortName, "README  TXT", 11));
+    CHECK(Fat16::toShortName("a", 1, shortName) && !memcmp(shortName, "A          ", 11));
+    CHECK(Fat16::toShortName("..", 2, shortName) && !memcmp(shortName, "..         ", 11));
+    CHECK(Fat16::toShortName("dir/x", 3, shortName) && !memcmp(shortName, "DIR        ", 11)); // length counts
+    CHECK(!Fat16::toShortName("toolongname", 11, shortName));
+    CHECK(!Fat16::toShortName("a.toolong", 9, shortName));
+    CHECK(!Fat16::toShortName("a.b.c", 5, shortName));
+    CHECK(!Fat16::toShortName(".hidden", 7, shortName));
+
+    char name[Fs::maxNameLength + 1];
+    Fat16::fromShortName((const uint8_t*)"README  TXT", name);
+    CHECK(!strcmp(name, "README.TXT"));
+    Fat16::fromShortName((const uint8_t*)"SUBDIR     ", name);
+    CHECK(!strcmp(name, "SUBDIR"));
+    Fat16::fromShortName((const uint8_t*)"ABCDEFGHIJK", name);
+    CHECK(!strcmp(name, "ABCDEFGH.IJK"));
+}
+
+static void testFat16()
+{
+    group("FAT16 (RAM disk)");
+
+    auto* image = static_cast<uint8_t*>(kmalloc((size_t)fatTotalSectors * sectorSize));
+    CHECK(image != nullptr);
+    if (!image)
+        return;
+    buildFat16(image, fatTotalSectors);
+
+    Drivers::MemoryBlockDevice volume(image, fatTotalSectors);
+    Fs::Fat16 fat(volume);
+    Fs::FileInfo info;
+    CHECK(!fat.stat("HELLO.TXT", info)); // not mounted yet
+    CHECK(fat.mount());
+    CHECK(fat.clusterCount() == fatClusters && fat.clusterSize() == sectorSize);
+
+    // Lookup: case insensitive, leading "/", deleted entries and labels skipped
+    CHECK(fat.stat("HELLO.TXT", info) && !info.isDirectory && info.size == sizeof(s_helloText) - 1);
+    CHECK(!strcmp(info.name, "HELLO.TXT"));
+    CHECK(fat.stat("/hello.txt", info));
+    CHECK(fat.stat("/", info) && info.isDirectory);
+    CHECK(fat.stat("SUBDIR", info) && info.isDirectory && !strcmp(info.name, "SUBDIR"));
+    CHECK(!fat.stat("NOPE.TXT", info));
+    CHECK(!fat.stat("OLD.TXT", info));
+    CHECK(!fat.stat("ATLOSTES.T", info));
+    CHECK(!fat.stat("HELLO.TXT/X", info));
+
+    // Reads: whole, from an offset, at and after the end
+    char text[64] {};
+    CHECK(fat.read("HELLO.TXT", 0, text, sizeof(text)) == (int64_t)sizeof(s_helloText) - 1);
+    CHECK(!memcmp(text, s_helloText, sizeof(s_helloText) - 1));
+    CHECK(fat.read("HELLO.TXT", 7, text, sizeof(text)) == 6 && !memcmp(text, "FAT16!", 6));
+    CHECK(fat.read("HELLO.TXT", 13, text, sizeof(text)) == 0);
+    CHECK(fat.read("HELLO.TXT", 1000, text, sizeof(text)) == 0);
+    CHECK(fat.read("EMPTY.TXT", 0, text, sizeof(text)) == 0);
+    CHECK(fat.read("SUBDIR", 0, text, sizeof(text)) == -1);
+    CHECK(fat.read("NOPE.TXT", 0, text, sizeof(text)) == -1);
+
+    // A file over three clusters that are not in order
+    static uint8_t s_big[bigSize];
+    CHECK(fat.read("BIG.BIN", 0, s_big, sizeof(s_big)) == bigSize);
+    bool same = true;
+    for (uint32_t i = 0; i < bigSize; i++)
+        same = same && s_big[i] == bigByte(i);
+    CHECK(same);
+    CHECK(fat.read("BIG.BIN", 1000, s_big, 200) == 200); // across the cluster 2 -> 3 border
+    same = true;
+    for (uint32_t i = 0; i < 200; i++)
+        same = same && s_big[i] == bigByte(1000 + i);
+    CHECK(same);
+
+    // Subdirectories, "..", and the listing
+    CHECK(fat.read("SUBDIR/NESTED.TXT", 0, text, sizeof(text)) == 7 && !memcmp(text, "nested\n", 7));
+    CHECK(fat.stat("subdir/../hello.txt", info) && info.size == sizeof(s_helloText) - 1);
+    CHECK(fat.stat("SUBDIR/..", info) && info.isDirectory);
+
+    ListResult list {};
+    CHECK(fat.listDirectory("/", collectEntry, &list));
+    CHECK(list.count == 8);
+    CHECK(!strcmp(list.names[0], "HELLO.TXT") && !strcmp(list.names[1], "SUBDIR/") && !strcmp(list.names[7], "LOOPDIR/"));
+    list = {};
+    CHECK(fat.listDirectory("SUBDIR", collectEntry, &list));
+    CHECK(list.count == 1 && !strcmp(list.names[0], "NESTED.TXT"));
+    CHECK(!fat.listDirectory("HELLO.TXT", collectEntry, &list));
+
+    // Broken volumes fail instead of returning garbage or hanging
+    static uint8_t s_short[1500];
+    CHECK(fat.read("SHORT.BIN", 0, s_short, 100) == 100); // the part that exists
+    CHECK(fat.read("SHORT.BIN", 0, s_short, sizeof(s_short)) == -1);
+    CHECK(fat.read("FREE.BIN", 0, s_short, 1000) == -1);
+    CHECK(fat.read("OUTSIDE.BIN", 0, text, 10) == -1);
+    list = {};
+    CHECK(!fat.listDirectory("LOOPDIR", collectEntry, &list));
+
+    // The VFS puts the volume under a name
+    Fs::Vfs vfs;
+    CHECK(vfs.mount("ram", fat));
+    CHECK(!vfs.mount("ram", fat));
+    CHECK(!vfs.mount("", fat));
+    CHECK(!vfs.mount("a/b", fat));
+    CHECK(!vfs.mount("a-very-long-mount-name", fat));
+    CHECK(vfs.find("ram") == &fat && vfs.mountCount() == 1);
+    CHECK(vfs.stat("/", info) && info.isDirectory);
+    CHECK(vfs.stat("/ram", info) && info.isDirectory);
+    CHECK(vfs.stat("/ram/SUBDIR/NESTED.TXT", info) && info.size == 7);
+    CHECK(vfs.read("/ram/HELLO.TXT", 0, text, 5) == 5 && !memcmp(text, "Hello", 5));
+    CHECK(!vfs.stat("/nope/HELLO.TXT", info));
+    CHECK(vfs.read("/", 0, text, 5) == -1);
+    list = {};
+    CHECK(vfs.listDirectory("/", collectEntry, &list) && list.count == 1 && !strcmp(list.names[0], "ram/"));
+    list = {};
+    CHECK(vfs.listDirectory("/ram/SUBDIR", collectEntry, &list) && list.count == 1);
+
+    // Not FAT16: a bad signature, or too few clusters (that is FAT12)
+    image[511] = 0;
+    Fs::Fat16 unsigned16(volume);
+    CHECK(!unsigned16.mount());
+    buildFat16(image, fatFirstData + 4000);
+    Fs::Fat16 fat12(volume);
+    CHECK(!fat12.mount());
+
+    kfree(image);
+}
+
+// The test disk, see scripts/make-disk-image.sh
+static const char s_diskHello[] = "Hello from the atlOS disk!\n";
+static const char s_diskReadme[] = "atlOS test disk: a file in a subdirectory.\n";
+static constexpr uint32_t diskBigLines = 2000;
+static constexpr uint32_t diskBigLineLength = 11; // "line 00001\n"
+
+static void testAtaDisk(Fs::Vfs& vfs)
+{
+    group("ATA disk (test disk)");
+
+    Drivers::ATAPioDevice disk(Drivers::ATAPioDevice::Channel::Primary, Drivers::ATAPioDevice::Drive::Master, "test");
+    if (!disk.isPresent()) {
+        printf("[SELFTEST] skipped: no ATA disk (the test scripts attach one)\n");
+        return;
+    }
+    CHECK(disk.sectorCount() >= 2048 + fatTotalSectors);
+    CHECK(disk.model()[0] != '\0');
+
+    Drivers::PartitionInfo partitions[Drivers::mbrPartitionCount];
+    CHECK(Drivers::readPartitionTable(disk, partitions) == 1);
+    CHECK(partitions[0].firstLba == 2048 && Drivers::isFat16PartitionType(partitions[0].type));
+
+    // Write and read back sector 1: unused, between the MBR and the partition
+    static uint8_t s_original[sectorSize];
+    static uint8_t s_pattern[2 * sectorSize];
+    static uint8_t s_check[2 * sectorSize];
+    CHECK(disk.readSectors(1, 1, s_original));
+    for (uint32_t i = 0; i < sizeof(s_pattern); i++)
+        s_pattern[i] = (uint8_t)(i ^ 0x5A);
+    CHECK(disk.writeSectors(1, 1, s_pattern));
+    CHECK(disk.readSectors(0, 2, s_check)); // two sectors in one command
+    CHECK(!memcmp(s_check + sectorSize, s_pattern, sectorSize));
+    CHECK(s_check[510] == 0x55 && s_check[511] == 0xAA); // the MBR is untouched
+    CHECK(disk.writeSectors(1, 1, s_original));
+    CHECK(!disk.readSectors(disk.sectorCount(), 1, s_check));
+
+    // The files storage mounted at boot
+    CHECK(vfs.find("disk0") != nullptr);
+    Fs::FileInfo info;
+    char text[64] {};
+    CHECK(vfs.stat("/disk0/HELLO.TXT", info) && info.size == sizeof(s_diskHello) - 1);
+    CHECK(vfs.read("/disk0/HELLO.TXT", 0, text, sizeof(text)) == (int64_t)sizeof(s_diskHello) - 1);
+    CHECK(!memcmp(text, s_diskHello, sizeof(s_diskHello) - 1));
+    CHECK(vfs.read("/disk0/docs/readme.txt", 0, text, sizeof(text)) == (int64_t)sizeof(s_diskReadme) - 1);
+    CHECK(!memcmp(text, s_diskReadme, sizeof(s_diskReadme) - 1));
+
+    // A file over many clusters: every line in order
+    uint64_t bigSize = (uint64_t)diskBigLines * diskBigLineLength;
+    CHECK(vfs.stat("/disk0/BIG.TXT", info) && info.size == bigSize);
+    auto* big = static_cast<char*>(kmalloc(bigSize));
+    CHECK(vfs.read("/disk0/BIG.TXT", 0, big, bigSize) == (int64_t)bigSize);
+    bool lines = true;
+    for (uint32_t i = 0; i < diskBigLines; i++) {
+        char expected[16];
+        snprintf(expected, sizeof(expected), "line %05u\n", i + 1);
+        lines = lines && !memcmp(big + (size_t)i * diskBigLineLength, expected, diskBigLineLength);
+    }
+    CHECK(lines);
+    kfree(big);
+    CHECK(vfs.read("/disk0/BIG.TXT", 1234ULL * diskBigLineLength, text, diskBigLineLength) == diskBigLineLength);
+    CHECK(!memcmp(text, "line 01235\n", diskBigLineLength));
+
+    ListResult list {};
+    CHECK(vfs.listDirectory("/disk0", collectEntry, &list));
+    CHECK(list.count == 3);
+}
+
+int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs)
 {
     printf("[SELFTEST] start\n");
 
@@ -1703,6 +2072,10 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testIdleKeepsInterruptState(scheduler);
     testScancodeDecoder();
     testKeyboard(space);
+    testBlockDevices();
+    testFat16Names();
+    testFat16();
+    testAtaDisk(vfs);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;

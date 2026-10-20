@@ -9,13 +9,14 @@
 | Ninja | any | build (generator of the presets) |
 | `grub-mkrescue` + `xorriso` | GRUB 2 | bootable ISO |
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
+| `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed |
 | Doxygen | optional | API docs |
 | clang-format, clang-tidy | 14 (as in CI), optional | `format`, `format-check`, `tidy`; other versions may format differently |
 
 On Debian/Ubuntu:
 
 ```sh
-sudo apt install cmake ninja-build grub-pc-bin grub-common xorriso mtools qemu-system-x86 doxygen
+sudo apt install cmake ninja-build grub-pc-bin grub-common xorriso mtools qemu-system-x86 dosfstools fdisk doxygen
 ```
 
 ## Cross compiler
@@ -90,6 +91,7 @@ All presets export `compile_commands.json` for editors and clangd.
 | `build/default/kernel/atlOS.kernel` | the kernel ELF (with debug info) |
 | `build/default/libc/libk.a` | the C library linked into the kernel |
 | `build/default/atlOS.iso` | bootable GRUB ISO |
+| `build/default/disk.img` | the test disk (`--target disk-image`; `run` and `debug` attach it as the primary ATA master) |
 
 ## Debugging
 

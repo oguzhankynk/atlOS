@@ -26,12 +26,16 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 333 passed, 0 failed
+[SELFTEST] done: 439 passed, 0 failed
 SELFTEST PASSED
 ```
 
-`scripts/run-selftest.sh <iso> [log]` does the QEMU part and can be used on
-its own. Its exit code is 0 when all checks pass, 1 when a check fails and 2
+`scripts/run-selftest.sh <iso> [log] [disk.img]` does the QEMU part and can be
+used on its own. With a disk image it attaches a copy as the primary ATA master
+(the test disk, `scripts/make-disk-image.sh`; the `selftest` target passes
+`build/selftest/disk.img`) and fails if the kernel then skips the disk tests.
+Without one, or on a machine without that disk, the *ATA disk* group is
+skipped. Its exit code is 0 when all checks pass, 1 when a check fails and 2
 on a panic, crash or timeout (`SELFTEST_TIMEOUT`, default 60 s). A panic stops
 the run at once, no need to wait for the timeout. The full serial log is
 written to `build/selftest/selftest.log`; `scripts/symbolize.sh
@@ -70,6 +74,10 @@ backtrace in it into function names.
 | ConditionVariable (isolated) | Mesa semantics: the waiter checks again; woken waiters get the mutex back first |
 | Scheduler idle keeps the interrupt state (kernel, PIT) | sleeping with interrupts off returns with them off |
 | Scancode decoder (set 1, US) | make/break, Shift, Caps Lock, Ctrl, 0xE0 keys, Print Screen's fake shift, Pause and controller answers |
+| Block devices and the MBR (RAM disk) | range checks, partition table parsing (bad signature, entries beyond the disk), a partition as its own device |
+| FAT16 8.3 names | path component to the on disk 11 bytes and back |
+| FAT16 (RAM disk) | a hand built volume: lookup (case, deleted entries, labels, LFN parts, ".."), reads across clusters out of order, broken chains (too short, a free cluster, out of range, a looping directory), the VFS on top, volumes that are not FAT16 |
+| ATA disk (test disk) | IDENTIFY, the partition table, writing and reading back sector 1, and `/disk0` as mounted at boot: `HELLO.TXT`, `DOCS/README.TXT`, a 22000 byte `BIG.TXT` line by line |
 | PS/2 keyboard (fake interrupt controller) | IRQ 1 attached and unmasked, `tryRead`, a reader blocked until characters arrive, a full buffer drops new characters |
 
 ## Crash test

@@ -36,8 +36,9 @@
 #include <mm/pmm.hpp>
 #include <mm/vmm.hpp>
 
-#include <dev/device_manager.hpp>
 #include <drivers/serial.hpp>
+#include <fs/storage.hpp>
+#include <fs/vfs.hpp>
 
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/gdt/gdt.hpp>
@@ -70,6 +71,7 @@ static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
 static Cxx::Uninitialized<Threading::Scheduler> s_scheduler;
 static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
+static Cxx::Uninitialized<Fs::Vfs> s_vfs;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
 static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL * 1024 * 1024 * 1024)];
@@ -78,6 +80,22 @@ static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(256ULL 
  * @brief entry point of atlOS
  *
  */
+static void printEntry(const Fs::FileInfo& entry, void*)
+{
+    if (entry.isDirectory)
+        printf("  %s/\n", entry.name);
+    else
+        printf("  %-12s %lu bytes\n", entry.name, entry.size);
+}
+
+static void printMount(const Fs::FileInfo& mount, void* vfs)
+{
+    char path[Fs::Vfs::maxMountNameLength + 2];
+    snprintf(path, sizeof(path), "/%s", mount.name);
+    printf("%s:\n", path);
+    static_cast<Fs::Vfs*>(vfs)->listDirectory(path, printEntry, nullptr);
+}
+
 extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 {
 
@@ -118,7 +136,9 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // kmalloc gets its pages from the kernel address space (liballoc hooks)
     Memory::setHeapAddressSpace(kernelSpace);
 
-    DeviceManager::init();
+    // Disks: ATA PIO polls, it needs neither interrupts nor the scheduler
+    Fs::Vfs& vfs = s_vfs.construct();
+    Fs::mountAtaDisks(vfs);
 
     // Interrupt controller: the 8259 PIC (there is no APIC driver yet). The ISR
     // dispatcher is the one place that needs it without being handed it.
@@ -134,7 +154,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Threading::Scheduler& scheduler = s_scheduler.construct(pit);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm, kernelSpace, scheduler);
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs);
     Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
 #endif
 
@@ -145,6 +165,9 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // Demo: echo what is typed. read() blocks this flow (task 0) on the
     // keyboard's semaphore; with nothing else to run the CPU sleeps in hlt.
     Drivers::PS2Keyboard& keyboard = s_keyboard.construct(pic, scheduler);
+    // Demo: what is on the disks
+    vfs.listDirectory("/", printMount, &vfs);
+
     printf("Type something:\n");
     while (true) {
         char c = keyboard.read();

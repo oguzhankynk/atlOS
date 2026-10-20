@@ -63,7 +63,6 @@ add_custom_target(atlos_version
 file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     core/*.cpp
     cxx/*.cpp
-    dev/*.cpp
     drivers/*.cpp
     firmware/*.cpp
     fs/*.cpp

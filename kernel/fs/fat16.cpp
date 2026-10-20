@@ -1,590 +1,390 @@
 /**
  * @file fat16.cpp
  * @author Oguzhan KAYNAK
- * @brief
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * @brief Fs::Fat16: a read only FAT16 file system with 8.3 names.
  */
 
 #include <fs/fat16.hpp>
 
-#include <ctype.h>
-#include <stdio.h>
 #include <string.h>
 
-#include <core/logger.hpp>
-#include <drivers/disk/disk.hpp>
-#include <lib/utils.hpp>
-#include <mm/heap.hpp>
+namespace Fs {
 
-namespace FileSystem {
-namespace FAT16 {
-    /// Enable / Disable logs
-    static constexpr LogFlag dbgLog = LogFlag::Log;
-    static constexpr LogFlag infLog = LogFlag::Log;
-    static constexpr LogFlag errLog = LogFlag::Log;
+using Drivers::BlockDevice;
 
-    void BPB::print() const noexcept
-    {
-        printf("JMP Instruction: 0x%02X 0x%02X 0x%02X\n",
-            jmpInstruction[0], jmpInstruction[1], jmpInstruction[2]);
-        printf("OEM Identifier: %.8s\n", oemIdentifier);
-        printf("Bytes Per Sector: %u\n", bytesPerSector);
-        printf("Sectors Per Cluster: %u\n", sectorsPerCluster);
-        printf("Reserved Sectors: %u\n", reservedSectors);
-        printf("Number of FATs: %u\n", numberOfFats);
-        printf("Number of Root Directory Entries: %u\n", numDirEntries);
-        printf("Total Sectors: %u\n", totalSectors);
-        printf("Media Descriptor Type: 0x%02X\n", mediaDescriptorType);
-        printf("Sectors Per FAT: %u\n", sectorsPerFat);
-        printf("Sectors Per Track: %u\n", sectorsPerTrack);
-        printf("Number of Heads: %u\n", numberOfHeads);
-        printf("Hidden Sectors: %u\n", hiddenSectors);
-        printf("Large Sectors: %u\n", longSectors);
+// The fields of the boot sector the driver needs (the BIOS Parameter Block)
+struct BootSector {
+    uint8_t jump[3];
+    uint8_t oemName[8];
+    uint16_t bytesPerSector;
+    uint8_t sectorsPerCluster;
+    uint16_t reservedSectors; // including the boot sector
+    uint8_t fatCount;
+    uint16_t rootEntryCount;
+    uint16_t totalSectors16; // 0: see totalSectors32
+    uint8_t media;
+    uint16_t sectorsPerFat;
+    uint16_t sectorsPerTrack;
+    uint16_t headCount;
+    uint32_t hiddenSectors;
+    uint32_t totalSectors32;
+    uint8_t rest[474];
+    uint8_t signature[2]; // 0x55 0xAA
+} __attribute__((packed));
+
+static_assert(sizeof(BootSector) == BlockDevice::sectorSize, "the boot sector is one sector");
+static_assert(sizeof(Fat16::DirectoryEntry) == 32, "directory entries are 32 bytes");
+
+static constexpr uint8_t attributeVolumeLabel = 0x08;
+static constexpr uint8_t attributeDirectory = 0x10;
+static constexpr uint8_t attributeLongName = 0x0F; // read only + hidden + system + volume: an LFN part
+
+static constexpr uint8_t entryEnd = 0x00; // first name byte: no entries after this one
+static constexpr uint8_t entryDeleted = 0xE5;
+
+static constexpr uint16_t chainBad = 0xFFF7;
+static constexpr uint16_t chainEnd = 0xFFF8; // 0xFFF8..0xFFFF
+
+// The FAT type is decided by the number of clusters, nothing else (Microsoft's FAT spec)
+static constexpr uint32_t minFat16Clusters = 4085;
+static constexpr uint32_t maxFat16Clusters = 65524;
+
+static constexpr uint32_t entriesPerSector = BlockDevice::sectorSize / sizeof(Fat16::DirectoryEntry);
+static constexpr uint32_t fatEntriesPerSector = BlockDevice::sectorSize / 2;
+
+static char toUpper(char c)
+{
+    return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+}
+
+Fat16::Fat16(Drivers::BlockDevice& volume)
+    : m_volume(volume)
+{
+}
+
+bool Fat16::mount()
+{
+    BootSector boot;
+    if (!m_volume.readSectors(0, 1, &boot))
+        return false;
+
+    if (boot.signature[0] != 0x55 || boot.signature[1] != 0xAA)
+        return false;
+
+    // Only 512 byte sectors, as the block devices use
+    uint32_t spc = boot.sectorsPerCluster;
+    if (boot.bytesPerSector != BlockDevice::sectorSize || !spc || (spc & (spc - 1)) || !boot.reservedSectors
+        || !boot.fatCount || !boot.rootEntryCount || !boot.sectorsPerFat)
+        return false;
+
+    uint64_t totalSectors = boot.totalSectors16 ? boot.totalSectors16 : boot.totalSectors32;
+    if (totalSectors > m_volume.sectorCount())
+        return false;
+
+    m_sectorsPerCluster = spc;
+    m_firstFatSector = boot.reservedSectors;
+    m_firstRootSector = m_firstFatSector + boot.fatCount * boot.sectorsPerFat;
+    m_rootSectors = (boot.rootEntryCount * sizeof(DirectoryEntry) + BlockDevice::sectorSize - 1) / BlockDevice::sectorSize;
+    m_firstDataSector = m_firstRootSector + m_rootSectors;
+    if (m_firstDataSector >= totalSectors)
+        return false;
+
+    m_clusterCount = (totalSectors - m_firstDataSector) / spc;
+    if (m_clusterCount < minFat16Clusters || m_clusterCount > maxFat16Clusters)
+        return false;
+
+    // The FAT must have an entry for every cluster (plus the two reserved ones)
+    if ((uint64_t)boot.sectorsPerFat * fatEntriesPerSector < m_clusterCount + 2)
+        return false;
+
+    m_fatSector = UINT32_MAX;
+    m_mounted = true;
+    return true;
+}
+
+uint64_t Fat16::clusterLba(uint16_t cluster) const
+{
+    // Data clusters are numbered from 2
+    return m_firstDataSector + (uint64_t)(cluster - 2) * m_sectorsPerCluster;
+}
+
+Fat16::ChainStep Fat16::nextCluster(uint16_t cluster, uint16_t& next)
+{
+    // Two bytes per cluster: the FAT sector is cluster / 256
+    uint32_t sector = cluster / fatEntriesPerSector;
+    if (sector != m_fatSector) {
+        if (!m_volume.readSectors(m_firstFatSector + sector, 1, m_fat))
+            return ChainStep::Broken;
+        m_fatSector = sector;
     }
 
-    void BOOTSector::print() const noexcept
-    {
-        bpb.print();
-        printf("Drive Number: 0x%02X\n", driveNumber);
-        printf("Boot Signature: 0x%02X\n", bootSignature);
-        printf("Volume ID: 0x%08X\n", volumeID);
-        printf("Volume Label: %.11s\n", volumeLabel);
-        printf("File System Type: %.8s\n", fileSystemType);
-        printf("Signature: 0x%04X\n", signature);
-    }
+    uint16_t value = m_fat[cluster % fatEntriesPerSector];
+    if (value >= chainEnd)
+        return ChainStep::End;
+    if (value == chainBad || !isDataCluster(value))
+        return ChainStep::Broken; // a free (0), reserved or bad cluster in a chain
+    next = value;
+    return ChainStep::Next;
+}
 
-    void Directory::print() const noexcept
-    {
-        printf("Name: %.8s.%.3s\n", fileName, extension);
-        printf("Attributes: 0x%02X Last Access Date: %04u\n", attributes, lastAccessDate);
-        printf("Creation Time: %04u Creation Date: %04u\n", creationTime, creationDate);
-        printf("Last Write Time: %04u Last Write Date: %04u\n", lastWriteime, lastWriteDate);
-        printf("First Cluster: %u File Size: %u bytes\n", firstCluster, fileSize);
-    }
+bool Fat16::toShortName(const char* component, uint32_t length, uint8_t shortName[11])
+{
+    memset(shortName, ' ', 11);
 
-    FAT16FileSystem::FAT16FileSystem(const Disk& device, uint32_t lbaFirsSector)
-        : IFileSystem(device, lbaFirsSector)
-    {
-        m_StartingSector = lbaFirsSector;
-    }
-
-    FAT16FileSystem::~FAT16FileSystem()
-    {
-        if (m_mounted) {
-            kfree(m_rootDirectoryBuffer);
-        }
-    }
-
-    bool FAT16FileSystem::mount()
-    {
-        m_device.readSector(m_StartingSector, (uint8_t*)&m_sector);
-
-        if (m_sector.signature == 0xAA55) {
-            logMsg(dbgLog, "Disk signature OK \n");
-        } else {
-            logMsg(errLog, "Disk signature error \n");
-            return false;
-        }
-
-        m_bytesPerSector = m_sector.bpb.bytesPerSector;
-        m_clusterSize = m_sector.bpb.sectorsPerCluster * m_sector.bpb.bytesPerSector;
-        m_numDirEntries = m_sector.bpb.numDirEntries;
-        m_totalSectors = (m_sector.bpb.totalSectors == 0) ? m_sector.bpb.longSectors : m_sector.bpb.totalSectors;
-
-        m_fatSize = m_sector.bpb.sectorsPerFat;
-        m_rootDirSectors = ((m_numDirEntries * 32) + (m_bytesPerSector - 1)) / m_bytesPerSector;
-        m_rootDirectorySize = m_rootDirSectors * m_bytesPerSector;
-
-        m_dataSectors = m_totalSectors - (m_sector.bpb.reservedSectors + (m_sector.bpb.numberOfFats * m_fatSize) + m_rootDirSectors);
-        m_totalClusters = m_dataSectors / m_sector.bpb.sectorsPerCluster;
-
-        m_firstFatSector = m_StartingSector + m_sector.bpb.reservedSectors;
-        m_firstRootDirSector = m_firstFatSector + (m_sector.bpb.numberOfFats * m_fatSize);
-        m_firstDataSector = m_firstFatSector + (m_sector.bpb.numberOfFats * m_fatSize) + m_rootDirSectors;
-
-        logMsg(dbgLog, "total_sectors    :%05u  fat_size           :%05u \n", m_totalSectors, m_fatSize);
-        logMsg(dbgLog, "numberOfFats     :%05u  clusterSize        :%05u \n", m_sector.bpb.numberOfFats, m_clusterSize);
-        logMsg(dbgLog, "root_dir_sectors :%05u  first_data_sector  :%05u \n", m_rootDirSectors, m_firstDataSector);
-        logMsg(dbgLog, "first_fat_sector :%05u  data_sectors       :%05u \n", m_firstFatSector, m_dataSectors);
-        logMsg(dbgLog, "total_clusters   :%05u  root_directory_size:%05u \n", m_totalClusters, m_rootDirectorySize);
-        logMsg(dbgLog, "numDirEntries    :%05u  bytesPerSector     :%05u \n", m_numDirEntries, m_bytesPerSector);
-
-        m_rootDirectoryBuffer = (uint8_t*)kmalloc(m_rootDirectorySize);
-
-        if (m_rootDirectoryBuffer == nullptr) {
-            logMsg(errLog, "NO memory for root directory! \n");
-            return false;
-        }
-
-        memset(m_rootDirectoryBuffer, 0, m_rootDirectorySize);
-
-        for (int i = 0; i < m_rootDirSectors; ++i) {
-            m_device.readSector(m_firstRootDirSector + i, m_rootDirectoryBuffer + (static_cast<size_t>(i) * m_bytesPerSector));
-        }
-
-        m_dirEntry = reinterpret_cast<Directory*>(m_rootDirectoryBuffer);
-
-        m_mounted = true;
-
+    // "." and ".." exist as entries in subdirectories
+    if ((length == 1 || length == 2) && component[0] == '.' && component[length - 1] == '.') {
+        memcpy(shortName, component, length);
         return true;
     }
 
-    void FAT16FileSystem::printFilelist()
-    {
+    uint32_t i = 0;
+    uint32_t out = 0;
+    for (; i < length && component[i] != '.'; i++) {
+        if (out == 8)
+            return false;
+        shortName[out++] = toUpper(component[i]);
+    }
+    if (!out)
+        return false;
 
-        for (size_t i = 0; i < m_numDirEntries; ++i) {
-            auto& dirEntry = m_dirEntry[i];
-
-            if (dirEntry.fileName[0] == 0x00) {
-                continue;
-            }
-
-            if (dirEntry.fileName[0] == 0xE5) {
-                continue;
-            }
-
-            printf("File: %.8s.%.3s\n", dirEntry.fileName, dirEntry.extension);
+    if (i < length) {
+        i++; // the dot
+        out = 8;
+        for (; i < length; i++) {
+            if (out == 11 || component[i] == '.')
+                return false;
+            shortName[out++] = toUpper(component[i]);
         }
     }
+    return true;
+}
 
-    File* FAT16FileSystem::open(const char* filename)
-    {
+void Fat16::fromShortName(const uint8_t shortName[11], char name[maxNameLength + 1])
+{
+    uint32_t out = 0;
+    for (int i = 0; i < 8 && shortName[i] != ' '; i++)
+        name[out++] = static_cast<char>(shortName[i]);
+    // 0x05 stands for a real 0xE5 first character (0xE5 marks deleted entries)
+    if (out && static_cast<uint8_t>(name[0]) == 0x05)
+        name[0] = static_cast<char>(0xE5);
 
-        char formattedName[12]; // 8+1+3
+    if (shortName[8] != ' ') {
+        name[out++] = '.';
+        for (int i = 8; i < 11 && shortName[i] != ' '; i++)
+            name[out++] = static_cast<char>(shortName[i]);
+    }
+    name[out] = '\0';
+}
 
-        formatFilename(filename, formattedName);
+bool Fat16::visitSector(uint64_t lba, EntryVisitor visit, void* arg, bool& done)
+{
+    // Not m_sector: a visitor (or a listDirectory callback) may read the volume
+    DirectoryEntry entries[entriesPerSector];
+    if (!m_volume.readSectors(lba, 1, entries))
+        return false;
 
-        FAT16File* fd = (FAT16File*)kmalloc(sizeof(FAT16File));
+    for (const DirectoryEntry& entry : entries) {
 
-        if (fd == nullptr) {
-            logMsg(errLog, "No memory for open a file\n");
-            return nullptr;
+        if (entry.name[0] == entryEnd) {
+            done = true;
+            return true;
         }
+        if (entry.name[0] == entryDeleted || entry.attributes == attributeLongName
+            || (entry.attributes & attributeVolumeLabel))
+            continue;
 
-        bool newFile = true;
-
-        auto fileIndex = 0;
-
-        for (; fileIndex < m_numDirEntries; ++fileIndex) {
-
-            auto& dirEntry = m_dirEntry[fileIndex];
-
-            if (dirEntry.fileName[0] == 0x00) {
-                break;
-            }
-
-            if (dirEntry.fileName[0] == 0xE5) {
-                break;
-            }
-
-            bool searchchFlag = true;
-
-            for (int j = 0; j < 11; j++) {
-                if (dirEntry.fileName[j] != static_cast<uint8_t>(formattedName[j])) {
-                    searchchFlag = false;
-                    break;
-                }
-            }
-
-            if (searchchFlag) {
-                logMsg(dbgLog, "File:%s found. file indx: %u \n", formattedName, fileIndex);
-
-                fd->dirEntry = &dirEntry;
-                fd->fileIndex = fileIndex;
-                fd->startCluster = dirEntry.firstCluster; // Starting cluster
-                fd->startSector = (fd->startCluster - 2) * m_sector.bpb.sectorsPerCluster + m_firstDataSector;
-                fd->currentCluster = fd->startCluster;
-                fd->position = 0; // Start at the beginning of the file
-                fd->size = dirEntry.fileSize; // Size of the file
-
-                // find end sector
-
-                uint16_t currentCluster = fd->startCluster;
-                uint16_t previousCluster = 0;
-
-                while (currentCluster > 0x0002 && currentCluster < 0xFFF8) {
-                    previousCluster = currentCluster;
-                    currentCluster = findNextCluster(currentCluster);
-                }
-
-                uint32_t lastClusterStartSector = (previousCluster - 2) * m_sector.bpb.sectorsPerCluster + m_firstDataSector;
-
-                uint32_t totalSectors = (fd->size + m_sector.bpb.bytesPerSector - 1) / m_sector.bpb.bytesPerSector;
-
-                fd->endCluster = previousCluster;
-                fd->endSector = lastClusterStartSector + (totalSectors - 1) % m_sector.bpb.sectorsPerCluster;
-
-                logMsg(dbgLog, "startCluster:%u startSector:%u \nendCluster:%u endSector:%u size:%u \n",
-                    fd->startCluster, fd->startSector, fd->endCluster, fd->endSector, fd->size);
-
-                newFile = false;
-            }
+        if (visit(entry, arg)) {
+            done = true;
+            return true;
         }
+    }
+    return true;
+}
 
-        if (newFile == true) {
-            auto newCluster = findFreeCluster();
+bool Fat16::forEachEntry(const Node& directory, EntryVisitor visit, void* arg)
+{
+    bool done = false;
 
-            logMsg(dbgLog, "File  not found. It will be created. newCluster:%u \n", newCluster);
-
-            if (newCluster == 0xFFFF) {
-                logMsg(dbgLog, "File:%s No memory for new cluster\n", formattedName);
-                kfree(fd);
-                return nullptr;
-            }
-
-            updateFAT(newCluster, 0xFFFF);
-
-            auto& dirEntry = m_dirEntry[fileIndex];
-
-            memset(&dirEntry, 0, sizeof(Directory));
-            memcpy(dirEntry.fileName, formattedName, 11);
-            dirEntry.attributes = static_cast<uint8_t>(Attributes::ARCHIVE);
-            dirEntry.firstCluster = newCluster;
-            dirEntry.fileSize = 0;
-
-            fd->dirEntry = &dirEntry;
-            fd->fileIndex = fileIndex;
-            fd->startCluster = dirEntry.firstCluster;
-            fd->startSector = (fd->startCluster - 2) * m_sector.bpb.sectorsPerCluster + m_firstDataSector;
-            fd->currentCluster = fd->startCluster;
-            fd->position = 0; // Start at the beginning of the file
-            fd->size = dirEntry.fileSize; // Size of the file
-            fd->endCluster = fd->startCluster;
-            fd->endSector = fd->startSector;
-
-            updateDirectoryEntry(fileIndex);
+    // The root directory has a fixed place and size
+    if (directory.isRoot) {
+        for (uint32_t s = 0; s < m_rootSectors && !done; s++) {
+            if (!visitSector(m_firstRootSector + s, visit, arg, done))
+                return false;
         }
-
-        return fd;
+        return true;
     }
 
-    int FAT16FileSystem::close(File* fd)
-    {
-        if (fd == nullptr) {
-            return -1;
+    // A subdirectory is a cluster chain like a file. A chain longer than the
+    // number of clusters loops: stop there instead of walking forever
+    uint16_t cluster = directory.firstCluster;
+    for (uint32_t steps = 0; steps < m_clusterCount; steps++) {
+        if (!isDataCluster(cluster))
+            return false;
+
+        for (uint32_t s = 0; s < m_sectorsPerCluster && !done; s++) {
+            if (!visitSector(clusterLba(cluster) + s, visit, arg, done))
+                return false;
         }
+        if (done)
+            return true;
 
-        kfree((FAT16File*)fd);
+        switch (nextCluster(cluster, cluster)) {
+        case ChainStep::Next:
+            break;
+        case ChainStep::End:
+            return true;
+        case ChainStep::Broken:
+            return false;
+        }
+    }
+    return false;
+}
 
+namespace {
+    struct FindArg {
+        const uint8_t* shortName;
+        Fat16::DirectoryEntry found;
+        bool isFound;
+    };
+
+    struct ListArg {
+        DirectoryCallback callback;
+        void* arg;
+    };
+} // namespace
+
+bool Fat16::lookup(const char* path, Node& node)
+{
+    if (!m_mounted)
+        return false;
+
+    node = { true, true, 0, 0, {} };
+
+    while (*path) {
+        while (*path == '/')
+            path++;
+        if (!*path)
+            break;
+
+        uint32_t length = 0;
+        while (path[length] && path[length] != '/')
+            length++;
+
+        uint8_t shortName[11];
+        if (!node.isDirectory || !toShortName(path, length, shortName))
+            return false;
+
+        FindArg find {};
+        find.shortName = shortName;
+        auto visit = [](const DirectoryEntry& entry, void* arg) {
+            auto* find = static_cast<FindArg*>(arg);
+            if (memcmp(entry.name, find->shortName, 11) != 0)
+                return false;
+            find->found = entry;
+            find->isFound = true;
+            return true;
+        };
+        if (!forEachEntry(node, visit, &find) || !find.isFound)
+            return false;
+
+        node.isDirectory = find.found.attributes & attributeDirectory;
+        node.firstCluster = find.found.firstCluster;
+        node.size = node.isDirectory ? 0 : find.found.size;
+        memcpy(node.shortName, find.found.name, 11);
+        // ".." of a directory in the root points at cluster 0: the root
+        node.isRoot = node.isDirectory && !node.firstCluster;
+
+        path += length;
+    }
+    return true;
+}
+
+bool Fat16::stat(const char* path, FileInfo& info)
+{
+    Node node;
+    if (!lookup(path, node))
+        return false;
+
+    if (node.isRoot)
+        strcpy(info.name, "/");
+    else
+        fromShortName(node.shortName, info.name);
+    info.isDirectory = node.isDirectory;
+    info.size = node.size;
+    return true;
+}
+
+int64_t Fat16::read(const char* path, uint64_t offset, void* buffer, uint64_t size)
+{
+    Node node;
+    if (!lookup(path, node) || node.isDirectory)
+        return -1;
+
+    if (offset >= node.size)
         return 0;
-    }
+    if (size > node.size - offset)
+        size = node.size - offset;
 
-    int FAT16FileSystem::remove(const char* filename)
-    {
-        char formattedName[12]; // 8+1+3
+    uint16_t cluster = node.firstCluster;
+    uint64_t clusterBytes = clusterSize();
 
-        formatFilename(filename, formattedName);
-
-        auto fileIndex = 0;
-
-        for (; fileIndex < m_numDirEntries; ++fileIndex) {
-            auto& dirEntry = m_dirEntry[fileIndex];
-
-            bool searchchFlag = true;
-
-            for (int j = 0; j < 11; j++) {
-                if (dirEntry.fileName[j] != static_cast<uint8_t>(formattedName[j])) {
-                    searchchFlag = false;
-                    break;
-                }
-            }
-
-            if (searchchFlag) {
-                uint16_t currentCluster = dirEntry.firstCluster;
-
-                while (currentCluster < 0xFFF8) {
-                    uint16_t nextCluster = findNextCluster(currentCluster);
-                    updateFAT(currentCluster, 0x00);
-                    currentCluster = nextCluster;
-                }
-
-                memset(&dirEntry, 0, sizeof(dirEntry));
-                updateDirectoryEntry(fileIndex);
-                return 0;
-            }
-        }
-
-        return -1; // file could not found
-    }
-
-    ssize_t FAT16FileSystem::read(File* file, void* buffer, size_t size)
-    {
-        if (file == nullptr) {
+    // Follow the chain to the cluster that holds offset
+    for (uint64_t skip = offset / clusterBytes; skip; skip--) {
+        if (nextCluster(cluster, cluster) != ChainStep::Next)
             return -1;
-        }
-
-        FAT16File* fat16File = static_cast<FAT16File*>(file);
-        Directory* dirEntry = fat16File->dirEntry;
-
-        if (fat16File->position >= dirEntry->fileSize) {
-            return 0; // End of file reached
-        }
-
-        // Adjust count if it exceeds remaining file size
-        size_t bytesToRead = size;
-        if (fat16File->position + bytesToRead > dirEntry->fileSize) {
-            bytesToRead = dirEntry->fileSize - fat16File->position;
-        }
-
-        auto clusterOffset = fat16File->position % (static_cast<size_t>(m_bytesPerSector) * m_sector.bpb.sectorsPerCluster);
-
-        uint32_t sectorIndexInCluster = clusterOffset / m_bytesPerSector;
-
-        uint32_t sectorOffset = clusterOffset % m_bytesPerSector;
-
-        size_t bytesRead = 0;
-
-        logMsg(dbgLog, "ReadFile: count:%u position:%u f_size: %u bytes_to_read: %u cluster:%u sectorIndex:%u sectorOffset:%u \n",
-            size, fat16File->position, dirEntry->fileSize, bytesToRead, fat16File->currentCluster, sectorIndexInCluster, sectorOffset);
-
-        while (bytesRead < bytesToRead) {
-            uint32_t lba = clusterToSector(fat16File->currentCluster) + sectorIndexInCluster;
-
-            // Read the sector containing file data into the buffer
-
-            uint8_t readBuffer[512];
-
-            m_device.readSector(lba, readBuffer);
-
-            auto readSize = 512 - sectorOffset;
-            readSize = Utils::min((size_t)readSize, bytesToRead - bytesRead);
-
-            memcpy((char*)buffer + bytesRead, readBuffer + sectorOffset, readSize);
-
-            // Increment read_bytes and offset accordingly
-            bytesRead += readSize;
-
-            // Check if we need to read from the next cluster
-            if (bytesRead >= bytesToRead) {
-                break;
-            }
-
-            sectorOffset = 0;
-
-            // If we reached the end of the cluster, move to the next cluster
-            sectorIndexInCluster++;
-            if (sectorIndexInCluster >= m_sector.bpb.sectorsPerCluster) {
-                fat16File->currentCluster = findNextCluster(fat16File->currentCluster);
-                sectorIndexInCluster = 0;
-            }
-        }
-
-        // Update the file's position
-        fat16File->position += bytesRead;
-
-        // Return the number of bytes read
-        return static_cast<ssize_t>(bytesRead);
     }
 
-    ssize_t FAT16FileSystem::write(File* file, const void* buffer, size_t size)
-    {
-        if (file == nullptr || buffer == nullptr || size == 0) {
+    auto* out = static_cast<uint8_t*>(buffer);
+    uint64_t position = offset % clusterBytes; // inside the current cluster
+    uint64_t done = 0;
+
+    while (done < size) {
+        if (!isDataCluster(cluster))
             return -1;
-        }
 
-        FAT16File* fat16File = static_cast<FAT16File*>(file);
+        uint64_t sector = position / BlockDevice::sectorSize;
+        uint64_t inSector = position % BlockDevice::sectorSize;
+        if (!m_volume.readSectors(clusterLba(cluster) + sector, 1, m_sector))
+            return -1;
 
-        auto bytesToWrite = size;
-        const uint8_t* src = static_cast<const uint8_t*>(buffer);
+        uint64_t chunk = BlockDevice::sectorSize - inSector;
+        if (chunk > size - done)
+            chunk = size - done;
+        memcpy(out + done, m_sector + inSector, chunk);
+        done += chunk;
+        position += chunk;
 
-        auto clusterOffset = fat16File->position % (static_cast<size_t>(m_bytesPerSector) * m_sector.bpb.sectorsPerCluster);
-
-        uint32_t sectorIndexInCluster = clusterOffset / m_bytesPerSector;
-
-        uint32_t sectorOffset = clusterOffset % m_bytesPerSector;
-
-        uint32_t bytesWritten = 0;
-
-        logMsg(dbgLog, "writeFile: bytesToWrite:%u c_Cluster:%u ClusterOffset:%u\n",
-            bytesToWrite, fat16File->currentCluster, clusterOffset);
-
-        bool directoryEntryChanged = false;
-
-        while (bytesWritten < bytesToWrite) {
-            uint32_t lba = clusterToSector(fat16File->currentCluster) + sectorIndexInCluster;
-
-            size_t writeSize = 0;
-
-            if (sectorOffset == 0) {
-                writeSize = Utils::min((size_t)m_bytesPerSector, bytesToWrite - bytesWritten);
-
-                m_device.write(lba, src, writeSize);
-            } else {
-                // Read the sector containing file data into the buffer
-
-                uint8_t readBuffer[512];
-
-                m_device.readSector(lba, readBuffer);
-
-                writeSize = Utils::min((size_t)m_bytesPerSector - sectorOffset, bytesToWrite - bytesWritten);
-
-                memcpy(readBuffer + sectorOffset, src, writeSize);
-
-                m_device.writeSector(lba, readBuffer);
-
-                sectorOffset = 0;
-            }
-
-            bytesWritten += writeSize;
-            src += writeSize;
-
-            if (bytesWritten >= bytesToWrite) {
-                break;
-            }
-
-            sectorIndexInCluster++;
-            if (sectorIndexInCluster >= m_sector.bpb.sectorsPerCluster) {
-                uint32_t nextCluster = findNextCluster(fat16File->currentCluster);
-
-                if (nextCluster == 0xFFFF) {
-                    // No next cluster, allocate a new one
-                    nextCluster = findFreeCluster();
-
-                    if (nextCluster == 0xFFFF) {
-                        logMsg(errLog, "Failed to allocate new cluster!\n");
-                        return -1;
-                    }
-
-                    fat16File->endCluster = nextCluster;
-                    // Update the FAT to link the clusters
-                    updateFAT(fat16File->currentCluster, nextCluster);
-                    updateFAT(nextCluster, 0xFFFF);
-
-                    directoryEntryChanged = true;
-
-                    logMsg(dbgLog, "allocate new cluster: %u\n", nextCluster);
-                }
-
-                fat16File->currentCluster = nextCluster;
-
-                sectorIndexInCluster = 0;
-
-                logMsg(dbgLog, "moved to next cluster: %u\n", fat16File->currentCluster);
-            }
-        }
-
-        fat16File->position += bytesWritten;
-
-        if (fat16File->position > fat16File->size) {
-            fat16File->size = fat16File->position;
-            directoryEntryChanged = true;
-        }
-
-        if (directoryEntryChanged) {
-            fat16File->dirEntry->fileSize = fat16File->size;
-            updateDirectoryEntry(fat16File->fileIndex);
-            logMsg(dbgLog, "Write updateDirectoryEntry:%u \n", fat16File->fileIndex);
-        }
-
-        return bytesWritten;
-    }
-
-    void FAT16FileSystem::formatFilename(const char* filename, char* formattedName) const
-    {
-        // Clear the formatted name buffer
-        memset(formattedName, ' ', 12); // 8 + 1 + 3
-
-        // Split the filename into name and extension
-        const char* dot = strchr(filename, '.');
-        size_t nameLength = (dot) ? (dot - filename) : strlen(filename);
-        size_t extLength = (dot) ? strlen(dot + 1) : 0;
-
-        // Copy the name part (up to 8 characters)
-        for (size_t i = 0; i < nameLength && i < 8; ++i) {
-            formattedName[i] = static_cast<char>(toupper(filename[i])); // Convert to uppercase
-        }
-
-        // If there's an extension, copy it (up to 3 characters)
-        if (dot) {
-            for (size_t i = 0; i < extLength && i < 3; ++i) {
-                formattedName[8 + i] = static_cast<char>(toupper(dot[i + 1])); // Convert to uppercase
-            }
-        }
-
-        // Ensure the name is null-terminated (optional, as we use fixed size)
-        formattedName[11] = '\0'; // Optional, for safety
-    }
-
-    uint32_t FAT16FileSystem::findNextCluster(uint32_t cluster) const
-    {
-        uint16_t fatTable[256] {};
-
-        uint32_t fatSector = m_firstFatSector + cluster / 256;
-
-        uint32_t fatOffset = cluster % 256;
-
-        m_device.readSector(fatSector, (uint8_t*)fatTable);
-
-        auto nextCluster = fatTable[fatOffset];
-
-        if (nextCluster >= 0xFFF8) {
-            nextCluster = 0xFFFF;
-        }
-
-        return nextCluster;
-    }
-
-    uint32_t FAT16FileSystem::clusterToSector(uint32_t cluster) const
-    {
-        return m_firstDataSector + (cluster - 2) * m_sector.bpb.sectorsPerCluster;
-    }
-
-    uint16_t FAT16FileSystem::findFreeCluster() const
-    {
-        uint16_t fatTable[256] {};
-
-        for (uint32_t i = 0; i < m_fatSize; ++i) {
-            m_device.readSector(m_firstFatSector + i, (uint8_t*)fatTable);
-
-            for (int j = 0; j < 256; ++j) {
-                if (fatTable[j] == 0x0000) {
-                    return (i * 256) + j;
-                }
-            }
-        }
-
-        return 0xFFFF;
-    }
-
-    void FAT16FileSystem::updateFAT(uint16_t cluster, uint16_t nextCluster)
-    {
-        uint16_t fatTable[256] {};
-
-        uint32_t fatSector = m_firstFatSector + cluster / 256;
-
-        uint32_t fatOffset = cluster % 256;
-
-        for (auto i = 0; i < m_sector.bpb.numberOfFats; i++) {
-            m_device.readSector(fatSector, (uint8_t*)fatTable);
-            fatTable[fatOffset] = nextCluster;
-
-            m_device.writeSector(fatSector, (uint8_t*)fatTable);
-            fatSector += m_fatSize;
+        // The file size says more data follows: the chain must go on
+        if (position == clusterBytes && done < size) {
+            position = 0;
+            if (nextCluster(cluster, cluster) != ChainStep::Next)
+                return -1;
         }
     }
+    return static_cast<int64_t>(done);
+}
 
-    void FAT16FileSystem::updateDirectoryEntry(size_t entryIndex)
-    {
+bool Fat16::listDirectory(const char* path, DirectoryCallback callback, void* arg)
+{
+    Node node;
+    if (!lookup(path, node) || !node.isDirectory)
+        return false;
 
-        uint32_t sector = m_firstRootDirSector + (entryIndex / (m_bytesPerSector / sizeof(Directory)));
-        uint32_t offset = (entryIndex % (m_bytesPerSector / sizeof(Directory))) * sizeof(Directory);
+    ListArg list { callback, arg };
+    auto visit = [](const DirectoryEntry& entry, void* arg) {
+        if (entry.name[0] == '.')
+            return false; // "." and ".."
 
-        uint8_t buffer[512];
-        m_device.readSector(sector, buffer);
-        memcpy(&buffer[offset], &m_dirEntry[entryIndex], sizeof(Directory));
-        m_device.writeSector(sector, buffer);
-    }
+        FileInfo info;
+        fromShortName(entry.name, info.name);
+        info.isDirectory = entry.attributes & attributeDirectory;
+        info.size = info.isDirectory ? 0 : entry.size;
 
-}; // namespace FAT16
-} // namespace FileSystem
+        auto* list = static_cast<ListArg*>(arg);
+        list->callback(info, list->arg);
+        return false;
+    };
+    return forEachEntry(node, visit, &list);
+}
+
+} // namespace Fs

@@ -1,7 +1,7 @@
 # Drivers (`kernel/drivers/`)
 
 Code that talks to hardware: the interrupt controller, the timer, the serial
-port, the VGA text screen, the keyboard, and (not started yet) ATA disks.
+port, the VGA text screen, the keyboard and ATA disks.
 
 ## What is it for?
 
@@ -34,6 +34,7 @@ Small interfaces, concrete drivers as objects, created and wired in
 | `TickSource` (`tick_source.hpp`) | `PIT` (8253/8254 channel 0) | `Threading::Scheduler` |
 | `CharacterSink` (`character_sink.hpp`) | `SerialPort`, `VGATextConsole` | the console behind `printf` |
 | `CharacterSource` (`character_source.hpp`) | `PS2Keyboard` | the keyboard demo in `kernelMain` |
+| `BlockDevice` (`disk/block_device.hpp`) | `ATAPioDevice`, `PartitionDevice`, `MemoryBlockDevice` | the file systems (`kernel/fs/`) |
 
 - **PIC**: the constructor remaps the 16 IRQs to vectors `0x20..0x2F` (by
   default they collide with CPU exceptions) and masks every line. A driver
@@ -52,8 +53,26 @@ Small interfaces, concrete drivers as objects, created and wired in
 - The output drivers poll their status registers: the simplest way to use a
   device that answers within microseconds.
 
-Not started yet: `disk/` (ATA PIO); it exists from earlier work but nothing
-creates it.
+### Disks (`disk/`)
+
+- **ATAPioDevice** (`ata.cpp`): an IDE disk through the legacy ports
+  (`0x1F0`/`0x170`). The constructor sends IDENTIFY DEVICE: no answer (a
+  floating bus reads `0xFF`, an empty slot `0`) or an ATAPI signature (a CD
+  drive) means "not present"; otherwise words 60..61 give the sector count and
+  27..46 the model. Reads and writes are 28-bit LBA PIO commands: per sector,
+  wait for DRQ, move 256 words with `in`/`out`. Every wait has a limit, so a
+  broken or missing drive fails a call instead of hanging the kernel. The
+  channel's IRQ is turned off (nIEN): the driver polls. Writes end with
+  FLUSH CACHE.
+- **PartitionDevice** (`partition.cpp`): a range of another device, starting
+  at its sector 0. `readPartitionTable` reads the four MBR entries and
+  rejects a sector 0 whose entries do not fit the disk (e.g. a disk formatted
+  without partitions, whose boot sector also ends in `0x55AA`).
+- **MemoryBlockDevice**: a disk in RAM, for testing file systems.
+
+Polling is the simplest way to use a disk and fine with a cooperative
+scheduler that has nothing else to do; IRQ 14 + `Sync::Semaphore` would let
+another thread run while the disk seeks.
 
 ### The keyboard (`keyboard.cpp`, `scancode.cpp`)
 
@@ -108,6 +127,8 @@ sequenceDiagram
 
 - No generic device model or driver registry; `kernelMain` creates the few
   drivers there are.
+- Disks: no DMA, no AHCI (SATA in native mode), no 48-bit LBA (2^28 sectors
+  = 128 GB is the limit), no GPT.
 - Keyboard: no controller self test or reset, no LEDs, no key repeat
   settings, no Num Lock (the keypad always types digits), no key events for
   keys without a character (arrows) in the character stream, US layout only.
@@ -147,6 +168,8 @@ buffer. *Console (fake sink)*, *VGA text console
   [Serial Ports](https://wiki.osdev.org/Serial_Ports),
   [Text Mode Cursor](https://wiki.osdev.org/Text_Mode_Cursor), [I/O Ports](https://wiki.osdev.org/I/O_Ports),
   ["8042" PS/2 Controller](https://wiki.osdev.org/I8042_PS/2_Controller),
-  [PS/2 Keyboard](https://wiki.osdev.org/PS/2_Keyboard) (scancode set 1 table)
+  [PS/2 Keyboard](https://wiki.osdev.org/PS/2_Keyboard) (scancode set 1 table),
+  [ATA PIO Mode](https://wiki.osdev.org/ATA_PIO_Mode), [MBR (x86)](https://wiki.osdev.org/MBR_(x86))
+- ATA/ATAPI-6 (T13 1410D): IDENTIFY DEVICE data words
 - Intel 8259A and 8254 data sheets; National Semiconductor PC16550D data sheet
 - xv6 book (MIT 6.1810): chapter "Interrupts and device drivers"
