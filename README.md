@@ -57,7 +57,7 @@ kernel/
   cxx/           C++ runtime support (global constructors, new/delete)
   mm/            pmm, vmm, heap (liballoc)
   sched/         scheduler, threads
-  sync/          spinlock, mutex, semaphore
+  sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
   drivers/       pic, pit, serial, vga console, keyboard, disk/ (ATA)
   dev/           device manager
   fs/            vfs, fat16

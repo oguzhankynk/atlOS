@@ -30,13 +30,7 @@ void Spinlock::lock()
     while (true) {
         bool expected = false;
         // Atomically set m_locked to true if it was false (unlocked)
-        if (__atomic_compare_exchange_n(
-                &m_locked,
-                &expected,
-                true,
-                false,
-                __ATOMIC_SEQ_CST,
-                __ATOMIC_SEQ_CST)) {
+        if (m_locked.compareExchange(expected, true)) {
             // Lock acquired successfully
             return;
         }
@@ -53,6 +47,6 @@ void Spinlock::unlock()
 {
     // Atomically set m_locked to false (unlocked) with sequential consistency.
     // This ensures that the lock is safely released and visible to all threads in the correct order.
-    __atomic_store_n(&m_locked, false, __ATOMIC_SEQ_CST);
+    m_locked.store(false);
 }
 } // namespace Sync

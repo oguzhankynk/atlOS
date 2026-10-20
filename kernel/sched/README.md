@@ -50,7 +50,11 @@ thread must cooperate.
 - States: `Ready`, `Running` (runnable) and `Sleeping` (until `wakeTick`),
   `Blocked` (until `unblock`), `Terminated` (skipped, then dequeued).
 - Nothing runnable → `sti; hlt`: the CPU sleeps until an interrupt (e.g. a
-  timer tick that wakes a sleeper).
+  timer tick that wakes a sleeper). If the caller had interrupts off (a
+  thread waiting under a `Sync::InterruptGuard`), they are turned off again
+  before it continues.
+- Waiting for an event (not a time) goes through `kernel/sync/`: a
+  `WaitQueue` blocks threads and `unblock`s them, see `sync/README.md`.
 - **No global scheduler**: a thread's entry point receives its scheduler,
   `void worker(Scheduler& scheduler)`. That is also why the self tests can
   build their own schedulers on a fake tick source.
@@ -92,7 +96,7 @@ sequenceDiagram
     B->>S: sleep(10)
     Note over B: Sleeping until tick + 10
     S->>M: switchTask(B, task0)
-    Note over S: every tick: PIT IRQ -> m_ticks++
+    Note over S: every tick: PIT IRQ -> m_ticks.fetchAdd(1)
     M->>S: yield()
     S->>A: (B still sleeping, skipped)
 ```

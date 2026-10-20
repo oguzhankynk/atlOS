@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 175 passed, 0 failed
+[SELFTEST] done: 265 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -62,6 +62,13 @@ backtrace in it into function names.
 | Backtrace in a thread | the walk stops at the top of a thread's stack (rbp = 0) |
 | Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, instances do not affect each other |
 | Scheduler sleep (kernel, PIT) | the kernel scheduler with real ticks: idling in `hlt`, a sleeping thread |
+| Atomic, InterruptGuard, Spinlock | atomic operations and wrap around; guards nest and restore IF |
+| WaitQueue (isolated) | FIFO wake order, `wakeOne` does not switch, `wakeAll` |
+| Semaphore (isolated) | counting up to `max`, hand off to a waiter, `give` from interrupt context |
+| Semaphore producer/consumer (isolated) | a 4 slot bounded buffer with two semaphores: order and sum |
+| Mutex (isolated) | threads that yield while holding it run one after the other, ownership hand off |
+| ConditionVariable (isolated) | Mesa semantics: the waiter checks again; woken waiters get the mutex back first |
+| Scheduler idle keeps the interrupt state (kernel, PIT) | sleeping with interrupts off returns with them off |
 
 ## Crash test
 

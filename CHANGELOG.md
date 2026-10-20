@@ -22,6 +22,10 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - `crashtest` preset and `scripts/run-crashtest.sh`: a kernel that page faults
   on purpose, its report is checked in CI
 - Self tests for fault decoding, the TSS and the backtrace (175 checks)
+- `kernel/sync/`: `Atomic<T>`, `InterruptGuard`, `WaitQueue` (FIFO),
+  counting `Semaphore` (`take`/`tryTake`/`give`, `give` from interrupt
+  handlers), `Mutex` with an owner, `ConditionVariable`; teaching README
+- Self tests for the sync objects (265 checks)
 
 ### Changed
 
@@ -31,6 +35,9 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   (`ATLOS_DEBUG_EXIT_PORT`, set by the test presets) instead of a hard coded
   test device, so test kernels also run on real hardware
 - New threads and the boot flow start with `rbp = 0`
+- The scheduler tick counter is a `Sync::Atomic`; idling in `sti; hlt`
+  restores the caller's interrupt state
+- `Spinlock` uses `Sync::Atomic`
 
 ### Fixed
 

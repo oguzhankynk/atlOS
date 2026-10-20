@@ -34,6 +34,13 @@
 #include <mm/vmm.hpp>
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
+#include <sync/atomic.hpp>
+#include <sync/condition_variable.hpp>
+#include <sync/interrupt_guard.hpp>
+#include <sync/mutex.hpp>
+#include <sync/semaphore.hpp>
+#include <sync/spinlock.hpp>
+#include <sync/wait_queue.hpp>
 
 namespace SelfTest {
 using namespace Memory;
@@ -1084,6 +1091,397 @@ static void testSchedulersAreIndependent(Scheduler& kernelScheduler, AddressSpac
     delete a;
 }
 
+// ------------------------------------------------------------
+// Sync
+//
+// Each test runs on its own scheduler with a fake tick source; the test
+// itself is task 0 and decides when the other threads run (yield).
+// ------------------------------------------------------------
+
+static void testAtomic()
+{
+    group("Atomic");
+    using Sync::Atomic;
+
+    Atomic<uint64_t> a(5);
+    CHECK(a.load() == 5);
+    a.store(7);
+    CHECK(a.exchange(9) == 7);
+    CHECK(a.load() == 9);
+
+    uint64_t expected = 1;
+    CHECK(!a.compareExchange(expected, 2)); // 9 != 1: expected gets the value
+    CHECK(expected == 9);
+    CHECK(a.compareExchange(expected, 2));
+    CHECK(a.load() == 2);
+
+    CHECK(a.fetchAdd(3) == 2);
+    CHECK(a.fetchSub(5) == 5);
+    CHECK(a.load() == 0);
+
+    Atomic<uint8_t> small(255);
+    small.fetchAdd(1);
+    CHECK(small.load() == 0); // wraps like the plain type
+
+    Atomic<bool> flag;
+    CHECK(!flag.load());
+    CHECK(!flag.exchange(true));
+    CHECK(flag.load());
+
+    int target = 0;
+    Atomic<int*> pointer;
+    CHECK(pointer.load() == nullptr);
+    pointer.store(&target);
+    CHECK(pointer.load() == &target);
+}
+
+static void testInterruptGuard()
+{
+    group("InterruptGuard");
+    using Sync::InterruptGuard;
+
+    CHECK(IOPort::interruptsEnabled()); // the tests run with interrupts on
+    {
+        InterruptGuard guard;
+        CHECK(!IOPort::interruptsEnabled());
+        {
+            InterruptGuard inner;
+            CHECK(!IOPort::interruptsEnabled());
+        }
+        CHECK(!IOPort::interruptsEnabled()); // the inner guard found them off
+    }
+    CHECK(IOPort::interruptsEnabled());
+
+    // A guard taken with interrupts off leaves them off
+    IOPort::disableInterrupts();
+    {
+        InterruptGuard guard;
+    }
+    CHECK(!IOPort::interruptsEnabled());
+    IOPort::enableInterrupts();
+}
+
+static void testSpinlock()
+{
+    group("Spinlock");
+
+    Sync::Spinlock lock;
+    lock.lock();
+    lock.unlock();
+    lock.lock(); // free again after unlock
+    lock.unlock();
+    CHECK(true); // reached
+}
+
+static Sync::WaitQueue* s_waitQueue {};
+static int s_wakeOrder[3] {};
+static int s_wakeCount {};
+
+template <int Id>
+static void queueWaiter(Scheduler& scheduler)
+{
+    s_waitQueue->wait();
+    s_wakeOrder[s_wakeCount++] = Id;
+}
+
+static void testWaitQueue(AddressSpace& space)
+{
+    group("WaitQueue (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    Sync::WaitQueue queue(scheduler);
+    s_waitQueue = &queue;
+    s_wakeCount = 0;
+
+    CHECK(queue.wakeOne() == nullptr);
+
+    Thread* a = new Thread(scheduler, space, queueWaiter<0>);
+    Thread* b = new Thread(scheduler, space, queueWaiter<1>);
+    Thread* c = new Thread(scheduler, space, queueWaiter<2>);
+
+    // One yield: a, b and c each run until they wait
+    scheduler.yield();
+    CHECK(queue.waiterCount() == 3);
+    CHECK(b->getTCB().state == ThreadState::Blocked);
+
+    // First in, first out
+    CHECK(queue.wakeOne() == &a->getTCB());
+    CHECK(s_wakeCount == 0); // woken is not running yet
+    scheduler.yield();
+    CHECK(s_wakeCount == 1 && s_wakeOrder[0] == 0);
+    CHECK(queue.waiterCount() == 2);
+
+    queue.wakeAll();
+    CHECK(queue.isEmpty());
+    CHECK(waitForExit(scheduler, *b, 1000));
+    CHECK(waitForExit(scheduler, *c, 1000));
+    CHECK(s_wakeCount == 3 && s_wakeOrder[1] == 1 && s_wakeOrder[2] == 2);
+    CHECK(waitForExit(scheduler, *a, 1000));
+
+    delete a;
+    delete b;
+    delete c;
+}
+
+static Sync::Semaphore* s_semaphore {};
+static int s_taken {};
+
+static void semaphoreTaker(Scheduler& scheduler)
+{
+    for (int i = 0; i < 3; i++) {
+        s_semaphore->take();
+        s_taken++;
+    }
+}
+
+// What an interrupt handler would do: give from interrupt context
+static void fakeInterruptHandler(void* semaphore)
+{
+    static_cast<Sync::Semaphore*>(semaphore)->give();
+}
+
+static void testSemaphore(AddressSpace& space)
+{
+    group("Semaphore (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+
+    // Counting without waiting
+    Sync::Semaphore counter(scheduler, 2, 3);
+    CHECK(counter.tryTake());
+    CHECK(counter.tryTake());
+    CHECK(!counter.tryTake());
+    CHECK(counter.give() && counter.give() && counter.give());
+    CHECK(counter.count() == 3);
+    CHECK(!counter.give()); // full: the unit is dropped
+    CHECK(counter.count() == 3);
+
+    // A taker waits at 0; give hands the unit over, the count stays 0
+    Sync::Semaphore semaphore(scheduler, 0, 1);
+    s_semaphore = &semaphore;
+    s_taken = 0;
+    Thread* t = new Thread(scheduler, space, semaphoreTaker);
+    scheduler.yield();
+    CHECK(s_taken == 0);
+    CHECK(semaphore.waiterCount() == 1);
+
+    CHECK(semaphore.give());
+    CHECK(semaphore.count() == 0);
+    CHECK(semaphore.waiterCount() == 0);
+    scheduler.yield();
+    CHECK(s_taken == 1);
+
+    // From "interrupt context": interrupts off, no thread switch
+    IOPort::disableInterrupts();
+    fakeInterruptHandler(&semaphore);
+    IOPort::enableInterrupts();
+    scheduler.yield();
+    CHECK(s_taken == 2);
+
+    // The taker waits for its third unit again
+    CHECK(semaphore.waiterCount() == 1);
+    CHECK(semaphore.give());
+    CHECK(waitForExit(scheduler, *t, 1000));
+    CHECK(s_taken == 3);
+    CHECK(semaphore.count() == 0);
+    delete t;
+
+    // Nobody waits: the unit is counted, up to max
+    CHECK(semaphore.give());
+    CHECK(semaphore.count() == 1);
+    CHECK(!semaphore.give());
+}
+
+// Bounded buffer: the classic producer/consumer with two semaphores
+static constexpr int bufferSize = 4;
+static constexpr int itemCount = 20;
+static int s_buffer[bufferSize] {};
+static Sync::Semaphore* s_freeSlots {};
+static Sync::Semaphore* s_filledSlots {};
+static int s_consumedSum {};
+static bool s_consumedInOrder {};
+
+static void producer(Scheduler& scheduler)
+{
+    for (int i = 1; i <= itemCount; i++) {
+        s_freeSlots->take();
+        s_buffer[i % bufferSize] = i;
+        s_filledSlots->give();
+    }
+}
+
+static void consumer(Scheduler& scheduler)
+{
+    for (int i = 1; i <= itemCount; i++) {
+        s_filledSlots->take();
+        int value = s_buffer[i % bufferSize];
+        s_consumedInOrder = s_consumedInOrder && value == i;
+        s_consumedSum += value;
+        s_freeSlots->give();
+        if (i % 3 == 0)
+            scheduler.yield(); // let the producer fill the buffer
+    }
+}
+
+static void testProducerConsumer(AddressSpace& space)
+{
+    group("Semaphore producer/consumer (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    Sync::Semaphore freeSlots(scheduler, bufferSize, bufferSize);
+    Sync::Semaphore filledSlots(scheduler, 0, bufferSize);
+    s_freeSlots = &freeSlots;
+    s_filledSlots = &filledSlots;
+    s_consumedSum = 0;
+    s_consumedInOrder = true;
+
+    Thread* p = new Thread(scheduler, space, producer);
+    Thread* c = new Thread(scheduler, space, consumer);
+    CHECK(waitForExit(scheduler, *p, 1000));
+    CHECK(waitForExit(scheduler, *c, 1000));
+
+    CHECK(s_consumedInOrder);
+    CHECK(s_consumedSum == itemCount * (itemCount + 1) / 2);
+    CHECK(freeSlots.count() == bufferSize);
+    CHECK(filledSlots.count() == 0);
+    delete p;
+    delete c;
+}
+
+static Sync::Mutex* s_mutex {};
+static int s_mutexLog[4] {};
+static int s_mutexLogCount {};
+
+// Holds the mutex across yields: without it, the two would interleave
+template <int Id>
+static void mutexUser(Scheduler& scheduler)
+{
+    s_mutex->lock();
+    s_mutexLog[s_mutexLogCount++] = Id * 10; // in
+    for (int i = 0; i < 3; i++)
+        scheduler.yield();
+    s_mutexLog[s_mutexLogCount++] = Id * 10 + 1; // out
+    s_mutex->unlock();
+}
+
+static void testMutex(AddressSpace& space)
+{
+    group("Mutex (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    Sync::Mutex mutex(scheduler);
+    s_mutex = &mutex;
+    s_mutexLogCount = 0;
+
+    CHECK(!mutex.isLocked());
+    mutex.lock();
+    CHECK(mutex.isOwnedByCurrent());
+    CHECK(!mutex.tryLock());
+    mutex.unlock();
+    CHECK(!mutex.isLocked());
+    CHECK(mutex.tryLock());
+    mutex.unlock();
+
+    // The test holds the mutex: both threads wait, in order
+    mutex.lock();
+    Thread* a = new Thread(scheduler, space, mutexUser<1>);
+    Thread* b = new Thread(scheduler, space, mutexUser<2>);
+    scheduler.yield();
+    CHECK(s_mutexLogCount == 0);
+    CHECK(a->getTCB().state == ThreadState::Blocked);
+    CHECK(b->getTCB().state == ThreadState::Blocked);
+
+    // unlock hands the mutex to the first waiter before it runs
+    mutex.unlock();
+    CHECK(mutex.isLocked() && !mutex.isOwnedByCurrent());
+
+    CHECK(waitForExit(scheduler, *a, 1000));
+    CHECK(waitForExit(scheduler, *b, 1000));
+    CHECK(s_mutexLogCount == 4);
+    CHECK(s_mutexLog[0] == 10 && s_mutexLog[1] == 11 && s_mutexLog[2] == 20 && s_mutexLog[3] == 21);
+    CHECK(!mutex.isLocked());
+    delete a;
+    delete b;
+}
+
+static Sync::ConditionVariable* s_condition {};
+static bool s_ready {};
+static int s_wakeups {};
+static int s_sawReady {};
+
+static void conditionWaiter(Scheduler& scheduler)
+{
+    s_mutex->lock();
+    while (!s_ready) {
+        s_condition->wait(*s_mutex);
+        s_wakeups++;
+    }
+    s_sawReady++;
+    s_mutex->unlock();
+}
+
+static void testConditionVariable(AddressSpace& space)
+{
+    group("ConditionVariable (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks);
+    Sync::Mutex mutex(scheduler);
+    Sync::ConditionVariable condition(scheduler);
+    s_mutex = &mutex;
+    s_condition = &condition;
+    s_ready = false;
+    s_wakeups = 0;
+    s_sawReady = 0;
+
+    Thread* a = new Thread(scheduler, space, conditionWaiter);
+    Thread* b = new Thread(scheduler, space, conditionWaiter);
+    scheduler.yield();
+    CHECK(condition.waiterCount() == 2);
+    CHECK(!mutex.isLocked()); // wait() gave the mutex back
+
+    // A notify without the condition: the waiter checks again and waits again
+    condition.notifyOne();
+    scheduler.yield();
+    CHECK(s_wakeups == 1);
+    CHECK(condition.waiterCount() == 2);
+    CHECK(s_sawReady == 0);
+
+    // Woken waiters need the mutex back before wait() returns
+    mutex.lock();
+    s_ready = true;
+    condition.notifyAll();
+    scheduler.yield();
+    CHECK(s_sawReady == 0);
+    CHECK(mutex.isOwnedByCurrent());
+    mutex.unlock();
+
+    CHECK(waitForExit(scheduler, *a, 1000));
+    CHECK(waitForExit(scheduler, *b, 1000));
+    CHECK(s_sawReady == 2);
+    CHECK(!mutex.isLocked());
+    delete a;
+    delete b;
+}
+
+static void testIdleKeepsInterruptState(Scheduler& scheduler)
+{
+    group("Scheduler idle keeps the interrupt state (kernel, PIT)");
+
+    // A thread waiting under an InterruptGuard may make the scheduler idle in
+    // "sti; hlt"; it must get the CPU back with interrupts off, as it left it
+    IOPort::disableInterrupts();
+    uint64_t t0 = scheduler.ticks();
+    scheduler.sleep(3);
+    CHECK(!IOPort::interruptsEnabled());
+    CHECK(scheduler.ticks() - t0 >= 3);
+    IOPort::enableInterrupts();
+}
+
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler)
 {
     printf("[SELFTEST] start\n");
@@ -1112,6 +1510,15 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testBlock(space);
     testRemove(space);
     testSchedulersAreIndependent(scheduler, space);
+    testAtomic();
+    testInterruptGuard();
+    testSpinlock();
+    testWaitQueue(space);
+    testSemaphore(space);
+    testProducerConsumer(space);
+    testMutex(space);
+    testConditionVariable(space);
+    testIdleKeepsInterruptState(scheduler);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;

@@ -73,7 +73,7 @@ sequenceDiagram
     CPU->>D: INT_32 stub -> intHandler -> interruptHandler(32)
     D->>PIC: endOfInterrupt(32)
     D->>S: onTick(&scheduler)
-    S-->>S: m_ticks++
+    S-->>S: m_ticks.fetchAdd(1)
 ```
 
 ## Tests

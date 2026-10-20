@@ -93,4 +93,12 @@ void disableInterrupts(void)
     asm volatile("cli");
 }
 
+bool interruptsEnabled(void)
+{
+    uint64_t flags;
+    asm volatile("pushfq; popq %0"
+                 : "=r"(flags));
+    return flags & (1 << 9); // IF
+}
+
 } // namespace IOPort

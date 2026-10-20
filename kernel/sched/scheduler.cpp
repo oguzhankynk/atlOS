@@ -1,3 +1,4 @@
+#include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <drivers/tick_source.hpp>
 #include <sched/scheduler.hpp>
@@ -27,12 +28,12 @@ Scheduler::Scheduler(Drivers::TickSource& ticks)
 void Scheduler::onTick(void* scheduler)
 {
     auto* self = static_cast<Scheduler*>(scheduler);
-    self->m_ticks = self->m_ticks + 1;
+    self->m_ticks.fetchAdd(1);
 }
 
 void Scheduler::wakeSleepers()
 {
-    uint64_t now = m_ticks;
+    uint64_t now = m_ticks.load();
     for (uint32_t i = 0; i < m_threadCount; i++) {
         if (m_readyQueue[i]->state == ThreadState::Sleeping && now >= m_readyQueue[i]->wakeTick)
             m_readyQueue[i]->state = ThreadState::Ready;
@@ -73,6 +74,10 @@ void Scheduler::switchTo(uint32_t nextIndex)
 // halt until an interrupt (e.g. the timer waking a sleeper) changes that.
 void Scheduler::schedule()
 {
+    // A thread may wait with interrupts off (Sync::WaitQueue); idling turns
+    // them on, so put back what the caller had before returning to it
+    bool interruptsWereEnabled = IOPort::interruptsEnabled();
+
     while (true) {
         wakeSleepers();
 
@@ -88,6 +93,8 @@ void Scheduler::schedule()
             return;
 
         asm volatile("sti; hlt");
+        if (!interruptsWereEnabled)
+            IOPort::disableInterrupts();
     }
 }
 
@@ -131,7 +138,7 @@ void Scheduler::sleep(uint64_t ms)
     }
 
     TCB* self = m_readyQueue[m_currentThreadIndex];
-    self->wakeTick = m_ticks + ms;
+    self->wakeTick = m_ticks.load() + ms;
     self->state = ThreadState::Sleeping;
     schedule();
 }
