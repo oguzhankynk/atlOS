@@ -75,6 +75,24 @@ uint16_t inportw(uint16_t port)
     return result;
 }
 
+void outportl(uint16_t port, uint32_t data)
+{
+    asm volatile("outl %0, %1"
+                 :
+                 : "a"(data), "d"(port));
+}
+
+uint32_t inportl(uint16_t port)
+{
+    uint32_t result;
+
+    asm volatile("inl %1, %0"
+                 : "=a"(result)
+                 : "d"(port));
+
+    return result;
+}
+
 /**
  * @brief Enable Interrupts
  *

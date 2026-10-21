@@ -11,6 +11,10 @@
 #include <string.h>
 
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/msr.hpp>
+#include <arch/x86_64/gdt/gdt.hpp>
+#include <arch/x86_64/idt/fault.hpp>
+#include <arch/x86_64/idt/idt.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <core/version.hpp>
@@ -493,6 +497,289 @@ static void cmdRun(Interpreter& shell, int argc, char** argv)
         printf("started pid %d\n", pid);
 }
 
+// ------------------------------------------------------------
+// Hardware: I/O ports, MSRs, control registers, GDT, IDT, page tables, interrupts
+// ------------------------------------------------------------
+
+// "b", "w", "l" (1, 2, 4 bytes); b when not given
+static bool parseWidth(int argc, char** argv, int index, uint32_t& width)
+{
+    width = 1;
+    if (argc <= index)
+        return true;
+    if (!strcmp(argv[index], "b"))
+        width = 1;
+    else if (!strcmp(argv[index], "w"))
+        width = 2;
+    else if (!strcmp(argv[index], "l"))
+        width = 4;
+    else
+        return false;
+    return true;
+}
+
+static void cmdIn(Interpreter&, int argc, char** argv)
+{
+    uint64_t port;
+    uint32_t width;
+    if (!usage("in", argc, 2, 3))
+        return;
+    if (!parseNumber(argv[1], port) || port > 0xFFFF || !parseWidth(argc, argv, 2, width)) {
+        printf("in: a port 0 .. 0xffff and b, w or l\n");
+        return;
+    }
+    uint32_t value = width == 1 ? IOPort::inportb(port) : (width == 2 ? IOPort::inportw(port) : IOPort::inportl(port));
+    printf("port 0x%04lx: 0x%0*x (%u)\n", port, (int)width * 2, value, value);
+}
+
+static void cmdOut(Interpreter&, int argc, char** argv)
+{
+    uint64_t port;
+    uint64_t value;
+    uint32_t width;
+    if (!usage("out", argc, 3, 4))
+        return;
+    if (!parseNumber(argv[1], port) || port > 0xFFFF || !parseNumber(argv[2], value) || !parseWidth(argc, argv, 3, width)
+        || value >> (width * 8)) {
+        printf("out: a port 0 .. 0xffff, a value that fits, and b, w or l\n");
+        return;
+    }
+    if (width == 1)
+        IOPort::outportb(port, (uint8_t)value);
+    else if (width == 2)
+        IOPort::outportw(port, (uint16_t)value);
+    else
+        IOPort::outportl(port, (uint32_t)value);
+}
+
+struct BitName {
+    uint32_t bit;
+    const char* name;
+};
+
+// "name" for every set bit that has one
+static void printBits(uint64_t value, const BitName* names, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        if (value & (1ULL << names[i].bit))
+            printf(" %s", names[i].name);
+    }
+}
+
+static constexpr BitName cr0Bits[] = { { 0, "PE" }, { 1, "MP" }, { 2, "EM" }, { 3, "TS" }, { 4, "ET" }, { 5, "NE" },
+    { 16, "WP" }, { 18, "AM" }, { 29, "NW" }, { 30, "CD" }, { 31, "PG" } };
+static constexpr BitName cr4Bits[] = { { 0, "VME" }, { 1, "PVI" }, { 2, "TSD" }, { 3, "DE" }, { 4, "PSE" }, { 5, "PAE" },
+    { 6, "MCE" }, { 7, "PGE" }, { 8, "PCE" }, { 9, "OSFXSR" }, { 10, "OSXMMEXCPT" }, { 11, "UMIP" }, { 13, "VMXE" },
+    { 16, "FSGSBASE" }, { 17, "PCIDE" }, { 18, "OSXSAVE" }, { 20, "SMEP" }, { 21, "SMAP" } };
+static constexpr BitName eferBits[] = { { 0, "SCE" }, { 8, "LME" }, { 10, "LMA" }, { 11, "NXE" } };
+static constexpr BitName entryBits[] = { { 0, "P" }, { 1, "W" }, { 2, "U" }, { 3, "PWT" }, { 4, "PCD" }, { 5, "A" },
+    { 6, "D" }, { 7, "PS" }, { 8, "G" }, { 9, "owned" }, { 63, "NX" } };
+
+template <uint32_t N>
+static void printRegister(const char* name, uint64_t value, const BitName (&bits)[N])
+{
+    printf("  %-5s 0x%016lx ", name, value);
+    printBits(value, bits, N);
+    printf("\n");
+}
+
+static void cmdCr(Interpreter&, int, char**)
+{
+    uint64_t cr0, cr2, cr3, cr4;
+    __asm__ volatile("mov %%cr0, %0"
+                     : "=r"(cr0));
+    __asm__ volatile("mov %%cr2, %0"
+                     : "=r"(cr2));
+    __asm__ volatile("mov %%cr3, %0"
+                     : "=r"(cr3));
+    __asm__ volatile("mov %%cr4, %0"
+                     : "=r"(cr4));
+
+    printRegister("cr0", cr0, cr0Bits);
+    printf("  %-5s 0x%016lx  the address of the last page fault\n", "cr2", cr2);
+    printf("  %-5s 0x%016lx  the PML4 (physical)%s%s\n", "cr3", cr3, cr3 & 0x8 ? " PWT" : "", cr3 & 0x10 ? " PCD" : "");
+    printRegister("cr4", cr4, cr4Bits);
+    uint64_t efer;
+    if (readMsr(msrEfer, &efer))
+        printRegister("efer", efer, eferBits);
+}
+
+static void cmdRdmsr(Interpreter&, int argc, char** argv)
+{
+    uint64_t msr;
+    uint64_t value;
+    if (!usage("rdmsr", argc, 2, 2))
+        return;
+    if (!parseNumber(argv[1], msr) || msr > 0xFFFFFFFF) {
+        printf("rdmsr: an MSR number, e.g. rdmsr 0xc0000080 (EFER)\n");
+        return;
+    }
+    // The exception table turns the #GP of an MSR the CPU does not have into false
+    if (readMsr((uint32_t)msr, &value))
+        printf("msr 0x%08lx: 0x%016lx\n", msr, value);
+    else
+        printf("msr 0x%08lx: not readable (#GP)\n", msr);
+}
+
+static void cmdWrmsr(Interpreter&, int argc, char** argv)
+{
+    uint64_t msr;
+    uint64_t value;
+    if (!usage("wrmsr", argc, 3, 3))
+        return;
+    if (!parseNumber(argv[1], msr) || msr > 0xFFFFFFFF || !parseNumber(argv[2], value)) {
+        printf("wrmsr: an MSR number and a value\n");
+        return;
+    }
+    if (!writeMsr((uint32_t)msr, value))
+        printf("msr 0x%08lx: not writable (#GP)\n", msr);
+}
+
+static void cmdGdt(Interpreter&, int, char**)
+{
+    struct __attribute__((packed)) {
+        uint16_t limit;
+        uint64_t base;
+    } gdtr;
+    __asm__ volatile("sgdt %0"
+                     : "=m"(gdtr));
+    printf("  GDT at 0x%016lx, %u entries\n", gdtr.base, (gdtr.limit + 1) / 8);
+
+    const auto* entries = reinterpret_cast<const uint64_t*>(gdtr.base);
+    for (uint32_t i = 0; i < (uint32_t)(gdtr.limit + 1) / 8; i++) {
+        uint64_t e = entries[i];
+        uint32_t access = (e >> 40) & 0xFF;
+        uint32_t flags = (e >> 52) & 0xF;
+        uint64_t base = ((e >> 16) & 0xFFFFFF) | ((e >> 32) & 0xFF000000);
+        uint32_t limit = (e & 0xFFFF) | ((e >> 32) & 0xF0000);
+        bool present = access & 0x80;
+        uint32_t dpl = (access >> 5) & 3;
+
+        printf("  0x%02x ", i * 8);
+        if (!present) {
+            printf("(not present)\n");
+            continue;
+        }
+        if (access & 0x10) { // code or data
+            bool code = access & 0x08;
+            printf("%s  dpl %u%s%s\n", code ? "code" : "data", dpl, code && (flags & 0x2) ? "  64-bit" : "",
+                code ? ((access & 0x02) ? "  readable" : "") : ((access & 0x02) ? "  writable" : ""));
+            continue;
+        }
+        // A system descriptor takes two slots in long mode: base bits 32..63 in the second
+        uint32_t type = access & 0xF;
+        if (type == 0x9 || type == 0xB) {
+            base |= (entries[i + 1] & 0xFFFFFFFF) << 32;
+            printf("TSS (%s)  base 0x%016lx  limit 0x%x  dpl %u\n", type == 0xB ? "busy" : "available", base, limit, dpl);
+            i++;
+            continue;
+        }
+        printf("system type 0x%x\n", type);
+    }
+}
+
+// What a vector is: an exception, a PIC IRQ (0x20 + line), or the system call gate
+static void vectorName(uint32_t vector, char* name, size_t size)
+{
+    static const char* const s_irqs[16] = { "timer", "keyboard", "cascade", "COM2", "COM1", "LPT2", "floppy", "LPT1",
+        "RTC", "IRQ 9", "IRQ 10", "IRQ 11", "PS/2 mouse", "FPU", "primary ATA", "secondary ATA" };
+    if (Fault::exceptionName(vector))
+        snprintf(name, size, "%s", Fault::exceptionName(vector));
+    else if (vector >= 0x20 && vector < 0x30)
+        snprintf(name, size, "IRQ %u %s", vector - 0x20, s_irqs[vector - 0x20]);
+    else if (vector == IDT::systemCallVector)
+        snprintf(name, size, "system call");
+    else
+        name[0] = '\0';
+}
+
+static void printIdtEntry(uint32_t vector)
+{
+    const IDT::IDTEntry& e = IDT::entry(vector);
+    uint64_t handler = e.isrLow | ((uint64_t)e.isrMid << 16) | ((uint64_t)e.isrHigh << 32);
+    uint32_t type = e.attributes & 0xF;
+    char name[32];
+    vectorName(vector, name, sizeof(name));
+    if (!(e.attributes & 0x80)) {
+        printf("  %3u  (no gate)  %s\n", vector, name);
+        return;
+    }
+    printf("  %3u  0x%016lx  %-4s dpl %u  ist %u  %s\n", vector, handler, type == 0xF ? "trap" : "int",
+        (e.attributes >> 5) & 3, e.ist, name);
+}
+
+static void cmdIdt(Interpreter&, int argc, char** argv)
+{
+    if (!usage("idt", argc, 1, 2))
+        return;
+    if (argc == 2) {
+        uint64_t vector;
+        if (!parseNumber(argv[1], vector) || vector > 255) {
+            printf("idt: a vector 0 .. 255\n");
+            return;
+        }
+        printIdtEntry(vector);
+        return;
+    }
+
+    // The exceptions, the PIC IRQs and the system call gate; the rest go to the default stubs
+    printf("  vec  handler             type dpl    ist\n");
+    for (uint32_t v = 0; v < 0x30; v++)
+        printIdtEntry(v);
+    printIdtEntry(IDT::systemCallVector);
+    printf("  (48 .. 255: interrupt gates, no handler attached; \"idt n\" shows one)\n");
+}
+
+static void cmdPt(Interpreter& shell, int argc, char** argv)
+{
+    uint64_t address;
+    if (!usage("pt", argc, 2, 2))
+        return;
+    if (!parseNumber(argv[1], address)) {
+        printf("pt: a virtual address\n");
+        return;
+    }
+
+    static const char* const s_levels[4] = { "PML4", "PDPT", "PD", "PT" };
+    static const uint64_t s_pageSizes[4] = { 0, 1ULL << 30, 2ULL << 20, 4096 };
+    Memory::AddressSpace::WalkStep steps[4] {};
+    uint32_t count = shell.context().space.walk(address, steps);
+    if (!count)
+        return; // walk reads at least the PML4
+
+    for (uint32_t level = 0; level < count; level++) {
+        const Memory::AddressSpace::WalkStep& step = steps[level];
+        char where[16];
+        snprintf(where, sizeof(where), "%s[%u]", s_levels[level], step.index);
+        printf("  %-10s = 0x%016lx ", where, step.entry);
+        printBits(step.entry, entryBits, sizeof(entryBits) / sizeof(entryBits[0]));
+        printf("\n");
+    }
+
+    const Memory::AddressSpace::WalkStep& last = steps[count - 1];
+    if (!(last.entry & 0x1)) {
+        printf("  not mapped: %s[%u] is not present\n", s_levels[count - 1], last.index);
+        return;
+    }
+    uint64_t pageSize = s_pageSizes[count - 1];
+    uint64_t physical = (last.entry & 0x000FFFFFFFFFF000ULL & ~(pageSize - 1)) | (address & (pageSize - 1));
+    printf("  %s page, physical 0x%lx\n", pageSize == 4096 ? "4 KB" : (pageSize == (2ULL << 20) ? "2 MB" : "1 GB"),
+        physical);
+}
+
+static void cmdIrq(Interpreter&, int, char**)
+{
+    printf("  vec  count       what\n");
+    for (uint32_t v = 0; v < IDT::idtTableLen; v++) {
+        uint64_t count = IDT::interruptCount(v);
+        if (!count)
+            continue;
+        char name[32];
+        vectorName(v, name, sizeof(name));
+        printf("  %3u  %-10lu  %s\n", v, count, name);
+    }
+}
+
 static void cmdCpuinfo(Interpreter&, int, char**)
 {
     static CPUInfo s_info;
@@ -560,6 +847,15 @@ static const Command s_commands[] = {
     { "ps", "ps", "the same as tasks", cmdTasks },
     { "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
     { "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
+    { "cr", "cr", "control registers and EFER, bits by name", cmdCr },
+    { "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
+    { "wrmsr", "wrmsr msr value", "write a model specific register", cmdWrmsr },
+    { "in", "in port [b|w|l]", "read an I/O port (byte, word, long)", cmdIn },
+    { "out", "out port value [b|w|l]", "write an I/O port", cmdOut },
+    { "gdt", "gdt", "the GDT: segments and the TSS", cmdGdt },
+    { "idt", "idt [vector]", "the IDT gates: handler, type, DPL, IST", cmdIdt },
+    { "pt", "pt addr", "the page table walk for an address", cmdPt },
+    { "irq", "irq", "how often each vector has arrived", cmdIrq },
     { "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
     { "reboot", "reboot", "reset the machine", cmdReboot },

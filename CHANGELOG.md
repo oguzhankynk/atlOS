@@ -7,6 +7,17 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Shell commands for the hardware: `cr` (CR0, CR2, CR3, CR4, EFER by bit),
+  `rdmsr`/`wrmsr`, `in`/`out` (8, 16, 32 bit), `gdt`, `idt [vector]`,
+  `pt addr` (the page table walk), `irq` (interrupts per vector)
+- The exception table (`.extable`, `Fault::fixup`): `readMsr`, `writeMsr`
+  and `readQword` fault without a panic and return false
+- `IDT::interruptCount`, `AddressSpace::walk`, `IOPort::inportl`/`outportl`
+- Self tests for the exception table, the walk, the counts and the commands
+  (752 checks); the shell test runs them (32 steps)
+
 ### Changed
 
 - QEMU emulates the same CPU everywhere: an Intel Skylake

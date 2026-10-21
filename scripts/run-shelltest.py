@@ -165,6 +165,20 @@ def main():
             out = serial.command("vmmap\r")
             check("ffffffff80000000" in out and "2M" in out, "vmmap", out)
 
+            # Hardware: registers, tables, ports, counters
+            out = serial.command("cr\r")
+            check("PE ET PG" in out and "LME LMA" in out, "cr", out)
+            out = serial.command("gdt\r")
+            check("TSS (busy)" in out, "gdt", out)
+            out = serial.command("idt 0x80\r")
+            check("dpl 3" in out and "system call" in out, "idt", out)
+            out = serial.command("pt 0xffffffff80400000\r")
+            check("PML4[511]" in out and "2 MB page, physical 0x400000" in out, "pt", out)
+            out = serial.command("irq\r")
+            check("IRQ 0 timer" in out and "IRQ 4 COM1" in out, "irq (the serial port we type on)", out)
+            out = serial.command("rdmsr 0xc0000080\r")
+            check("msr 0xc0000080: 0x" in out, "rdmsr", out)
+
             out = serial.command("tasks\r")
             check("kernel" in out and "running" in out and "1 task(s)" in out, "tasks", out)
             out = serial.command("uptime\r")

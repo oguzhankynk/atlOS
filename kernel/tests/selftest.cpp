@@ -15,6 +15,8 @@
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/msr.hpp>
+#include <arch/x86_64/cpu/probe.hpp>
 #include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/fault.hpp>
 #include <arch/x86_64/idt/idt.hpp>
@@ -2428,6 +2430,60 @@ static void testTranslate(AddressSpace& space)
 }
 
 // ------------------------------------------------------------
+// The exception table, MSRs, the page table walk, interrupt counts
+// ------------------------------------------------------------
+
+static void testExceptionTable()
+{
+    group("Exception table (faults that are expected)");
+
+    CHECK(Fault::exceptionTableSize() >= 3); // readMsr, writeMsr, readQword
+
+    // A read that works, then two that fault: the kernel goes on, the call says false
+    static uint64_t s_word = 0x1122334455667788ULL;
+    uint64_t value = 0;
+    CHECK(readQword(&s_word, &value) && value == 0x1122334455667788ULL);
+    uint64_t faultsBefore = IDT::interruptCount(13) + IDT::interruptCount(14);
+    CHECK(!readQword((const void*)0x8000000000000000ULL, &value)); // not canonical: #GP
+    CHECK(!readQword((const void*)0xDEAD0000, &value)); // not mapped: page fault
+    CHECK(IDT::interruptCount(13) + IDT::interruptCount(14) == faultsBefore + 2);
+
+    // EFER: long mode enabled and active; writing back the same value is harmless
+    uint64_t efer = 0;
+    CHECK(readMsr(msrEfer, &efer));
+    CHECK((efer & (1 << 8)) && (efer & (1 << 10))); // LME, LMA
+    CHECK(writeMsr(msrEfer, efer));
+    uint64_t again = 0;
+    CHECK(readMsr(msrEfer, &again) && again == efer);
+}
+
+static void testPageTableWalk(AddressSpace& space)
+{
+    group("Page table walk");
+
+    AddressSpace::WalkStep steps[4];
+    uint64_t text = (uint64_t)&_text_start;
+    CHECK(space.walk(text, steps) == 3); // PML4, PDPT, PD with a 2 MB page
+    CHECK(steps[0].index == 511 && (steps[2].entry & 0x80)); // PS
+    CHECK((steps[2].entry & 0x000FFFFFFFE00000ULL) == ((text - KERNEL_VIRTUAL_LOAD_OFFSET) & ~0x1FFFFFULL));
+
+    CHECK(space.walk(0xDEAD0000, steps) == 2); // PML4[0] present, PDPT[3] not
+    CHECK(!(steps[1].entry & 1) && steps[1].index == 3);
+
+    CHECK(space.walk(0, steps) == 3 && (steps[2].entry & 0x000FFFFFFFE00000ULL) == 0); // the identity map
+}
+
+static void testInterruptCounts(Scheduler& scheduler)
+{
+    group("Interrupt counts");
+
+    uint64_t timer = IDT::interruptCount(0x20);
+    scheduler.sleep(5);
+    CHECK(IDT::interruptCount(0x20) >= timer + 5); // one per millisecond
+    CHECK(IDT::interruptCount(0x99) == 0); // nothing arrives there
+}
+
+// ------------------------------------------------------------
 // Shell
 // ------------------------------------------------------------
 
@@ -2675,6 +2731,25 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     bool ps = (runCommand(shell, sink, "ps"), sink.contains("sleeping"));
     scheduler.removeTask(*sleeper);
     delete sleeper;
+
+    // Hardware: the commands decode what the CPU holds
+    bool cr = (runCommand(shell, sink, "cr"), sink.contains("PE ET PG") && sink.contains("LME LMA"));
+    bool rdmsr = (runCommand(shell, sink, "rdmsr 0xc0000080"), sink.contains("msr 0xc0000080: 0x"));
+    bool gdt = (runCommand(shell, sink, "gdt"), sink.contains("TSS (busy)") && sink.contains("0x18 code  dpl 3  64-bit"));
+    bool idt = (runCommand(shell, sink, "idt 14"), sink.contains("trap dpl 0  ist 0  Page fault"))
+        && (runCommand(shell, sink, "idt 8"), sink.contains("ist 1  Double fault"))
+        && (runCommand(shell, sink, "idt 0x80"), sink.contains("int  dpl 3  ist 0  system call"));
+    char ptCommand[48];
+    snprintf(ptCommand, sizeof(ptCommand), "pt 0x%lx", (uint64_t)&_text_start);
+    bool pt = (runCommand(shell, sink, ptCommand), sink.contains("PML4[511]") && sink.contains("2 MB page"))
+        && (runCommand(shell, sink, "pt 0xdead0000"), sink.contains("not mapped: PDPT[3] is not present"));
+    bool irq = (runCommand(shell, sink, "irq"), sink.contains("IRQ 0 timer"));
+    char port[48];
+    snprintf(port, sizeof(port), "port 0x0021: 0x%02x", IOPort::inportb(0x21)); // the PIC's mask
+    bool in = (runCommand(shell, sink, "in 0x21"), sink.contains(port));
+    bool badPort = (runCommand(shell, sink, "in 0x10000"), sink.contains("a port 0 .. 0xffff"))
+        && (runCommand(shell, sink, "out 0x80 0x100"), sink.contains("a value that fits"));
+
     bool help = (runCommand(shell, sink, "help"), sink.contains("md addr [len]") && sink.contains("vmmap"));
     bool version = (runCommand(shell, sink, "version"), sink.contains("atlOS 0."));
     bool unknown = (runCommand(shell, sink, "frobnicate"), sink.contains("unknown command"));
@@ -2690,6 +2765,10 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(dump && written && tooWide && unaligned);
     CHECK(unmapped && unmappedWrite && badNumber);
     CHECK(mem && vmmap);
+    CHECK(cr && rdmsr);
+    CHECK(gdt && idt);
+    CHECK(pt && irq);
+    CHECK(in && badPort);
     CHECK(threads);
     CHECK(ps);
     CHECK(help);
@@ -2993,6 +3072,9 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testFat16Write();
     testAtaDisk(vfs);
     testTranslate(space);
+    testExceptionTable();
+    testPageTableWalk(space);
+    testInterruptCounts(scheduler);
     testAddressSpaces(pmm, space);
     testElf();
     testUserPrograms(pmm, runtime, scheduler, vfs);

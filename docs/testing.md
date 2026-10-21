@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 706 passed, 0 failed
+[SELFTEST] done: 752 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -86,6 +86,9 @@ backtrace in it into function names.
 | VMM translate and mappings | `translate` tells physical 0 from unmapped, refuses non canonical addresses, covers the physmap (and no more); `forEachMapping` finds the kernel, the identity map and 64 GB of physmap |
 | ELF64 parsing | a good two segment file; bad magic, 32-bit, wrong machine, not an executable, segments outside the file or the user range, sharing a page, the entry outside code, a broken header table |
 | User programs (ring 3, test disk) | `HELLO.ELF` prints and exits with 0, `FAULT.ELF` ends with 142 (user page fault, no panic), `BADPTR.ELF` gets every bad pointer refused, missing and non ELF files, two programs at once, every page given back |
+| Exception table (faults that are expected) | `readQword` on a non canonical (#GP) and an unmapped (page fault) address returns false and the kernel goes on; `readMsr`/`writeMsr` on EFER |
+| Page table walk | the kernel image (PML4 511, a 2 MB page), an unmapped address, the identity map |
+| Interrupt counts | the timer vector counts one per millisecond |
 | Address spaces (a second one, user pages) | a new address space shares the kernel half and the identity map; user pages only in the user range, 2 MB aligned, zeroed, with the asked flags; built while inactive, seen after `activate()`; the destructor gives back pages and tables; kernel pages appear in every address space |
 | Shell parser | words, quotes, limits; hex and decimal numbers, overflow |
 | Shell line editor | echo, Backspace and DEL, `\r\n` as one Enter, Ctrl+C, skipped escape sequences, history (order, duplicates, full), the length limit |

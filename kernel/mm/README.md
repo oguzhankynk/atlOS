@@ -113,8 +113,9 @@ address space only); the two it needs are there from boot.
   space owns: unmapping or destroying it gives those back, never a
   `mapPhysical` page. The destructor also frees its PDs and PDPTs.
 - `translate(virt, phys)` walks the tables without faulting and
-  `forEachMapping` reports every mapped page; the shell's `md`, `mw` and
-  `vmmap` use them.
+  `forEachMapping` reports every mapped page; `walk(virt, steps)` returns
+  every entry it reads on the way (the shell's `pt`); the shell's `md`, `mw`
+  and `vmmap` use them.
 
 #### Physmap or recursive mapping
 

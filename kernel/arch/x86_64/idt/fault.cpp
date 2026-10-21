@@ -177,6 +177,31 @@ void printReport(const InterruptFrame& frame)
     printRegisters(frame);
 }
 
+// The table the linker collects from every .extable section (see msr.S)
+struct ExceptionTableEntry {
+    uint64_t instruction;
+    uint64_t resume;
+};
+
+extern "C" const ExceptionTableEntry __extable_start[];
+extern "C" const ExceptionTableEntry __extable_end[];
+
+uint32_t exceptionTableSize()
+{
+    return __extable_end - __extable_start;
+}
+
+bool fixup(InterruptFrame& frame)
+{
+    for (const ExceptionTableEntry* entry = __extable_start; entry < __extable_end; entry++) {
+        if (entry->instruction == frame.rip) {
+            frame.rip = entry->resume;
+            return true;
+        }
+    }
+    return false;
+}
+
 void reportException(const InterruptFrame& frame)
 {
     printReport(frame);

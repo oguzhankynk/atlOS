@@ -115,6 +115,20 @@ public:
      */
     bool isUserAccessible(uint64_t virtAddr, uint64_t size, bool write) const;
 
+    /// One level of a page table walk
+    struct WalkStep {
+        uint64_t tablePhys; ///< the table read at this level
+        uint32_t index; ///< the entry used in it
+        uint64_t entry; ///< its value
+    };
+
+    /**
+     * @brief Walk the tables for virtAddr: PML4, PDPT, PD (and PT), one step
+     * per level read, until an entry that is not present or maps a page.
+     * @return The number of steps written (1..4).
+     */
+    uint32_t walk(uint64_t virtAddr, WalkStep steps[4]) const;
+
     /// Load this address space into CR3.
     void activate() const;
 

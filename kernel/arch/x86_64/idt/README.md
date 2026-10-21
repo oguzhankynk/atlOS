@@ -135,6 +135,30 @@ halts, instead of reporting forever. `haltWithStatus` ends in a `cli; hlt`
 loop; test builds first write the status to `ATLOS_DEBUG_EXIT_PORT` so the
 test machine can stop at once (see `docs/testing.md`).
 
+### Faults that are expected: the exception table
+
+Some kernel code may fault on purpose: reading an MSR the CPU may not have
+(`readMsr`), reading memory that may not be mapped (`readQword`). Such an
+instruction gets an entry in the **exception table**: its address and the
+address to resume at, in the section `.extable`, which the linker collects
+between `__extable_start` and `__extable_end`.
+
+```
+msr.S:   1: rdmsr            ...   2: xor %eax, %eax; ret      .extable: .quad 1b, 2b
+```
+
+When an exception arrives in ring 0, `intHandler` first calls
+`Fault::fixup(frame)`: if `frame.rip` is in the table, it is replaced by the
+resume address and the handler returns, so `iretq` continues there and the
+function returns false. Anything else is a real bug and panics. Linux does
+the same (`__ex_table`, used by `copy_from_user`).
+
+### Counting interrupts
+
+`intHandler` counts every vector on entry (`IDT::interruptCount`, an
+atomic add, since trap gates let interrupts nest); the shell's `irq` lists
+the counts.
+
 ### Pitfalls (and the tests that guard them)
 
 - **The stub must give back every register unchanged.** After the call it

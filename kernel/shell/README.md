@@ -72,6 +72,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap` |
 | system | `run program.elf`, `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
+| hardware | `cr`, `rdmsr msr`, `wrmsr msr value`, `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `gdt`, `idt [vector]`, `pt addr`, `irq` |
 
 ### Looking at memory safely
 
@@ -109,6 +110,47 @@ harmless places to try.
 
 `tasks` lists the scheduler's queue: name, state, time left for sleepers,
 the stack, and `rsp` (for the running task: the current frame).
+
+### Looking at the hardware
+
+The shell runs in ring 0 and can reach everything the CPU has:
+
+```
+atlOS:/> cr
+  cr0   0x0000000080000011  PE ET PG
+  cr3   0x0000000000408000  the PML4 (physical)
+  cr4   0x0000000000000030  PSE PAE
+  efer  0x0000000000000500  LME LMA
+atlOS:/> pt 0xffffffff80400000
+  PML4[511]  = 0x000000000040a023  P W A
+  PDPT[510]  = 0x000000000040b023  P W A
+  PD[2]      = 0x00000000004000a3  P W A PS
+  2 MB page, physical 0x400000
+atlOS:/> irq
+  vec  count       what
+   32  16545       IRQ 0 timer
+   36  14          IRQ 4 COM1
+```
+
+- `cr` decodes CR0, CR4 and EFER bit by bit; CR2 holds the last page fault
+  address, CR3 the active PML4.
+- `pt addr` walks the active tables for one address (`AddressSpace::walk`)
+  and names the bits of every entry it reads (P, W, U, A, D, PS, G, NX and
+  atlOS's `owned`).
+- `gdt` reads the GDT through `sgdt` and decodes code, data and the TSS
+  descriptor (two slots in long mode); `idt` shows the gates of the
+  exceptions, the PIC IRQs and the system call (handler, interrupt or trap
+  gate, DPL, IST), `idt n` any one.
+- `in` and `out` reach any I/O port, a byte by default (`w` 16, `l` 32 bit):
+  `in 0x21` is the PIC's interrupt mask, `in 0x64` the keyboard controller's
+  status. Writing to a port changes the device: `out 0x80 0x42` is harmless
+  (the POST code port), others are not.
+- `rdmsr` and `wrmsr` reach the model specific registers. An MSR the CPU
+  does not have raises #GP on a real CPU; the exception table (see
+  `kernel/arch/x86_64/idt/README.md`) turns that into "not readable", the
+  kernel goes on. QEMU's emulator returns 0 for MSRs it does not know.
+- `irq` counts what arrived on every vector since boot: timer ticks,
+  keyboard and serial interrupts, system calls, faults.
 
 ### Deliberately not done
 

@@ -405,6 +405,14 @@ const IDTEntry& entry(uint32_t vector)
     return s_idt[vector];
 }
 
+// Per vector, counted on entry; interrupts may nest (trap gates), so atomically
+static uint64_t s_counts[idtTableLen];
+
+uint64_t interruptCount(uint32_t vector)
+{
+    return __atomic_load_n(&s_counts[vector], __ATOMIC_RELAXED);
+}
+
 static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAttr, uint8_t ist)
 {
     // Configure the IDT entry
@@ -423,6 +431,8 @@ static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAt
  */
 extern "C" void intHandler(InterruptFrame& regs)
 {
+    __atomic_fetch_add(&s_counts[regs.intNo & 0xFF], 1, __ATOMIC_RELAXED);
+
     // A system call: the result goes back in the frame's rax
     if (regs.intNo == systemCallVector && Fault::isFromUserMode(regs) && Process::runtime()) {
         Process::runtime()->systemCall(regs);
@@ -435,7 +445,9 @@ extern "C" void intHandler(InterruptFrame& regs)
             Fault::printReport(regs);
             Process::runtime()->exitCurrent(128 + (int64_t)regs.intNo);
         }
-        // In the kernel: report and panic, never return
+        // In the kernel: code that expects the fault resumes, anything else panics
+        if (Fault::fixup(regs))
+            return;
         Fault::reportException(regs);
     }
 
