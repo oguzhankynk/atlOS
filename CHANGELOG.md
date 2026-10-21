@@ -25,6 +25,10 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ### Fixed
 
+- `strncmp` compared an `int` counter with the `size_t` length (a
+  `-Wsign-compare` warning on every build); libc warnings are now errors, as
+  in the kernel
+
 - `scripts/build.sh run` failed with "mcopy: not found" on a machine without
   mtools: the test disk tools are now looked up on every configure (no cached
   paths), the disk script uses the ones CMake found and says which are
