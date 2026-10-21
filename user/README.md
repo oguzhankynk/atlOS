@@ -81,7 +81,9 @@ result in `rax`; a negative result is an error. `atlos.h` wraps them:
 | 1 | write | `write(fd, buffer, size)` | `size`; `-EBADF` if `fd` is not 1 (standard output), `-EINVAL` above 4096 bytes, `-EFAULT` if the buffer is not the program's own memory |
 | other | | `atlos_syscall(n, a, b, c)` | `-ENOSYS` |
 
-`print(text)` is `write(1, text, strlen(text))`.
+`print(text)` is `write(1, text, strlen(text))`. `breakpoint()` executes
+`int3`: the kernel prints the program's registers and the program goes on
+(`BREAK.ELF`).
 
 The kernel checks every pointer it is given: the buffer of `write` must lie
 in the program's own mapped pages. Passing a kernel address does not leak

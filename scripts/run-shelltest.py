@@ -176,6 +176,10 @@ def main():
             check("PML4[511]" in out and "2 MB page, physical 0x400000" in out, "pt", out)
             out = serial.command("irq\r")
             check("IRQ 0 timer" in out and "IRQ 4 COM1" in out, "irq (the serial port we type on)", out)
+            out = serial.command("int 3\r")
+            check("Breakpoint" in out and "==== continuing ====" in out, "int 3: a breakpoint, the shell goes on", out)
+            out = serial.command("int 0x30\r")
+            check("interrupt 48 (0x30): no handler" in out, "int 0x30", out)
             out = serial.command("rdmsr 0xc0000080\r")
             check("msr 0xc0000080: 0x" in out, "rdmsr", out)
 

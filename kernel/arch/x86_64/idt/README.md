@@ -153,6 +153,27 @@ resume address and the handler returns, so `iretq` continues there and the
 function returns false. Anything else is a real bug and panics. Linux does
 the same (`__ex_table`, used by `copy_from_user`).
 
+### Breakpoints
+
+`int3` is a debugging aid, not an error: the handler prints the report
+(registers, and a backtrace for kernel code) and returns, and the code goes
+on after the `int3`. In the kernel `ATLOS_BREAKPOINT()` (`core/debug.hpp`)
+puts one anywhere; user programs call `breakpoint()` (`user/lib/atlos.h`).
+The breakpoint gate has DPL 3, so a program's `int3` reaches it instead of
+raising #GP. The shell's `int 3` tries it.
+
+### Raising a vector in software
+
+`IDT::raise(vector)` (`raise.cpp`, the shell's `int`) executes `int n` for
+any vector. `int` takes the vector as an immediate, so there is one small
+function per vector, generated from a template. `int n` never pushes an error
+code, but the stubs of vectors 8, 10–14, 17 and 21 expect one right below
+`rip`; for those `raise` builds the frame by hand (align the stack, push ss,
+rsp, rflags, cs, the return address and a 0 error code) and jumps to the
+stub, whose `iretq` returns past the jump. An IRQ vector then runs its
+handler as if the device had interrupted; an exception vector reports and
+halts like the real fault.
+
 ### Counting interrupts
 
 `intHandler` counts every vector on entry (`IDT::interruptCount`, an

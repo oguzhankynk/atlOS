@@ -20,8 +20,10 @@
 #include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/fault.hpp>
 #include <arch/x86_64/idt/idt.hpp>
+#include <arch/x86_64/idt/raise.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/console.hpp>
+#include <core/debug.hpp>
 #include <cxx/uninitialized.hpp>
 #include <drivers/character_sink.hpp>
 #include <drivers/disk/ata.hpp>
@@ -2483,6 +2485,46 @@ static void testInterruptCounts(Scheduler& scheduler)
     CHECK(IDT::interruptCount(0x99) == 0); // nothing arrives there
 }
 
+static void testRaiseAndBreakpoint(Scheduler& scheduler)
+{
+    group("Raising interrupts, breakpoints");
+
+    FakeSink sink;
+    Drivers::CharacterSink* previous = Core::setConsole(sink);
+
+    // A vector without a handler: counted, a message, nothing else
+    uint64_t before = IDT::interruptCount(0x30);
+    IDT::raise(0x30);
+    bool counted = IDT::interruptCount(0x30) == before + 1;
+    bool noHandler = sink.contains("interrupt 48 (0x30): no handler");
+
+    // The timer vector runs the scheduler's tick handler, as the PIT would
+    sink.clear();
+    uint64_t ticks = scheduler.ticks();
+    IOPort::disableInterrupts(); // no real tick in between
+    IDT::raise(0x20);
+    bool ticked = scheduler.ticks() == ticks + 1;
+    IOPort::enableInterrupts();
+
+    // A breakpoint reports and the code goes on, from int 3 and from the macro
+    sink.clear();
+    uint64_t breakpoints = IDT::interruptCount(3);
+    IDT::raise(3);
+    volatile int after = 0;
+    ATLOS_BREAKPOINT();
+    after = 1;
+    bool reported = sink.contains("EXCEPTION 3: Breakpoint") && sink.contains("Backtrace")
+        && sink.contains("==== continuing ====") && !sink.contains("KERNEL PANIC");
+    bool wentOn = after == 1 && IDT::interruptCount(3) == breakpoints + 2;
+
+    Core::setConsole(*previous);
+    CHECK(counted && noHandler);
+    CHECK(ticked);
+    CHECK(reported && wentOn);
+    CHECK(((IDT::entry(3).attributes >> 5) & 3) == 3); // ring 3 may use int3
+    CHECK(IDT::hasErrorCode(14) && IDT::hasErrorCode(8) && !IDT::hasErrorCode(3) && !IDT::hasErrorCode(0x20));
+}
+
 // ------------------------------------------------------------
 // Shell
 // ------------------------------------------------------------
@@ -2919,6 +2961,12 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
         && sink.contains("CR2=0x0000000000000000 (user write, protection violation)") && !sink.contains("not reached")
         && !sink.contains("KERNEL PANIC");
 
+    // A breakpoint in ring 3: reported, the program goes on to exit 0
+    sink.clear();
+    int64_t breakpoint = runProgram(runtime, scheduler, "/disk0/BIN/BREAK.ELF");
+    bool breakpointOutput = sink.contains("before the breakpoint") && sink.contains("Breakpoint (in user mode)")
+        && sink.contains("after the breakpoint");
+
     // Pointers into the kernel, unmapped or not user: refused
     sink.clear();
     int64_t badptr = runProgram(runtime, scheduler, "/disk0/BIN/BADPTR.ELF");
@@ -2948,6 +2996,7 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(fault == 128 + 14);
     CHECK(faultReport);
     CHECK(badptr == 0 && badptrOutput);
+    CHECK(breakpoint == 0 && breakpointOutput);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
     // Address spaces, pages, kernel stacks: all given back
@@ -3075,6 +3124,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testExceptionTable();
     testPageTableWalk(space);
     testInterruptCounts(scheduler);
+    testRaiseAndBreakpoint(scheduler);
     testAddressSpaces(pmm, space);
     testElf();
     testUserPrograms(pmm, runtime, scheduler, vfs);

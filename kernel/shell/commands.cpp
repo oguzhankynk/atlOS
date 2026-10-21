@@ -15,6 +15,7 @@
 #include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/fault.hpp>
 #include <arch/x86_64/idt/idt.hpp>
+#include <arch/x86_64/idt/raise.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <core/version.hpp>
@@ -767,6 +768,29 @@ static void cmdPt(Interpreter& shell, int argc, char** argv)
         physical);
 }
 
+static void cmdInt(Interpreter&, int argc, char** argv)
+{
+    uint64_t vector;
+    if (!usage("int", argc, 2, 2))
+        return;
+    if (!parseNumber(argv[1], vector) || vector > 255) {
+        printf("int: a vector 0 .. 255\n");
+        return;
+    }
+
+    char name[32];
+    vectorName(vector, name, sizeof(name));
+    if (vector == 3)
+        printf("int 3: a breakpoint: it reports and goes on\n");
+    else if (vector < 32)
+        printf("int %lu: %s, an exception in the kernel: it reports and halts\n", vector, name);
+    else if (vector == IDT::systemCallVector)
+        printf("int 0x80 from the kernel is not a system call (only ring 3 makes one)\n");
+
+    // The handler runs as if the CPU or the device had raised it; irq counts it
+    IDT::raise((uint8_t)vector);
+}
+
 static void cmdIrq(Interpreter&, int, char**)
 {
     printf("  vec  count       what\n");
@@ -856,6 +880,7 @@ static const Command s_commands[] = {
     { "idt", "idt [vector]", "the IDT gates: handler, type, DPL, IST", cmdIdt },
     { "pt", "pt addr", "the page table walk for an address", cmdPt },
     { "irq", "irq", "how often each vector has arrived", cmdIrq },
+    { "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
     { "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
     { "reboot", "reboot", "reset the machine", cmdReboot },

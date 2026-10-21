@@ -15,8 +15,14 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - The exception table (`.extable`, `Fault::fixup`): `readMsr`, `writeMsr`
   and `readQword` fault without a panic and return false
 - `IDT::interruptCount`, `AddressSpace::walk`, `IOPort::inportl`/`outportl`
-- Self tests for the exception table, the walk, the counts and the commands
-  (752 checks); the shell test runs them (32 steps)
+- The shell's `int vector` (`IDT::raise`): any vector in software; the
+  vectors with an error code get a hand built frame
+- Breakpoints report and continue: `int3` in the kernel prints the registers
+  and a backtrace, in ring 3 the registers; `ATLOS_BREAKPOINT()` for kernel
+  code, `breakpoint()` and `BREAK.ELF` for user programs
+- Self tests for the exception table, the walk, the counts, raising, the
+  breakpoints and the commands (758 checks); the shell test runs them
+  (34 steps)
 
 ### Changed
 

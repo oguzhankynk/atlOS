@@ -72,7 +72,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap` |
 | system | `run program.elf`, `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
-| hardware | `cr`, `rdmsr msr`, `wrmsr msr value`, `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `gdt`, `idt [vector]`, `pt addr`, `irq` |
+| hardware | `cr`, `rdmsr msr`, `wrmsr msr value`, `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `gdt`, `idt [vector]`, `pt addr`, `irq`, `int vector` |
 
 ### Looking at memory safely
 
@@ -151,6 +151,11 @@ atlOS:/> irq
   kernel goes on. QEMU's emulator returns 0 for MSRs it does not know.
 - `irq` counts what arrived on every vector since boot: timer ticks,
   keyboard and serial interrupts, system calls, faults.
+- `int vector` raises any vector in software: `int 0x20` runs the timer's
+  handler (one tick), `int 0x30` reaches a vector without a handler, `int 3`
+  is a breakpoint (the registers and a backtrace, then the shell goes on),
+  any other exception (`int 0`, `int 14`, ...) reports and halts like the
+  real fault.
 
 ### Deliberately not done
 

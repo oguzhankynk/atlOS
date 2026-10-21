@@ -25,6 +25,7 @@ atlos_user_program(hello)
 atlos_user_program(fault)
 atlos_user_program(badptr)
 atlos_user_program(count)
+atlos_user_program(break)
 
 set(ATLOS_USER_PROGRAMS ${ATLOS_USER_PROGRAMS} PARENT_SCOPE)
-set(ATLOS_USER_TARGETS hello fault badptr count PARENT_SCOPE)
+set(ATLOS_USER_TARGETS hello fault badptr count break PARENT_SCOPE)

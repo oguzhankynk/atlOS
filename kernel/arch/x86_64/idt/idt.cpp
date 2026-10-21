@@ -17,6 +17,9 @@
  *
  */
 
+#include <stdio.h>
+
+#include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/fault.hpp>
@@ -374,7 +377,12 @@ void init()
             IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateInt);
     }
 
-    // System calls: the only gate ring 3 may use with "int" (DPL 3); the
+    // A breakpoint (int3) may come from ring 3 too: a program's int3 reports
+    // and goes on instead of being a #GP
+    setEntry(static_cast<int>(ExternalInterrupts::Breakpoint), (void*)s_interruptTable[3],
+        (uint16_t)SegmentSelect::KERNELCODE, IDTEntry::PRESENT | IDTEntry::RING3 | IDTEntry::GateTrap);
+
+    // System calls: the gate ring 3 uses with "int $0x80" (DPL 3); the
     // others raise #GP when a program tries
     setEntry(systemCallVector, (void*)s_interruptTable[systemCallVector], (uint16_t)SegmentSelect::KERNELCODE,
         IDTEntry::PRESENT | IDTEntry::RING3 | IDTEntry::GateInt);
@@ -436,6 +444,16 @@ extern "C" void intHandler(InterruptFrame& regs)
     // A system call: the result goes back in the frame's rax
     if (regs.intNo == systemCallVector && Fault::isFromUserMode(regs) && Process::runtime()) {
         Process::runtime()->systemCall(regs);
+        return;
+    }
+
+    // A breakpoint is a debugging aid: show where and what, then go on (rip is
+    // already after the int3)
+    if (regs.intNo == static_cast<uint32_t>(ExternalInterrupts::Breakpoint)) {
+        Fault::printReport(regs);
+        if (!Fault::isFromUserMode(regs))
+            Backtrace::print(regs.rip, regs.rbp);
+        printf("==== continuing ====\n");
         return;
     }
 

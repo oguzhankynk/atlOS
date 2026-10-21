@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 752 passed, 0 failed
+[SELFTEST] done: 758 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -89,6 +89,7 @@ backtrace in it into function names.
 | Exception table (faults that are expected) | `readQword` on a non canonical (#GP) and an unmapped (page fault) address returns false and the kernel goes on; `readMsr`/`writeMsr` on EFER |
 | Page table walk | the kernel image (PML4 511, a 2 MB page), an unmapped address, the identity map |
 | Interrupt counts | the timer vector counts one per millisecond |
+| Raising interrupts, breakpoints | `IDT::raise` on a vector without a handler and on the timer vector (one tick); `int 3` and `ATLOS_BREAKPOINT()` report and go on; the breakpoint gate has DPL 3 |
 | Address spaces (a second one, user pages) | a new address space shares the kernel half and the identity map; user pages only in the user range, 2 MB aligned, zeroed, with the asked flags; built while inactive, seen after `activate()`; the destructor gives back pages and tables; kernel pages appear in every address space |
 | Shell parser | words, quotes, limits; hex and decimal numbers, overflow |
 | Shell line editor | echo, Backspace and DEL, `\r\n` as one Enter, Ctrl+C, skipped escape sequences, history (order, duplicates, full), the length limit |
