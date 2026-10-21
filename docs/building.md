@@ -9,7 +9,7 @@
 | Ninja | any | build (generator of the presets) |
 | `grub-mkrescue` + `xorriso` | GRUB 2 | bootable ISO |
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
-| `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed |
+| `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed; optional: without them `run` and `debug` boot without a disk, the disk self tests are skipped and `shelltest` is not available |
 | Doxygen | optional | API docs |
 | clang-format, clang-tidy | 14 (as in CI), optional | `format`, `format-check`, `tidy`; other versions may format differently |
 

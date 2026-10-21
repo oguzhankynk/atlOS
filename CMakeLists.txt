@@ -32,9 +32,15 @@ add_subdirectory(user)
 
 find_program(GRUB_MKRESCUE NAMES grub2-mkrescue grub-mkrescue)
 find_program(QEMU qemu-system-x86_64)
-find_program(SFDISK sfdisk PATHS /usr/sbin /sbin)
-find_program(MKFS_FAT mkfs.fat PATHS /usr/sbin /sbin)
-find_program(MCOPY mcopy)
+# The test disk tools are looked up on every configure (NO_CACHE): a path that
+# was valid once must not outlive the tool, e.g. after it is uninstalled
+foreach(tool SFDISK MKFS_FAT MCOPY MMD)
+    unset(${tool} CACHE) # an entry from an older configure would skip the search
+endforeach()
+find_program(SFDISK sfdisk PATHS /usr/sbin /sbin NO_CACHE)
+find_program(MKFS_FAT mkfs.fat PATHS /usr/sbin /sbin NO_CACHE)
+find_program(MCOPY mcopy NO_CACHE)
+find_program(MMD mmd NO_CACHE)
 find_program(PYTHON3 python3)
 
 set(ATLOS_ISO_DIR ${CMAKE_BINARY_DIR}/isodir)
@@ -67,11 +73,13 @@ set(ATLOS_DISK_ARGS "")
 set(ATLOS_DISK_TARGET "")
 set(ATLOS_SELFTEST_DISK "")
 
-if(SFDISK AND MKFS_FAT AND MCOPY)
+if(SFDISK AND MKFS_FAT AND MCOPY AND MMD)
     file(GLOB_RECURSE ATLOS_DISK_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tools/disk/files/*)
     add_custom_command(
         OUTPUT ${ATLOS_DISK}
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK} ${ATLOS_USER_PROGRAMS}
+        # The script uses exactly the tools found here
+        COMMAND ${CMAKE_COMMAND} -E env SFDISK=${SFDISK} MKFS_FAT=${MKFS_FAT} MCOPY=${MCOPY} MMD=${MMD}
+            ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK} ${ATLOS_USER_PROGRAMS}
         DEPENDS ${CMAKE_SOURCE_DIR}/scripts/make-disk-image.sh ${ATLOS_DISK_FILES} ${ATLOS_USER_TARGETS}
         COMMENT "Creating disk.img"
         VERBATIM
@@ -83,7 +91,19 @@ if(SFDISK AND MKFS_FAT AND MCOPY)
     set(ATLOS_DISK_TARGET disk-image)
     set(ATLOS_SELFTEST_DISK ${ATLOS_DISK})
 else()
-    message(WARNING "sfdisk, mkfs.fat or mtools not found: no test disk (the disk self tests are skipped)")
+    # Not fatal: run and debug boot without a disk, the disk self tests are skipped
+    set(ATLOS_MISSING_DISK_TOOLS "")
+    foreach(tool SFDISK MKFS_FAT MCOPY MMD)
+        if(NOT ${tool})
+            string(TOLOWER ${tool} name)
+            string(REPLACE "_" "." name ${name})
+            list(APPEND ATLOS_MISSING_DISK_TOOLS ${name})
+        endif()
+    endforeach()
+    list(JOIN ATLOS_MISSING_DISK_TOOLS ", " ATLOS_MISSING_DISK_TOOLS)
+    message(WARNING "No test disk: ${ATLOS_MISSING_DISK_TOOLS} not found. "
+        "run and debug boot without a disk, the disk self tests are skipped. "
+        "On Debian/Ubuntu: sudo apt install mtools dosfstools fdisk")
 endif()
 
 # ------------------------------------------------------------
@@ -107,14 +127,22 @@ if(GRUB_MKRESCUE AND QEMU)
         VERBATIM
     )
 
-    # The normal kernel's shell, driven over the serial port
-    if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST AND PYTHON3 AND ATLOS_DISK_TARGET)
-        add_custom_target(shelltest
-            COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log ${CMAKE_BINARY_DIR}/user
-            DEPENDS iso ${ATLOS_DISK_TARGET}
-            USES_TERMINAL
-            VERBATIM
-        )
+    # The normal kernel's shell, driven over the serial port (it needs the test disk)
+    if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST)
+        if(PYTHON3 AND ATLOS_DISK_TARGET)
+            add_custom_target(shelltest
+                COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log ${CMAKE_BINARY_DIR}/user
+                DEPENDS iso ${ATLOS_DISK_TARGET}
+                USES_TERMINAL
+                VERBATIM
+            )
+        else()
+            add_custom_target(shelltest
+                COMMAND ${CMAKE_COMMAND} -E echo "shelltest needs python3 and the test disk tools (sudo apt install mtools dosfstools fdisk)"
+                COMMAND ${CMAKE_COMMAND} -E false
+                VERBATIM
+            )
+        endif()
     endif()
 
     if(ATLOS_SELFTEST)

@@ -7,6 +7,15 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/build.sh run` failed with "mcopy: not found" on a machine without
+  mtools: the test disk tools are now looked up on every configure (no cached
+  paths), the disk script uses the ones CMake found and says which are
+  missing, and without them `run` and `debug` boot without a disk;
+  `scripts/build.sh` configures every time, so installing a tool takes effect
+  at once
+
 ## [0.3.0] - 2026-10-20
 
 User programs: static ELF64 files from the disk run in ring 3, each in an

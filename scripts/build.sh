@@ -29,10 +29,10 @@ build() {
     preset=$1
     shift
 
-    # Every preset builds in build/<preset name> (CMakePresets.json)
-    if [ ! -f "build/$preset/CMakeCache.txt" ]; then
-        cmake --preset "$preset"
-    fi
+    # Every preset builds in build/<preset name> (CMakePresets.json). Configure
+    # each time: it is quick, and it looks for the optional host tools (the
+    # test disk's mtools, ...) again, so installing one takes effect at once
+    cmake --preset "$preset" > /dev/null || exit 1
     cmake --build --preset "$preset" "$@"
 }
 
