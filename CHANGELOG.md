@@ -9,6 +9,8 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ### Changed
 
+- QEMU emulates the same CPU model everywhere, `qemu64-v1` (`ATLOS_QEMU_CPU`,
+  `QEMU_CPU` for the test scripts): run, debug, the tests and the screenshots
 - `cpuinfo` (`printCPUInfo`): one value per line, the family and model as
   the CPU means them (with the extended fields), only the features the CPU
   has, with their Linux names, wrapped to 80 columns, and the cache sizes

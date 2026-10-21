@@ -57,6 +57,10 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 
 Commands can be chained: `scripts/build.sh clean all run`.
 
+QEMU emulates the same CPU everywhere: the `qemu64-v1` model (`ATLOS_QEMU_CPU`
+in `CMakeLists.txt`, `QEMU_CPU` for the test scripts), without KVM, so
+`cpuinfo` and the tests see the same x86_64 processor on every machine.
+
 Builds are incremental. Each preset builds in `build/<preset>/`;
 nothing is written into the source tree.
 

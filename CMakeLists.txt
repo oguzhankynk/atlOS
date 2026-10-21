@@ -32,6 +32,8 @@ add_subdirectory(user)
 
 find_program(GRUB_MKRESCUE NAMES grub2-mkrescue grub-mkrescue)
 find_program(QEMU qemu-system-x86_64)
+
+set(ATLOS_QEMU_CPU qemu64-v1)
 # The test disk tools are looked up on every configure (NO_CACHE): a path that
 # was valid once must not outlive the tool, e.g. after it is uninstalled
 foreach(tool SFDISK MKFS_FAT MCOPY MMD)
@@ -113,7 +115,7 @@ endif()
 if(GRUB_MKRESCUE AND QEMU)
     # Serial output on the terminal; Ctrl-C quits
     add_custom_target(run
-        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 512M -nographic -monitor none -serial stdio -no-shutdown
+        COMMAND ${QEMU} -cpu ${ATLOS_QEMU_CPU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 512M -nographic -monitor none -serial stdio -no-shutdown
         DEPENDS iso ${ATLOS_DISK_TARGET}
         USES_TERMINAL
         VERBATIM
@@ -121,7 +123,7 @@ if(GRUB_MKRESCUE AND QEMU)
 
     # Waits for gdb on :1234, serial output on telnet localhost 4321
     add_custom_target(debug
-        COMMAND ${QEMU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s
+        COMMAND ${QEMU} -cpu ${ATLOS_QEMU_CPU} -cdrom ${ATLOS_ISO} ${ATLOS_DISK_ARGS} -m 1024M -no-shutdown -serial telnet:localhost:4321,server,nowait -S -s
         DEPENDS iso ${ATLOS_DISK_TARGET}
         USES_TERMINAL
         VERBATIM
@@ -131,7 +133,7 @@ if(GRUB_MKRESCUE AND QEMU)
     if(NOT ATLOS_SELFTEST AND NOT ATLOS_CRASHTEST)
         if(PYTHON3 AND ATLOS_DISK_TARGET)
             add_custom_target(shelltest
-                COMMAND ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log ${CMAKE_BINARY_DIR}/user
+                COMMAND ${CMAKE_COMMAND} -E env QEMU_CPU=${ATLOS_QEMU_CPU} ${PYTHON3} ${CMAKE_SOURCE_DIR}/scripts/run-shelltest.py ${ATLOS_ISO} ${ATLOS_DISK} ${CMAKE_BINARY_DIR}/shelltest.log ${CMAKE_BINARY_DIR}/user
                 DEPENDS iso ${ATLOS_DISK_TARGET}
                 USES_TERMINAL
                 VERBATIM
@@ -147,7 +149,7 @@ if(GRUB_MKRESCUE AND QEMU)
 
     if(ATLOS_SELFTEST)
         add_custom_target(selftest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK}
+            COMMAND ${CMAKE_COMMAND} -E env QEMU_CPU=${ATLOS_QEMU_CPU} ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK}
             DEPENDS iso ${ATLOS_DISK_TARGET}
             USES_TERMINAL
             VERBATIM
@@ -155,12 +157,12 @@ if(GRUB_MKRESCUE AND QEMU)
 
         enable_testing()
         add_test(NAME selftest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK})
+            COMMAND ${CMAKE_COMMAND} -E env QEMU_CPU=${ATLOS_QEMU_CPU} ${CMAKE_SOURCE_DIR}/scripts/run-selftest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/selftest.log ${ATLOS_SELFTEST_DISK})
     endif()
 
     if(ATLOS_CRASHTEST)
         add_custom_target(crashtest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>
+            COMMAND ${CMAKE_COMMAND} -E env QEMU_CPU=${ATLOS_QEMU_CPU} ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>
             DEPENDS iso
             USES_TERMINAL
             VERBATIM
@@ -168,7 +170,7 @@ if(GRUB_MKRESCUE AND QEMU)
 
         enable_testing()
         add_test(NAME crashtest
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>)
+            COMMAND ${CMAKE_COMMAND} -E env QEMU_CPU=${ATLOS_QEMU_CPU} ${CMAKE_SOURCE_DIR}/scripts/run-crashtest.sh ${ATLOS_ISO} ${CMAKE_BINARY_DIR}/crashtest.log $<TARGET_FILE:atlOS.kernel>)
     endif()
 elseif(NOT QEMU)
     message(WARNING "qemu-system-x86_64 not found: the run, debug and selftest targets are not available")

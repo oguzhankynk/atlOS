@@ -19,6 +19,7 @@ if [ -z "$ISO" ] || [ ! -f "$ISO" ]; then
 fi
 
 timeout "$TIMEOUT" qemu-system-x86_64 \
+    -cpu "${QEMU_CPU:-qemu64-v1}" \
     -cdrom "$ISO" \
     -m 512M \
     -display none \

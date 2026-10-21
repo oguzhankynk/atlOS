@@ -27,5 +27,5 @@ if [ -z "$notes" ]; then
 fi
 
 printf '%s\n\n---\n\n' "$notes"
-printf 'Boot it with `qemu-system-x86_64 -cdrom atlOS-%s.iso -m 512M -serial stdio`.\n' "$VERSION"
+printf 'Boot it with `qemu-system-x86_64 -cpu qemu64-v1 -cdrom atlOS-%s.iso -m 512M -serial stdio`.\n' "$VERSION"
 printf 'Build from source: see [docs/building.md](https://github.com/oguzhankynk/atlOS/blob/v%s/docs/building.md).\n' "$VERSION"

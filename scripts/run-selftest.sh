@@ -26,6 +26,7 @@ if [ -n "$DISK" ]; then
 fi
 
 timeout "$TIMEOUT" qemu-system-x86_64 \
+    -cpu "${QEMU_CPU:-qemu64-v1}" \
     -cdrom "$ISO" $DISK_ARGS \
     -m 512M \
     -display none \
