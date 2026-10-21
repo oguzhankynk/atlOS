@@ -9,6 +9,9 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ### Changed
 
+- `cpuinfo` (`printCPUInfo`): one value per line, the family and model as
+  the CPU means them (with the extended fields), only the features the CPU
+  has, with their Linux names, wrapped to 80 columns, and the cache sizes
 - **No scheduler handed in**: `Threading::currentTask()` (set on every
   switch) and `TCB::scheduler` let `WaitQueue`, `Semaphore(initial, max)`,
   `Mutex`, `ConditionVariable` and `CharacterQueue` be created without a
