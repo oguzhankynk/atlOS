@@ -57,9 +57,11 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 
 Commands can be chained: `scripts/build.sh clean all run`.
 
-QEMU emulates the same CPU everywhere: the `qemu64-v1` model (`ATLOS_QEMU_CPU`
-in `CMakeLists.txt`, `QEMU_CPU` for the test scripts), without KVM, so
-`cpuinfo` and the tests see the same x86_64 processor on every machine.
+QEMU emulates the same CPU everywhere, without KVM: an Intel Skylake
+(`Skylake-Client-v1`) without the features QEMU's emulator does not provide,
+written in `scripts/qemu-cpu`. `run`, `debug`, the tests and the screenshots
+use it, so `cpuinfo` and the tests see the same x86_64 processor on every
+machine. To try another model: `QEMU_CPU=Nehalem-v1 scripts/run-selftest.sh ...`.
 
 Builds are incremental. Each preset builds in `build/<preset>/`;
 nothing is written into the source tree.

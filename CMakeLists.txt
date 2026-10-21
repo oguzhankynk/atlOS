@@ -33,7 +33,15 @@ add_subdirectory(user)
 find_program(GRUB_MKRESCUE NAMES grub2-mkrescue grub-mkrescue)
 find_program(QEMU qemu-system-x86_64)
 
-set(ATLOS_QEMU_CPU qemu64-v1)
+# The CPU QEMU emulates, the same for everyone (no KVM, no host CPU), from
+# scripts/qemu-cpu: an Intel Skylake (versioned: it does not change with the
+# QEMU version) without the features QEMU's emulator (TCG) does not have, so
+# it starts without warnings and newer QEMUs show the same CPU. The test
+# scripts get it as QEMU_CPU and read the same file when run on their own.
+file(READ ${CMAKE_SOURCE_DIR}/scripts/qemu-cpu ATLOS_QEMU_CPU)
+string(STRIP "${ATLOS_QEMU_CPU}" ATLOS_QEMU_CPU)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/scripts/qemu-cpu)
+
 # The test disk tools are looked up on every configure (NO_CACHE): a path that
 # was valid once must not outlive the tool, e.g. after it is uninstalled
 foreach(tool SFDISK MKFS_FAT MCOPY MMD)
