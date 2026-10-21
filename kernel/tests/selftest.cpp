@@ -38,6 +38,7 @@
 #include <drivers/vga.hpp>
 #include <drivers/vga_console.hpp>
 #include <fs/fat16.hpp>
+#include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
@@ -2688,7 +2689,9 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     Scheduler isolated(ticks);
     Drivers::CharacterQueue input;
     Process::Runtime runtime(pmm, space, vfs);
-    Shell::Context context { pmm, space, vfs, runtime, nullptr, nullptr };
+    Fs::BlockDeviceList disks;
+    CHECK(disks.add(volume));
+    Shell::Context context { pmm, space, vfs, disks, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2792,7 +2795,19 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     bool badPort = (runCommand(shell, sink, "in 0x10000"), sink.contains("a port 0 .. 0xffff"))
         && (runCommand(shell, sink, "out 0x80 0x100"), sink.contains("a value that fits"));
 
-    bool help = (runCommand(shell, sink, "help"), sink.contains("md addr [len]") && sink.contains("vmmap"));
+    // help: the groups with the names; help <group> and help <command>: the usage
+    bool help = (runCommand(shell, sink, "help"), sink.contains("memory") && sink.contains("vmmap") && !sink.contains("md addr [len]"));
+    bool helpGroup = (runCommand(shell, sink, "help memory"), sink.contains("md addr [len]") && !sink.contains("cat file"));
+    bool helpCommand = (runCommand(shell, sink, "help md"), sink.contains("md addr [len]") && !sink.contains("vmmap"));
+    bool helpUnknown = (runCommand(shell, sink, "help frobnicate"), sink.contains("no command or group"));
+
+    // The RAM disk's sector 0 is the FAT boot sector: 0x55 0xAA ends it
+    bool disk = (runCommand(shell, sink, "disk"), sink.contains("ram") && sink.contains("sectors"));
+    bool diskRead = (runCommand(shell, sink, "disk read 0"), sink.contains("ram sector 0") && sink.contains("00000000000001f0") && sink.contains("55 aa"));
+    bool diskSecond = (runCommand(shell, sink, "disk read 1 2 ram"), sink.contains("ram sector 2") && sink.contains("00000000000005f0"));
+    bool diskBad = (runCommand(shell, sink, "disk read 0 9"), sink.contains("a count of 1 .. 8"))
+        && (runCommand(shell, sink, "disk read 0 1 nope"), sink.contains("no such device"))
+        && (runCommand(shell, sink, "disk read 99999"), sink.contains("can not read sector"));
     bool version = (runCommand(shell, sink, "version"), sink.contains("atlOS 0."));
     bool unknown = (runCommand(shell, sink, "frobnicate"), sink.contains("unknown command"));
     bool usageShown = (runCommand(shell, sink, "cat"), sink.contains("usage: cat file"));
@@ -2813,7 +2828,8 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(in && badPort);
     CHECK(threads);
     CHECK(ps);
-    CHECK(help);
+    CHECK(help && helpGroup && helpCommand && helpUnknown);
+    CHECK(disk && diskRead && diskSecond && diskBad);
     CHECK(version);
     CHECK(unknown && usageShown && quote && nothing);
 

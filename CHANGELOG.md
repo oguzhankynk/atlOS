@@ -20,11 +20,16 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - Breakpoints report and continue: `int3` in the kernel prints the registers
   and a backtrace, in ring 3 the registers; `ATLOS_BREAKPOINT()` for kernel
   code, `breakpoint()` and `BREAK.ELF` for user programs
+- The shell's `disk` lists the disks and partitions (`Fs::BlockDeviceList`,
+  filled at boot); `disk read lba [count] [device]` dumps sectors in hex
 - Self tests for the exception table, the walk, the counts, raising, the
-  breakpoints and the commands (758 checks); the shell test runs them
-  (34 steps)
+  breakpoints and the commands (760 checks); the shell test runs them
+  (37 steps)
 
 ### Changed
+
+- `help` shows the commands by group (general, files, memory, tasks, cpu,
+  devices, system); `help group` and `help command` show their usage
 
 - QEMU emulates the same CPU everywhere: an Intel Skylake
   (`Skylake-Client-v1`) without the features its emulator lacks, in

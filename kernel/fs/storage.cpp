@@ -7,6 +7,7 @@
 #include <fs/storage.hpp>
 
 #include <stdio.h>
+#include <string.h>
 
 #include <drivers/disk/ata.hpp>
 #include <drivers/disk/partition.hpp>
@@ -15,6 +16,23 @@
 namespace Fs {
 
 using Drivers::ATAPioDevice;
+
+bool BlockDeviceList::add(Drivers::BlockDevice& device)
+{
+    if (count == capacity)
+        return false;
+    devices[count++] = &device;
+    return true;
+}
+
+Drivers::BlockDevice* BlockDeviceList::find(const char* name) const
+{
+    for (uint32_t i = 0; i < count; i++) {
+        if (!strcmp(devices[i]->name(), name))
+            return devices[i];
+    }
+    return nullptr;
+}
 
 static bool mountFat16(Vfs& vfs, Drivers::BlockDevice& volume, int& mounted)
 {
@@ -37,7 +55,7 @@ static bool mountFat16(Vfs& vfs, Drivers::BlockDevice& volume, int& mounted)
     return true;
 }
 
-static void mountPartitions(Vfs& vfs, ATAPioDevice& disk, int& mounted)
+static void mountPartitions(Vfs& vfs, BlockDeviceList& devices, ATAPioDevice& disk, int& mounted)
 {
     Drivers::PartitionInfo partitions[Drivers::mbrPartitionCount];
     int count = Drivers::readPartitionTable(disk, partitions);
@@ -59,14 +77,13 @@ static void mountPartitions(Vfs& vfs, ATAPioDevice& disk, int& mounted)
         char name[16];
         snprintf(name, sizeof(name), "%sp%d", disk.name(), i + 1);
         auto* partition = new Drivers::PartitionDevice(disk, part.firstLba, part.sectorCount, name);
-        if (!mountFat16(vfs, *partition, mounted)) {
+        devices.add(*partition);
+        if (!mountFat16(vfs, *partition, mounted))
             printf("storage: %s: FAT16 partition type, but no valid FAT16 volume\n", name);
-            delete partition;
-        }
     }
 }
 
-int mountAtaDisks(Vfs& vfs)
+int mountAtaDisks(Vfs& vfs, BlockDeviceList& devices)
 {
     static const struct {
         ATAPioDevice::Channel channel;
@@ -90,7 +107,8 @@ int mountAtaDisks(Vfs& vfs)
 
         printf("storage: %s: \"%s\", %lu sectors (%lu MB)\n", name, disk->model(), disk->sectorCount(),
             disk->sectorCount() / 2048);
-        mountPartitions(vfs, *disk, mounted);
+        devices.add(*disk);
+        mountPartitions(vfs, devices, *disk, mounted);
     }
     return mounted;
 }

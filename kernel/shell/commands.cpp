@@ -19,8 +19,10 @@
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <core/version.hpp>
+#include <drivers/disk/block_device.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/vga_console.hpp>
+#include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
@@ -62,10 +64,52 @@ static bool resolve(Interpreter& shell, const char* path, char* out)
 // General
 // ------------------------------------------------------------
 
-static void cmdHelp(Interpreter&, int, char**)
+// The groups, in the order help shows them
+static const char* const s_groups[] = { "general", "files", "memory", "tasks", "cpu", "devices", "system" };
+
+static void printCommand(const Command& command)
 {
-    for (const Command* command = commands(); command->name; command++)
-        printf("  %-28s %s\n", command->usage, command->help);
+    printf("  %-34s %s\n", command.usage, command.help);
+}
+
+static void cmdHelp(Interpreter&, int argc, char** argv)
+{
+    if (!usage("help", argc, 1, 2))
+        return;
+
+    // help: one line per group, the command names only
+    if (argc == 1) {
+        for (const char* group : s_groups) {
+            printf("  %-8s", group);
+            for (const Command* command = commands(); command->name; command++) {
+                if (!strcmp(command->group, group))
+                    printf(" %s", command->name);
+            }
+            printf("\n");
+        }
+        printf("  \"help <group>\" or \"help <command>\" for the details\n");
+        return;
+    }
+
+    // help memory: the commands of a group with their usage
+    bool found = false;
+    for (const Command* command = commands(); command->name; command++) {
+        if (!strcmp(command->group, argv[1])) {
+            printCommand(*command);
+            found = true;
+        }
+    }
+    if (found)
+        return;
+
+    // help md: one command
+    for (const Command* command = commands(); command->name; command++) {
+        if (!strcmp(command->name, argv[1])) {
+            printCommand(*command);
+            return;
+        }
+    }
+    printf("help: no command or group \"%s\"\n", argv[1]);
 }
 
 static void cmdClear(Interpreter& shell, int, char**)
@@ -299,6 +343,24 @@ static bool isMapped(const AddressSpace& space, uint64_t address, uint64_t size)
     return true;
 }
 
+// One line of a dump: the address (or offset), 16 bytes in hex, the printable characters
+static void printDumpLine(uint64_t label, const uint8_t* data, uint64_t count)
+{
+    printf("%016lx ", label);
+    for (uint64_t i = 0; i < 16; i++) {
+        if (i == 8)
+            printf(" ");
+        if (i < count)
+            printf(" %02x", data[i]);
+        else
+            printf("   ");
+    }
+    printf("  |");
+    for (uint64_t i = 0; i < count; i++)
+        printf("%c", data[i] >= 0x20 && data[i] < 0x7F ? data[i] : '.');
+    printf("|\n");
+}
+
 static void cmdMd(Interpreter& shell, int argc, char** argv)
 {
     if (!usage("md", argc, 2, 3))
@@ -312,27 +374,14 @@ static void cmdMd(Interpreter& shell, int argc, char** argv)
     if (address + length < address || !isMapped(shell.context().space, address, length))
         return;
 
-    // 16 bytes a line: address, hex, the printable characters
+    // Copied out byte by byte (volatile: device memory must be read as asked)
     const volatile uint8_t* bytes = (const volatile uint8_t*)address;
     for (uint64_t line = 0; line < length; line += 16) {
         uint8_t data[16];
         uint64_t count = length - line < 16 ? length - line : 16;
         for (uint64_t i = 0; i < count; i++)
             data[i] = bytes[line + i];
-
-        printf("%016lx ", address + line);
-        for (uint64_t i = 0; i < 16; i++) {
-            if (i == 8)
-                printf(" ");
-            if (i < count)
-                printf(" %02x", data[i]);
-            else
-                printf("   ");
-        }
-        printf("  |");
-        for (uint64_t i = 0; i < count; i++)
-            printf("%c", data[i] >= 0x20 && data[i] < 0x7F ? data[i] : '.');
-        printf("|\n");
+        printDumpLine(address + line, data, count);
     }
 }
 
@@ -427,6 +476,57 @@ static void cmdVmmap(Interpreter& shell, int, char**)
     shell.context().space.forEachMapping(collectMapping, &run);
     if (run.size)
         printRun(run);
+}
+
+// ------------------------------------------------------------
+// Disks
+// ------------------------------------------------------------
+
+static void cmdDisk(Interpreter& shell, int argc, char** argv)
+{
+    Fs::BlockDeviceList& disks = shell.context().disks;
+
+    if (argc == 1) {
+        if (!disks.count)
+            printf("  no disks\n");
+        for (uint32_t i = 0; i < disks.count; i++) {
+            Drivers::BlockDevice& device = *disks.devices[i];
+            printf("  %-8s %10lu sectors  %6lu MB\n", device.name(), device.sectorCount(), device.sectorCount() / 2048);
+        }
+        return;
+    }
+
+    // disk read lba [count] [device]
+    if (strcmp(argv[1], "read") != 0 || argc < 3 || argc > 5) {
+        usage("disk", 0, 1, 1);
+        return;
+    }
+    uint64_t lba;
+    uint64_t count = 1;
+    if (!parseNumber(argv[2], lba) || (argc >= 4 && !parseNumber(argv[3], count)) || !count || count > 8) {
+        printf("disk read: a sector number and a count of 1 .. 8\n");
+        return;
+    }
+    Drivers::BlockDevice* device = argc == 5 ? disks.find(argv[4]) : (disks.count ? disks.devices[0] : nullptr);
+    if (!device) {
+        printf("disk read: %s\n", argc == 5 ? "no such device (\"disk\" lists them)" : "no disks");
+        return;
+    }
+
+    static uint8_t s_sectors[8 * Drivers::BlockDevice::sectorSize];
+    if (!device->readSectors(lba, (uint32_t)count, s_sectors)) {
+        printf("disk read: %s can not read sector %lu (it has %lu)\n", device->name(), lba, device->sectorCount());
+        return;
+    }
+
+    // Labels are byte offsets on the device: sector n starts at n * 512
+    for (uint64_t sector = 0; sector < count; sector++) {
+        printf("%s sector %lu\n", device->name(), lba + sector);
+        for (uint64_t line = 0; line < Drivers::BlockDevice::sectorSize; line += 16) {
+            uint64_t offset = sector * Drivers::BlockDevice::sectorSize + line;
+            printDumpLine((lba * Drivers::BlockDevice::sectorSize) + offset, s_sectors + offset, 16);
+        }
+    }
 }
 
 // ------------------------------------------------------------
@@ -849,42 +949,43 @@ static void cmdReboot(Interpreter&, int, char**)
 }
 
 static const Command s_commands[] = {
-    { "help", "help", "this list", cmdHelp },
-    { "clear", "clear", "clear the screen", cmdClear },
-    { "echo", "echo [words] [> | >> file]", "print words, or write them to a file", cmdEcho },
-    { "version", "version", "the kernel version", cmdVersion },
-    { "uptime", "uptime", "time since boot", cmdUptime },
-    { "pwd", "pwd", "the current directory", cmdPwd },
-    { "cd", "cd [dir]", "change the current directory (default /)", cmdCd },
-    { "ls", "ls [dir]", "list a directory", cmdLs },
-    { "cat", "cat file", "print a file", cmdCat },
-    { "touch", "touch file", "create an empty file", cmdTouch },
-    { "mkdir", "mkdir dir", "create a directory", cmdMkdir },
-    { "rm", "rm file", "delete a file", cmdRm },
-    { "rmdir", "rmdir dir", "delete an empty directory", cmdRmdir },
-    { "mount", "mount", "the mounted file systems", cmdMount },
-    { "mem", "mem", "physical memory, heap, kernel image", cmdMem },
-    { "md", "md addr [len]", "memory dump (hex and text), len up to 4096", cmdMd },
-    { "mw", "mw addr value [1|2|4|8]", "write a value of 1 (default) to 8 bytes", cmdMw },
-    { "vmmap", "vmmap", "the page table mappings", cmdVmmap },
-    { "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
-    { "ps", "ps", "the same as tasks", cmdTasks },
-    { "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
-    { "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
-    { "cr", "cr", "control registers and EFER, bits by name", cmdCr },
-    { "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
-    { "wrmsr", "wrmsr msr value", "write a model specific register", cmdWrmsr },
-    { "in", "in port [b|w|l]", "read an I/O port (byte, word, long)", cmdIn },
-    { "out", "out port value [b|w|l]", "write an I/O port", cmdOut },
-    { "gdt", "gdt", "the GDT: segments and the TSS", cmdGdt },
-    { "idt", "idt [vector]", "the IDT gates: handler, type, DPL, IST", cmdIdt },
-    { "pt", "pt addr", "the page table walk for an address", cmdPt },
-    { "irq", "irq", "how often each vector has arrived", cmdIrq },
-    { "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
-    { "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
-    { "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
-    { "reboot", "reboot", "reset the machine", cmdReboot },
-    { nullptr, nullptr, nullptr, nullptr },
+    { "general", "help", "help [group | command]", "the commands, by group", cmdHelp },
+    { "general", "clear", "clear", "clear the screen", cmdClear },
+    { "general", "echo", "echo [words] [> | >> file]", "print words, or write them to a file", cmdEcho },
+    { "general", "version", "version", "the kernel version", cmdVersion },
+    { "general", "uptime", "uptime", "time since boot", cmdUptime },
+    { "files", "pwd", "pwd", "the current directory", cmdPwd },
+    { "files", "cd", "cd [dir]", "change the current directory (default /)", cmdCd },
+    { "files", "ls", "ls [dir]", "list a directory", cmdLs },
+    { "files", "cat", "cat file", "print a file", cmdCat },
+    { "files", "touch", "touch file", "create an empty file", cmdTouch },
+    { "files", "mkdir", "mkdir dir", "create a directory", cmdMkdir },
+    { "files", "rm", "rm file", "delete a file", cmdRm },
+    { "files", "rmdir", "rmdir dir", "delete an empty directory", cmdRmdir },
+    { "files", "mount", "mount", "the mounted file systems", cmdMount },
+    { "memory", "mem", "mem", "physical memory, heap, kernel image", cmdMem },
+    { "memory", "md", "md addr [len]", "memory dump (hex and text), len up to 4096", cmdMd },
+    { "memory", "mw", "mw addr value [1|2|4|8]", "write a value of 1 (default) to 8 bytes", cmdMw },
+    { "memory", "vmmap", "vmmap", "the page table mappings", cmdVmmap },
+    { "tasks", "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
+    { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
+    { "tasks", "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
+    { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
+    { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
+    { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
+    { "cpu", "wrmsr", "wrmsr msr value", "write a model specific register", cmdWrmsr },
+    { "devices", "in", "in port [b|w|l]", "read an I/O port (byte, word, long)", cmdIn },
+    { "devices", "out", "out port value [b|w|l]", "write an I/O port", cmdOut },
+    { "cpu", "gdt", "gdt", "the GDT: segments and the TSS", cmdGdt },
+    { "cpu", "idt", "idt [vector]", "the IDT gates: handler, type, DPL, IST", cmdIdt },
+    { "memory", "pt", "pt addr", "the page table walk for an address", cmdPt },
+    { "devices", "irq", "irq", "how often each vector has arrived", cmdIrq },
+    { "devices", "disk", "disk [read lba [count] [device]]", "the disks; dump sectors (count 1 .. 8)", cmdDisk },
+    { "devices", "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
+    { "system", "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
+    { "system", "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
+    { "system", "reboot", "reboot", "reset the machine", cmdReboot },
+    { nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
 const Command* commands()

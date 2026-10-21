@@ -9,9 +9,12 @@ the version, the free memory and the mounted disks. Every line it prints fits
 
 ```
 atlOS:/disk0> help
-  ls [dir]                     list a directory
-  md addr [len]                memory dump (hex and text), len up to 4096
+  general  help clear echo version uptime
+  files    pwd cd ls cat touch mkdir rm rmdir mount
+  memory   mem md mw vmmap pt
   ...
+atlOS:/disk0> help md
+  md addr [len]                      memory dump (hex and text), len up to 4096
 ```
 
 ## What is it for?
@@ -60,8 +63,8 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
   directory (`resolvePath` makes paths absolute and resolves `.` and `..`),
   and the dispatch through the command table.
 - **Commands** (`commands.cpp`): one function per command,
-  `void(Interpreter&, int argc, char** argv)`, listed in one table; `help`
-  prints the table. What the commands work on (PMM, address space,
+  `void(Interpreter&, int argc, char** argv)`, listed in one table with its group; `help`
+  prints one line per group, `help group` and `help command` the usage. What the commands work on (PMM, address space,
   scheduler, VFS) comes in a `Context` from `kernelMain`; no globals.
 
 ### The commands
@@ -70,9 +73,11 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 |---|---|
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
-| memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap` |
-| system | `run program.elf`, `tasks` / `ps`, `cpuinfo`, `panic [message]`, `fault`, `reboot` |
-| hardware | `cr`, `rdmsr msr`, `wrmsr msr value`, `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `gdt`, `idt [vector]`, `pt addr`, `irq`, `int vector` |
+| memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
+| tasks | `tasks`, `ps`, `run program.elf` |
+| cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
+| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `int vector` |
+| system | `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
 
@@ -157,6 +162,33 @@ atlOS:/> irq
   any other exception (`int 0`, `int 14`, ...) reports and halts like the
   real fault.
 
+### Looking at a disk
+
+`disk` lists the block devices found at boot (`Fs::BlockDeviceList`, filled
+by `mountAtaDisks`): the whole disks and their partitions. `disk read lba`
+dumps sectors of one, the first disk by default; the left column is the
+byte offset on that device:
+
+```
+atlOS:/> disk
+  ata0          65536 sectors      32 MB
+  ata0p1        63488 sectors      31 MB
+atlOS:/> disk read 0
+ata0 sector 0
+0000000000000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+...
+00000000000001b0  00 00 00 00 00 00 00 00  cf 33 1b 84 00 00 00 20  |.........3..... |
+00000000000001c0  21 00 06 14 10 04 00 08  00 00 00 f8 00 00 00 00  |!...............|
+...
+00000000000001f0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 55 aa  |..............U.|
+```
+
+Sector 0 of `ata0` is the MBR: the partition table at offset `0x1be` and
+the signature `55 aa` at the end. The first entry (type `06`, FAT16)
+starts at sector `0x800` (`00 08 00 00`, little endian) and has `0xf800`
+sectors. `disk read 0 1 ata0p1` is the FAT boot
+sector of the first partition, `disk read 1 2 ata0p1` the first FAT.
+
 ### Deliberately not done
 
 - No pipes, no general redirection: only `echo` writes to files (`>`, `>>`),
@@ -193,7 +225,8 @@ sequenceDiagram
   `\r\n`, Ctrl+C, skipped escape sequences, history order, duplicates, a
   full history, the length limit), *Shell commands* (every command against a
   FAT16 volume in RAM with the output captured: paths, files, `echo >`/`>>`,
-  `md`/`mw` on a buffer of the test, refusing unmapped memory, `tasks` with a
+  `md`/`mw` on a buffer of the test, refusing unmapped memory, `help` by
+  group, `disk read` of the RAM disk's boot sector, `tasks` with a
   sleeping thread), *VMM translate and mappings*.
 - End to end (`scripts/run-shelltest.py`, `scripts/build.sh shelltest`, CI):
   boots the normal kernel with COM1 on a TCP socket and types commands the

@@ -115,7 +115,16 @@ def main():
             check("mounted on /disk0" in boot, "boot mounts the test disk", boot[-300:])
 
             out = serial.command("help\r")
-            check("md addr [len]" in out and "vmmap" in out, "help lists the commands", out)
+            check("memory" in out and "vmmap" in out, "help lists the groups", out)
+
+            out = serial.command("help files\r")
+            check("cat file" in out and "vmmap" not in out, "help shows a group", out)
+
+            out = serial.command("disk\r")
+            check("ata0" in out and "ata0p1" in out, "disk lists the disks", out)
+
+            out = serial.command("disk read 0\r")
+            check("ata0 sector 0" in out and "55 aa" in out, "disk read dumps the MBR", out)
 
             out = serial.command("ls /disk0\r")
             check("HELLO.TXT" in out and "DOCS/" in out and "22000" in out, "ls /disk0", out)
