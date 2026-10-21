@@ -7,6 +7,8 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 ### Added
 
 - Shell commands for the hardware: `cr` (CR0, CR2, CR3, CR4, EFER by bit),
@@ -233,7 +235,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzhankynk/atlOS/releases/tag/v0.1.0
