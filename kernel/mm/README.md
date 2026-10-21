@@ -65,8 +65,8 @@ so the self tests build managers over a fake 128 MB "machine".
 
 - `Memory::populateFromMultiboot` (`memory.cpp`) frees the `AVAILABLE`
   regions, then reserves `0 .. kernel_physical_end` (the firmware reports the
-  kernel's memory as available too; forgetting this was one of the first
-  bugs fixed in this repo).
+  kernel's memory as available too; without the reservation the PMM would
+  hand out the kernel's own pages).
 - Block 0 is never handed out, its address would read as `nullptr`.
 - Page tables are 4 KB, a whole 2 MB block for each would waste 2044 KB. So
   the PMM also hands out **4 KB frames**, cut from 2 MB blocks ("frame pools").
@@ -116,16 +116,17 @@ address space only); the two it needs are there from boot.
   `forEachMapping` reports every mapped page; the shell's `md`, `mw` and
   `vmmap` use them.
 
-#### Why not the recursive mapping any more
+#### Physmap or recursive mapping
 
-Earlier atlOS reached its tables through a recursive slot: `PML4[510]` pointed
-back at the PML4, so addresses through slot 510 landed on the tables
-themselves (`[510][510][i][j]` was the PD for `(i, j)`). It needs no
-memory and no physical address mapping, but it only shows the tables loaded
-in CR3. Building a second address space for a program would mean switching
-CR3 to it (and back) for every edit, or a second recursive slot pointing at
-the other PML4. The physmap costs 256 KB of tables and makes every table, of
-every address space, one addition away.
+A common alternative is a recursive slot: one PML4 entry points back at the
+PML4 itself, so addresses through that slot land on the tables (with slot
+510, `[510][510][i][j]` is the PD for `(i, j)`). It needs no memory and no
+mapping of physical memory, but it only shows the tables loaded in CR3: to
+build a second address space for a program the kernel would switch CR3 to it
+(and back) for every edit, or point a second recursive slot at the other
+PML4. The physmap costs 256 KB of tables and makes every table, of every
+address space, one addition away; atlOS needs exactly that for user
+programs.
 
 **Heap: liballoc 1.1.** Writing a good general allocator is a project of its
 own; liballoc is small, public domain and needs only four hooks

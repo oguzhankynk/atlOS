@@ -94,17 +94,11 @@ in `rdi`, so its first "return" starts it.
 
 ## The current task
 
-Before, everything that had to block or wake a thread took the scheduler in
-its constructor: `WaitQueue(scheduler)`, then `Semaphore(scheduler, 0, 1)`,
-`Mutex(scheduler)`, `ConditionVariable(scheduler)`, the keyboard's
-`CharacterQueue(scheduler)`, `Thread(scheduler, space, entry)`, and thread
-entry points got it as `void worker(Scheduler&)`. A mutex, a plain value,
-depended on the scheduler object, and the chain grew with every user.
-
-What all of them really need is not "a scheduler" but **"the thread that is
-running now"** (to block it) and "the scheduler of a given thread" (to make
-it runnable again). Most kernels keep exactly that: Linux has `current`,
-xv6 has `myproc()`. atlOS does the same:
+Code that blocks or wakes a thread (a wait queue, a semaphore, a mutex, a
+new thread, a system call) needs two things: **the thread that is running
+now** (to block it) and **the scheduler of a given thread** (to make it
+runnable again). Most kernels keep exactly that: Linux has `current`, xv6 has
+`myproc()`. In atlOS:
 
 ```
 currentTask()        TCB of the running task          set by Scheduler::switchTo
@@ -126,9 +120,13 @@ sequenceDiagram
     Q->>S: tcb->scheduler->unblock(tcb)
 ```
 
+So a `Semaphore`, `Mutex` or `ConditionVariable` is a plain value
+(`Semaphore sem(0, 1);`) and one object works for threads of any scheduler;
+`Thread(entry)` goes to the caller's scheduler.
+
 It is a **boundary global** (`docs/style.md`): one CPU runs one task at a
-time, so "the current task" is a fact about the CPU, not a choice of
-design. With several CPUs it becomes one value per CPU (read through `gs`).
+time, so "the current task" is a fact about the CPU. With several CPUs it is
+one value per CPU (read through `gs`).
 
 Schedulers nest: a scheduler constructed by a flow makes that flow its
 task 0, so `currentTask()` is its boot TCB from then on; its destructor gives

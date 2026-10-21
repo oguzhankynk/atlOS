@@ -84,7 +84,7 @@ also turns interrupts off again after idling when the caller had them off
 
 ## How atlOS does it
 
-- **No scheduler handed in**: `Semaphore sem(0, 1);`, `Mutex m;`,
+- **Plain values**: `Semaphore sem(0, 1);`, `Mutex m;`,
   `ConditionVariable cv;`. `WaitQueue::wait()` blocks the running task
   (`Threading::currentTask()`) on its own scheduler; `wakeOne()` makes a
   waiter runnable on *its* scheduler (`tcb->scheduler`). So one object works

@@ -135,19 +135,21 @@ halts, instead of reporting forever. `haltWithStatus` ends in a `cli; hlt`
 loop; test builds first write the status to `ATLOS_DEBUG_EXIT_PORT` so the
 test machine can stop at once (see `docs/testing.md`).
 
-### Bugs this code had (and why they matter)
+### Pitfalls (and the tests that guard them)
 
-The first version added the interrupted code's `r12` to `rsp` after the call
-and popped the vector and error code into `rax`, overwriting it. Nothing
-noticed while IRQs were off; the first timer interrupt corrupted the stack. The
-*Interrupts* self test now puts known values in `rax` and `r12`, waits for an
-interrupt with `hlt` and checks they survived.
-
-`InterruptFrame` listed `rsi` before `rdi`, but `isr.S` pushes `rsi` first,
-so `rdi` is at the lower address: every register dump showed the two
-swapped, and nobody read them closely. The first system call, whose first
-argument is in `rdi`, made it obvious (`write` saw the buffer as the file
-descriptor). The user program tests depend on the order now.
+- **The stub must give back every register unchanged.** After the call it
+  drops exactly the vector and the error code (`addq $16, %rsp`) and pops
+  the 15 registers it pushed; touching `rax` or any other register on the way
+  corrupts the interrupted code, often only once the timer interrupt fires.
+  The *Interrupts* self test puts known values in `rax` and `r12`, waits for
+  an interrupt with `hlt` and checks they survived.
+- **`InterruptFrame` follows the push order of `isr.S`.** The stub pushes
+  `rax` first and `r15` last, so `r15` is at the lowest address and the
+  struct starts with it; `rsi` is pushed before `rdi`, so `rdi` comes first
+  in the struct. System calls read their arguments from the frame (`rdi`,
+  `rsi`, `rdx`): the user program tests fail if the order is wrong.
+- **`ExternalInterrupts` values are the vector numbers.** *Fault decoding*
+  checks a few of them (10, 14, 21).
 
 ### Deliberately not done
 
