@@ -26,6 +26,12 @@ class AddressSpace;
  */
 void setHeapAddressSpace(AddressSpace& space);
 
+/**
+ * @brief The kernel's address space, as bound with setHeapAddressSpace. What
+ * Threading::Thread(entry) takes its stacks from. Panics if none is bound.
+ */
+AddressSpace& kernelAddressSpace();
+
 struct HeapStatistics {
     uint64_t reserved; ///< bytes of pages the heap took from the address space
     uint64_t inUse; ///< bytes handed out by kmalloc and not freed yet

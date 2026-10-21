@@ -78,7 +78,7 @@ def main():
         port = probe.getsockname()[1]
 
     qemu = subprocess.Popen([
-        "qemu-system-x86_64", "-cdrom", iso, "-m", "512M", "-display", "none", "-no-reboot",
+        "qemu-system-x86_64", "-cpu", os.environ.get("QEMU_CPU") or open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "qemu-cpu")).read().strip(), "-cdrom", iso, "-m", "512M", "-display", "none", "-no-reboot",
         "-drive", f"file={disk_copy},format=raw,if=ide,index=0", "-boot", "d",
         "-serial", f"tcp:127.0.0.1:{port},server=on,wait=on",
     ])
@@ -115,7 +115,16 @@ def main():
             check("mounted on /disk0" in boot, "boot mounts the test disk", boot[-300:])
 
             out = serial.command("help\r")
-            check("md addr [len]" in out and "vmmap" in out, "help lists the commands", out)
+            check("memory" in out and "vmmap" in out, "help lists the groups", out)
+
+            out = serial.command("help files\r")
+            check("cat file" in out and "vmmap" not in out, "help shows a group", out)
+
+            out = serial.command("disk\r")
+            check("ata0" in out and "ata0p1" in out, "disk lists the disks", out)
+
+            out = serial.command("disk read 0\r")
+            check("ata0 sector 0" in out and "55 aa" in out, "disk read dumps the MBR", out)
 
             out = serial.command("ls /disk0\r")
             check("HELLO.TXT" in out and "DOCS/" in out and "22000" in out, "ls /disk0", out)
@@ -164,6 +173,24 @@ def main():
             check("physical:" in out and "heap:" in out and ".text" in out, "mem", out)
             out = serial.command("vmmap\r")
             check("ffffffff80000000" in out and "2M" in out, "vmmap", out)
+
+            # Hardware: registers, tables, ports, counters
+            out = serial.command("cr\r")
+            check("PE ET PG" in out and "LME LMA" in out, "cr", out)
+            out = serial.command("gdt\r")
+            check("TSS (busy)" in out, "gdt", out)
+            out = serial.command("idt 0x80\r")
+            check("dpl 3" in out and "system call" in out, "idt", out)
+            out = serial.command("pt 0xffffffff80400000\r")
+            check("PML4[511]" in out and "2 MB page, physical 0x400000" in out, "pt", out)
+            out = serial.command("irq\r")
+            check("IRQ 0 timer" in out and "IRQ 4 COM1" in out, "irq (the serial port we type on)", out)
+            out = serial.command("int 3\r")
+            check("Breakpoint" in out and "==== continuing ====" in out, "int 3: a breakpoint, the shell goes on", out)
+            out = serial.command("int 0x30\r")
+            check("interrupt 48 (0x30): no handler" in out, "int 0x30", out)
+            out = serial.command("rdmsr 0xc0000080\r")
+            check("msr 0xc0000080: 0x" in out, "rdmsr", out)
 
             out = serial.command("tasks\r")
             check("kernel" in out and "running" in out and "1 task(s)" in out, "tasks", out)

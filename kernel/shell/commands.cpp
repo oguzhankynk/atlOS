@@ -11,11 +11,18 @@
 #include <string.h>
 
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/msr.hpp>
+#include <arch/x86_64/gdt/gdt.hpp>
+#include <arch/x86_64/idt/fault.hpp>
+#include <arch/x86_64/idt/idt.hpp>
+#include <arch/x86_64/idt/raise.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <core/version.hpp>
+#include <drivers/disk/block_device.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/vga_console.hpp>
+#include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
@@ -57,10 +64,52 @@ static bool resolve(Interpreter& shell, const char* path, char* out)
 // General
 // ------------------------------------------------------------
 
-static void cmdHelp(Interpreter&, int, char**)
+// The groups, in the order help shows them
+static const char* const s_groups[] = { "general", "files", "memory", "tasks", "cpu", "devices", "system" };
+
+static void printCommand(const Command& command)
 {
-    for (const Command* command = commands(); command->name; command++)
-        printf("  %-28s %s\n", command->usage, command->help);
+    printf("  %-34s %s\n", command.usage, command.help);
+}
+
+static void cmdHelp(Interpreter&, int argc, char** argv)
+{
+    if (!usage("help", argc, 1, 2))
+        return;
+
+    // help: one line per group, the command names only
+    if (argc == 1) {
+        for (const char* group : s_groups) {
+            printf("  %-8s", group);
+            for (const Command* command = commands(); command->name; command++) {
+                if (!strcmp(command->group, group))
+                    printf(" %s", command->name);
+            }
+            printf("\n");
+        }
+        printf("  \"help <group>\" or \"help <command>\" for the details\n");
+        return;
+    }
+
+    // help memory: the commands of a group with their usage
+    bool found = false;
+    for (const Command* command = commands(); command->name; command++) {
+        if (!strcmp(command->group, argv[1])) {
+            printCommand(*command);
+            found = true;
+        }
+    }
+    if (found)
+        return;
+
+    // help md: one command
+    for (const Command* command = commands(); command->name; command++) {
+        if (!strcmp(command->name, argv[1])) {
+            printCommand(*command);
+            return;
+        }
+    }
+    printf("help: no command or group \"%s\"\n", argv[1]);
 }
 
 static void cmdClear(Interpreter& shell, int, char**)
@@ -80,7 +129,7 @@ static void cmdVersion(Interpreter&, int, char**)
 
 static void cmdUptime(Interpreter& shell, int, char**)
 {
-    uint64_t ms = shell.context().scheduler.ticks();
+    uint64_t ms = Threading::currentScheduler().ticks();
     printf("up %lu.%03lu s\n", ms / 1000, ms % 1000);
 }
 
@@ -294,6 +343,24 @@ static bool isMapped(const AddressSpace& space, uint64_t address, uint64_t size)
     return true;
 }
 
+// One line of a dump: the address (or offset), 16 bytes in hex, the printable characters
+static void printDumpLine(uint64_t label, const uint8_t* data, uint64_t count)
+{
+    printf("%016lx ", label);
+    for (uint64_t i = 0; i < 16; i++) {
+        if (i == 8)
+            printf(" ");
+        if (i < count)
+            printf(" %02x", data[i]);
+        else
+            printf("   ");
+    }
+    printf("  |");
+    for (uint64_t i = 0; i < count; i++)
+        printf("%c", data[i] >= 0x20 && data[i] < 0x7F ? data[i] : '.');
+    printf("|\n");
+}
+
 static void cmdMd(Interpreter& shell, int argc, char** argv)
 {
     if (!usage("md", argc, 2, 3))
@@ -307,27 +374,14 @@ static void cmdMd(Interpreter& shell, int argc, char** argv)
     if (address + length < address || !isMapped(shell.context().space, address, length))
         return;
 
-    // 16 bytes a line: address, hex, the printable characters
+    // Copied out byte by byte (volatile: device memory must be read as asked)
     const volatile uint8_t* bytes = (const volatile uint8_t*)address;
     for (uint64_t line = 0; line < length; line += 16) {
         uint8_t data[16];
         uint64_t count = length - line < 16 ? length - line : 16;
         for (uint64_t i = 0; i < count; i++)
             data[i] = bytes[line + i];
-
-        printf("%016lx ", address + line);
-        for (uint64_t i = 0; i < 16; i++) {
-            if (i == 8)
-                printf(" ");
-            if (i < count)
-                printf(" %02x", data[i]);
-            else
-                printf("   ");
-        }
-        printf("  |");
-        for (uint64_t i = 0; i < count; i++)
-            printf("%c", data[i] >= 0x20 && data[i] < 0x7F ? data[i] : '.');
-        printf("|\n");
+        printDumpLine(address + line, data, count);
     }
 }
 
@@ -425,6 +479,57 @@ static void cmdVmmap(Interpreter& shell, int, char**)
 }
 
 // ------------------------------------------------------------
+// Disks
+// ------------------------------------------------------------
+
+static void cmdDisk(Interpreter& shell, int argc, char** argv)
+{
+    Fs::BlockDeviceList& disks = shell.context().disks;
+
+    if (argc == 1) {
+        if (!disks.count)
+            printf("  no disks\n");
+        for (uint32_t i = 0; i < disks.count; i++) {
+            Drivers::BlockDevice& device = *disks.devices[i];
+            printf("  %-8s %10lu sectors  %6lu MB\n", device.name(), device.sectorCount(), device.sectorCount() / 2048);
+        }
+        return;
+    }
+
+    // disk read lba [count] [device]
+    if (strcmp(argv[1], "read") != 0 || argc < 3 || argc > 5) {
+        usage("disk", 0, 1, 1);
+        return;
+    }
+    uint64_t lba;
+    uint64_t count = 1;
+    if (!parseNumber(argv[2], lba) || (argc >= 4 && !parseNumber(argv[3], count)) || !count || count > 8) {
+        printf("disk read: a sector number and a count of 1 .. 8\n");
+        return;
+    }
+    Drivers::BlockDevice* device = argc == 5 ? disks.find(argv[4]) : (disks.count ? disks.devices[0] : nullptr);
+    if (!device) {
+        printf("disk read: %s\n", argc == 5 ? "no such device (\"disk\" lists them)" : "no disks");
+        return;
+    }
+
+    static uint8_t s_sectors[8 * Drivers::BlockDevice::sectorSize];
+    if (!device->readSectors(lba, (uint32_t)count, s_sectors)) {
+        printf("disk read: %s can not read sector %lu (it has %lu)\n", device->name(), lba, device->sectorCount());
+        return;
+    }
+
+    // Labels are byte offsets on the device: sector n starts at n * 512
+    for (uint64_t sector = 0; sector < count; sector++) {
+        printf("%s sector %lu\n", device->name(), lba + sector);
+        for (uint64_t line = 0; line < Drivers::BlockDevice::sectorSize; line += 16) {
+            uint64_t offset = sector * Drivers::BlockDevice::sectorSize + line;
+            printDumpLine((lba * Drivers::BlockDevice::sectorSize) + offset, s_sectors + offset, 16);
+        }
+    }
+}
+
+// ------------------------------------------------------------
 // System
 // ------------------------------------------------------------
 
@@ -447,7 +552,8 @@ static const char* stateName(Threading::ThreadState state)
 
 static void cmdTasks(Interpreter& shell, int, char**)
 {
-    Threading::Scheduler& scheduler = shell.context().scheduler;
+    // The shell's own scheduler: the one it runs on
+    Threading::Scheduler& scheduler = Threading::currentScheduler();
     uint64_t now = scheduler.ticks();
 
     // The header uses the rows' widths, so the columns line up
@@ -490,6 +596,312 @@ static void cmdRun(Interpreter& shell, int argc, char** argv)
     int pid = shell.context().runtime.spawn(path);
     if (pid > 0)
         printf("started pid %d\n", pid);
+}
+
+// ------------------------------------------------------------
+// Hardware: I/O ports, MSRs, control registers, GDT, IDT, page tables, interrupts
+// ------------------------------------------------------------
+
+// "b", "w", "l" (1, 2, 4 bytes); b when not given
+static bool parseWidth(int argc, char** argv, int index, uint32_t& width)
+{
+    width = 1;
+    if (argc <= index)
+        return true;
+    if (!strcmp(argv[index], "b"))
+        width = 1;
+    else if (!strcmp(argv[index], "w"))
+        width = 2;
+    else if (!strcmp(argv[index], "l"))
+        width = 4;
+    else
+        return false;
+    return true;
+}
+
+static void cmdIn(Interpreter&, int argc, char** argv)
+{
+    uint64_t port;
+    uint32_t width;
+    if (!usage("in", argc, 2, 3))
+        return;
+    if (!parseNumber(argv[1], port) || port > 0xFFFF || !parseWidth(argc, argv, 2, width)) {
+        printf("in: a port 0 .. 0xffff and b, w or l\n");
+        return;
+    }
+    uint32_t value = width == 1 ? IOPort::inportb(port) : (width == 2 ? IOPort::inportw(port) : IOPort::inportl(port));
+    printf("port 0x%04lx: 0x%0*x (%u)\n", port, (int)width * 2, value, value);
+}
+
+static void cmdOut(Interpreter&, int argc, char** argv)
+{
+    uint64_t port;
+    uint64_t value;
+    uint32_t width;
+    if (!usage("out", argc, 3, 4))
+        return;
+    if (!parseNumber(argv[1], port) || port > 0xFFFF || !parseNumber(argv[2], value) || !parseWidth(argc, argv, 3, width)
+        || value >> (width * 8)) {
+        printf("out: a port 0 .. 0xffff, a value that fits, and b, w or l\n");
+        return;
+    }
+    if (width == 1)
+        IOPort::outportb(port, (uint8_t)value);
+    else if (width == 2)
+        IOPort::outportw(port, (uint16_t)value);
+    else
+        IOPort::outportl(port, (uint32_t)value);
+}
+
+struct BitName {
+    uint32_t bit;
+    const char* name;
+};
+
+// "name" for every set bit that has one
+static void printBits(uint64_t value, const BitName* names, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        if (value & (1ULL << names[i].bit))
+            printf(" %s", names[i].name);
+    }
+}
+
+static constexpr BitName cr0Bits[] = { { 0, "PE" }, { 1, "MP" }, { 2, "EM" }, { 3, "TS" }, { 4, "ET" }, { 5, "NE" },
+    { 16, "WP" }, { 18, "AM" }, { 29, "NW" }, { 30, "CD" }, { 31, "PG" } };
+static constexpr BitName cr4Bits[] = { { 0, "VME" }, { 1, "PVI" }, { 2, "TSD" }, { 3, "DE" }, { 4, "PSE" }, { 5, "PAE" },
+    { 6, "MCE" }, { 7, "PGE" }, { 8, "PCE" }, { 9, "OSFXSR" }, { 10, "OSXMMEXCPT" }, { 11, "UMIP" }, { 13, "VMXE" },
+    { 16, "FSGSBASE" }, { 17, "PCIDE" }, { 18, "OSXSAVE" }, { 20, "SMEP" }, { 21, "SMAP" } };
+static constexpr BitName eferBits[] = { { 0, "SCE" }, { 8, "LME" }, { 10, "LMA" }, { 11, "NXE" } };
+static constexpr BitName entryBits[] = { { 0, "P" }, { 1, "W" }, { 2, "U" }, { 3, "PWT" }, { 4, "PCD" }, { 5, "A" },
+    { 6, "D" }, { 7, "PS" }, { 8, "G" }, { 9, "owned" }, { 63, "NX" } };
+
+template <uint32_t N>
+static void printRegister(const char* name, uint64_t value, const BitName (&bits)[N])
+{
+    printf("  %-5s 0x%016lx ", name, value);
+    printBits(value, bits, N);
+    printf("\n");
+}
+
+static void cmdCr(Interpreter&, int, char**)
+{
+    uint64_t cr0, cr2, cr3, cr4;
+    __asm__ volatile("mov %%cr0, %0"
+                     : "=r"(cr0));
+    __asm__ volatile("mov %%cr2, %0"
+                     : "=r"(cr2));
+    __asm__ volatile("mov %%cr3, %0"
+                     : "=r"(cr3));
+    __asm__ volatile("mov %%cr4, %0"
+                     : "=r"(cr4));
+
+    printRegister("cr0", cr0, cr0Bits);
+    printf("  %-5s 0x%016lx  the address of the last page fault\n", "cr2", cr2);
+    printf("  %-5s 0x%016lx  the PML4 (physical)%s%s\n", "cr3", cr3, cr3 & 0x8 ? " PWT" : "", cr3 & 0x10 ? " PCD" : "");
+    printRegister("cr4", cr4, cr4Bits);
+    uint64_t efer;
+    if (readMsr(msrEfer, &efer))
+        printRegister("efer", efer, eferBits);
+}
+
+static void cmdRdmsr(Interpreter&, int argc, char** argv)
+{
+    uint64_t msr;
+    uint64_t value;
+    if (!usage("rdmsr", argc, 2, 2))
+        return;
+    if (!parseNumber(argv[1], msr) || msr > 0xFFFFFFFF) {
+        printf("rdmsr: an MSR number, e.g. rdmsr 0xc0000080 (EFER)\n");
+        return;
+    }
+    // The exception table turns the #GP of an MSR the CPU does not have into false
+    if (readMsr((uint32_t)msr, &value))
+        printf("msr 0x%08lx: 0x%016lx\n", msr, value);
+    else
+        printf("msr 0x%08lx: not readable (#GP)\n", msr);
+}
+
+static void cmdWrmsr(Interpreter&, int argc, char** argv)
+{
+    uint64_t msr;
+    uint64_t value;
+    if (!usage("wrmsr", argc, 3, 3))
+        return;
+    if (!parseNumber(argv[1], msr) || msr > 0xFFFFFFFF || !parseNumber(argv[2], value)) {
+        printf("wrmsr: an MSR number and a value\n");
+        return;
+    }
+    if (!writeMsr((uint32_t)msr, value))
+        printf("msr 0x%08lx: not writable (#GP)\n", msr);
+}
+
+static void cmdGdt(Interpreter&, int, char**)
+{
+    struct __attribute__((packed)) {
+        uint16_t limit;
+        uint64_t base;
+    } gdtr;
+    __asm__ volatile("sgdt %0"
+                     : "=m"(gdtr));
+    printf("  GDT at 0x%016lx, %u entries\n", gdtr.base, (gdtr.limit + 1) / 8);
+
+    const auto* entries = reinterpret_cast<const uint64_t*>(gdtr.base);
+    for (uint32_t i = 0; i < (uint32_t)(gdtr.limit + 1) / 8; i++) {
+        uint64_t e = entries[i];
+        uint32_t access = (e >> 40) & 0xFF;
+        uint32_t flags = (e >> 52) & 0xF;
+        uint64_t base = ((e >> 16) & 0xFFFFFF) | ((e >> 32) & 0xFF000000);
+        uint32_t limit = (e & 0xFFFF) | ((e >> 32) & 0xF0000);
+        bool present = access & 0x80;
+        uint32_t dpl = (access >> 5) & 3;
+
+        printf("  0x%02x ", i * 8);
+        if (!present) {
+            printf("(not present)\n");
+            continue;
+        }
+        if (access & 0x10) { // code or data
+            bool code = access & 0x08;
+            printf("%s  dpl %u%s%s\n", code ? "code" : "data", dpl, code && (flags & 0x2) ? "  64-bit" : "",
+                code ? ((access & 0x02) ? "  readable" : "") : ((access & 0x02) ? "  writable" : ""));
+            continue;
+        }
+        // A system descriptor takes two slots in long mode: base bits 32..63 in the second
+        uint32_t type = access & 0xF;
+        if (type == 0x9 || type == 0xB) {
+            base |= (entries[i + 1] & 0xFFFFFFFF) << 32;
+            printf("TSS (%s)  base 0x%016lx  limit 0x%x  dpl %u\n", type == 0xB ? "busy" : "available", base, limit, dpl);
+            i++;
+            continue;
+        }
+        printf("system type 0x%x\n", type);
+    }
+}
+
+// What a vector is: an exception, a PIC IRQ (0x20 + line), or the system call gate
+static void vectorName(uint32_t vector, char* name, size_t size)
+{
+    static const char* const s_irqs[16] = { "timer", "keyboard", "cascade", "COM2", "COM1", "LPT2", "floppy", "LPT1",
+        "RTC", "IRQ 9", "IRQ 10", "IRQ 11", "PS/2 mouse", "FPU", "primary ATA", "secondary ATA" };
+    if (Fault::exceptionName(vector))
+        snprintf(name, size, "%s", Fault::exceptionName(vector));
+    else if (vector >= 0x20 && vector < 0x30)
+        snprintf(name, size, "IRQ %u %s", vector - 0x20, s_irqs[vector - 0x20]);
+    else if (vector == IDT::systemCallVector)
+        snprintf(name, size, "system call");
+    else
+        name[0] = '\0';
+}
+
+static void printIdtEntry(uint32_t vector)
+{
+    const IDT::IDTEntry& e = IDT::entry(vector);
+    uint64_t handler = e.isrLow | ((uint64_t)e.isrMid << 16) | ((uint64_t)e.isrHigh << 32);
+    uint32_t type = e.attributes & 0xF;
+    char name[32];
+    vectorName(vector, name, sizeof(name));
+    if (!(e.attributes & 0x80)) {
+        printf("  %3u  (no gate)  %s\n", vector, name);
+        return;
+    }
+    printf("  %3u  0x%016lx  %-4s dpl %u  ist %u  %s\n", vector, handler, type == 0xF ? "trap" : "int",
+        (e.attributes >> 5) & 3, e.ist, name);
+}
+
+static void cmdIdt(Interpreter&, int argc, char** argv)
+{
+    if (!usage("idt", argc, 1, 2))
+        return;
+    if (argc == 2) {
+        uint64_t vector;
+        if (!parseNumber(argv[1], vector) || vector > 255) {
+            printf("idt: a vector 0 .. 255\n");
+            return;
+        }
+        printIdtEntry(vector);
+        return;
+    }
+
+    // The exceptions, the PIC IRQs and the system call gate; the rest go to the default stubs
+    printf("  vec  handler             type dpl    ist\n");
+    for (uint32_t v = 0; v < 0x30; v++)
+        printIdtEntry(v);
+    printIdtEntry(IDT::systemCallVector);
+    printf("  (48 .. 255: interrupt gates, no handler attached; \"idt n\" shows one)\n");
+}
+
+static void cmdPt(Interpreter& shell, int argc, char** argv)
+{
+    uint64_t address;
+    if (!usage("pt", argc, 2, 2))
+        return;
+    if (!parseNumber(argv[1], address)) {
+        printf("pt: a virtual address\n");
+        return;
+    }
+
+    static const char* const s_levels[4] = { "PML4", "PDPT", "PD", "PT" };
+    static const uint64_t s_pageSizes[4] = { 0, 1ULL << 30, 2ULL << 20, 4096 };
+    Memory::AddressSpace::WalkStep steps[4] {};
+    uint32_t count = shell.context().space.walk(address, steps);
+    if (!count)
+        return; // walk reads at least the PML4
+
+    for (uint32_t level = 0; level < count; level++) {
+        const Memory::AddressSpace::WalkStep& step = steps[level];
+        char where[16];
+        snprintf(where, sizeof(where), "%s[%u]", s_levels[level], step.index);
+        printf("  %-10s = 0x%016lx ", where, step.entry);
+        printBits(step.entry, entryBits, sizeof(entryBits) / sizeof(entryBits[0]));
+        printf("\n");
+    }
+
+    const Memory::AddressSpace::WalkStep& last = steps[count - 1];
+    if (!(last.entry & 0x1)) {
+        printf("  not mapped: %s[%u] is not present\n", s_levels[count - 1], last.index);
+        return;
+    }
+    uint64_t pageSize = s_pageSizes[count - 1];
+    uint64_t physical = (last.entry & 0x000FFFFFFFFFF000ULL & ~(pageSize - 1)) | (address & (pageSize - 1));
+    printf("  %s page, physical 0x%lx\n", pageSize == 4096 ? "4 KB" : (pageSize == (2ULL << 20) ? "2 MB" : "1 GB"),
+        physical);
+}
+
+static void cmdInt(Interpreter&, int argc, char** argv)
+{
+    uint64_t vector;
+    if (!usage("int", argc, 2, 2))
+        return;
+    if (!parseNumber(argv[1], vector) || vector > 255) {
+        printf("int: a vector 0 .. 255\n");
+        return;
+    }
+
+    char name[32];
+    vectorName(vector, name, sizeof(name));
+    if (vector == 3)
+        printf("int 3: a breakpoint: it reports and goes on\n");
+    else if (vector < 32)
+        printf("int %lu: %s, an exception in the kernel: it reports and halts\n", vector, name);
+    else if (vector == IDT::systemCallVector)
+        printf("int 0x80 from the kernel is not a system call (only ring 3 makes one)\n");
+
+    // The handler runs as if the CPU or the device had raised it; irq counts it
+    IDT::raise((uint8_t)vector);
+}
+
+static void cmdIrq(Interpreter&, int, char**)
+{
+    printf("  vec  count       what\n");
+    for (uint32_t v = 0; v < IDT::idtTableLen; v++) {
+        uint64_t count = IDT::interruptCount(v);
+        if (!count)
+            continue;
+        char name[32];
+        vectorName(v, name, sizeof(name));
+        printf("  %3u  %-10lu  %s\n", v, count, name);
+    }
 }
 
 static void cmdCpuinfo(Interpreter&, int, char**)
@@ -537,32 +949,43 @@ static void cmdReboot(Interpreter&, int, char**)
 }
 
 static const Command s_commands[] = {
-    { "help", "help", "this list", cmdHelp },
-    { "clear", "clear", "clear the screen", cmdClear },
-    { "echo", "echo [words] [> | >> file]", "print words, or write them to a file", cmdEcho },
-    { "version", "version", "the kernel version", cmdVersion },
-    { "uptime", "uptime", "time since boot", cmdUptime },
-    { "pwd", "pwd", "the current directory", cmdPwd },
-    { "cd", "cd [dir]", "change the current directory (default /)", cmdCd },
-    { "ls", "ls [dir]", "list a directory", cmdLs },
-    { "cat", "cat file", "print a file", cmdCat },
-    { "touch", "touch file", "create an empty file", cmdTouch },
-    { "mkdir", "mkdir dir", "create a directory", cmdMkdir },
-    { "rm", "rm file", "delete a file", cmdRm },
-    { "rmdir", "rmdir dir", "delete an empty directory", cmdRmdir },
-    { "mount", "mount", "the mounted file systems", cmdMount },
-    { "mem", "mem", "physical memory, heap, kernel image", cmdMem },
-    { "md", "md addr [len]", "memory dump (hex and text), len up to 4096", cmdMd },
-    { "mw", "mw addr value [1|2|4|8]", "write a value of 1 (default) to 8 bytes", cmdMw },
-    { "vmmap", "vmmap", "the page table mappings", cmdVmmap },
-    { "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
-    { "ps", "ps", "the same as tasks", cmdTasks },
-    { "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
-    { "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
-    { "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
-    { "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
-    { "reboot", "reboot", "reset the machine", cmdReboot },
-    { nullptr, nullptr, nullptr, nullptr },
+    { "general", "help", "help [group | command]", "the commands, by group", cmdHelp },
+    { "general", "clear", "clear", "clear the screen", cmdClear },
+    { "general", "echo", "echo [words] [> | >> file]", "print words, or write them to a file", cmdEcho },
+    { "general", "version", "version", "the kernel version", cmdVersion },
+    { "general", "uptime", "uptime", "time since boot", cmdUptime },
+    { "files", "pwd", "pwd", "the current directory", cmdPwd },
+    { "files", "cd", "cd [dir]", "change the current directory (default /)", cmdCd },
+    { "files", "ls", "ls [dir]", "list a directory", cmdLs },
+    { "files", "cat", "cat file", "print a file", cmdCat },
+    { "files", "touch", "touch file", "create an empty file", cmdTouch },
+    { "files", "mkdir", "mkdir dir", "create a directory", cmdMkdir },
+    { "files", "rm", "rm file", "delete a file", cmdRm },
+    { "files", "rmdir", "rmdir dir", "delete an empty directory", cmdRmdir },
+    { "files", "mount", "mount", "the mounted file systems", cmdMount },
+    { "memory", "mem", "mem", "physical memory, heap, kernel image", cmdMem },
+    { "memory", "md", "md addr [len]", "memory dump (hex and text), len up to 4096", cmdMd },
+    { "memory", "mw", "mw addr value [1|2|4|8]", "write a value of 1 (default) to 8 bytes", cmdMw },
+    { "memory", "vmmap", "vmmap", "the page table mappings", cmdVmmap },
+    { "tasks", "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
+    { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
+    { "tasks", "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
+    { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
+    { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
+    { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
+    { "cpu", "wrmsr", "wrmsr msr value", "write a model specific register", cmdWrmsr },
+    { "devices", "in", "in port [b|w|l]", "read an I/O port (byte, word, long)", cmdIn },
+    { "devices", "out", "out port value [b|w|l]", "write an I/O port", cmdOut },
+    { "cpu", "gdt", "gdt", "the GDT: segments and the TSS", cmdGdt },
+    { "cpu", "idt", "idt [vector]", "the IDT gates: handler, type, DPL, IST", cmdIdt },
+    { "memory", "pt", "pt addr", "the page table walk for an address", cmdPt },
+    { "devices", "irq", "irq", "how often each vector has arrived", cmdIrq },
+    { "devices", "disk", "disk [read lba [count] [device]]", "the disks; dump sectors (count 1 .. 8)", cmdDisk },
+    { "devices", "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
+    { "system", "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
+    { "system", "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },
+    { "system", "reboot", "reboot", "reset the machine", cmdReboot },
+    { nullptr, nullptr, nullptr, nullptr, nullptr },
 };
 
 const Command* commands()

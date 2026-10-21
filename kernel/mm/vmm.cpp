@@ -449,6 +449,24 @@ void AddressSpace::forEachMapping(MappingCallback callback, void* arg) const
     }
 }
 
+uint32_t AddressSpace::walk(uint64_t virtAddr, WalkStep steps[4]) const
+{
+    uint64_t table = m_pml4;
+    const uint32_t shifts[4] = { 39, 30, 21, 12 };
+    for (uint32_t level = 0; level < 4; level++) {
+        uint32_t index = (virtAddr >> shifts[level]) & 0x1FF;
+        uint64_t entry = ((const uint64_t*)physToVirt(table))[index];
+        steps[level] = { table, index, entry };
+
+        // Not present, or a page (PS in a PDPT or PD entry; every PT entry is one)
+        bool page = level == 3 || ((level == 1 || level == 2) && (entry & MMU_PDE_TWO_MB));
+        if (!(entry & MMU_PRESENT) || page)
+            return level + 1;
+        table = entry & tableAddrMask;
+    }
+    return 4;
+}
+
 bool AddressSpace::isUserAccessible(uint64_t virtAddr, uint64_t size, bool write) const
 {
     if (virtAddr < userBase || virtAddr >= userEnd || size > userEnd - virtAddr)

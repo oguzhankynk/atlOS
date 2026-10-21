@@ -54,6 +54,12 @@ void outportw(uint16_t port, uint16_t data);
  */
 uint16_t inportw(uint16_t port);
 
+/// @brief Write a 32-bit value to an I/O port.
+void outportl(uint16_t port, uint32_t data);
+
+/// @brief Read a 32-bit value from an I/O port.
+uint32_t inportl(uint16_t port);
+
 /**
  * @brief Enable Interrupts
  *

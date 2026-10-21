@@ -20,6 +20,7 @@ class VGATextConsole;
 
 namespace Fs {
 class Vfs;
+struct BlockDeviceList;
 }
 
 namespace Memory {
@@ -41,8 +42,8 @@ namespace Shell {
 struct Context {
     Memory::PhysicalMemoryManager& pmm;
     Memory::AddressSpace& space;
-    Threading::Scheduler& scheduler;
     Fs::Vfs& vfs;
+    Fs::BlockDeviceList& disks; ///< the disk command reads them
     Process::Runtime& runtime;
     Drivers::VGATextConsole* screen; ///< for clear, may be null
     Drivers::SerialPort* serial; ///< for clear, may be null
@@ -88,6 +89,7 @@ private:
 
 /// One entry of the command table (commands.cpp).
 struct Command {
+    const char* group; ///< help lists the commands by group
     const char* name;
     const char* usage;
     const char* help;

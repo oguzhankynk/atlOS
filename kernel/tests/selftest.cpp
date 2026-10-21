@@ -15,11 +15,15 @@
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/msr.hpp>
+#include <arch/x86_64/cpu/probe.hpp>
 #include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/fault.hpp>
 #include <arch/x86_64/idt/idt.hpp>
+#include <arch/x86_64/idt/raise.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/console.hpp>
+#include <core/debug.hpp>
 #include <cxx/uninitialized.hpp>
 #include <drivers/character_sink.hpp>
 #include <drivers/disk/ata.hpp>
@@ -34,6 +38,7 @@
 #include <drivers/vga.hpp>
 #include <drivers/vga_console.hpp>
 #include <fs/fat16.hpp>
+#include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
@@ -907,8 +912,9 @@ static volatile uint64_t s_countA {};
 static volatile uint64_t s_countB {};
 static volatile bool s_frameAligned {};
 
-static void counterA(Scheduler& scheduler)
+static void counterA()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     // After "push rbp" the frame must be 16 byte aligned if the thread was
     // started with an ABI conformant stack
     s_frameAligned = ((uintptr_t)__builtin_frame_address(0) % 16) == 0;
@@ -919,8 +925,9 @@ static void counterA(Scheduler& scheduler)
     }
 }
 
-static void counterB(Scheduler& scheduler)
+static void counterB()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     for (uint64_t i = 0; i < rounds; i++) {
         s_countB = s_countB + 1;
         scheduler.yield();
@@ -963,7 +970,7 @@ static void testThreadStack(Scheduler& scheduler, AddressSpace& space)
 
 static int s_threadFrames {};
 
-static void backtraceInThread(Scheduler& scheduler)
+static void backtraceInThread()
 {
     uint64_t addresses[Backtrace::maxFrames];
     s_threadFrames = backtraceHere(addresses, Backtrace::maxFrames);
@@ -1014,8 +1021,9 @@ static void testRoundRobin(AddressSpace& space)
 
 static volatile uint64_t s_sleptTicks {};
 
-static void sleeper(Scheduler& scheduler)
+static void sleeper()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     uint64_t t0 = scheduler.ticks();
     scheduler.sleep(50);
     s_sleptTicks = scheduler.ticks() - t0;
@@ -1070,8 +1078,9 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
 
 static volatile int s_blockStage {};
 
-static void blocker(Scheduler& scheduler)
+static void blocker()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     s_blockStage = 1;
     scheduler.block();
     s_blockStage = 2;
@@ -1099,7 +1108,7 @@ static void testBlock(AddressSpace& space)
 
 static volatile bool s_ran {};
 
-static void neverRuns(Scheduler&)
+static void neverRuns()
 {
     s_ran = true;
 }
@@ -1238,7 +1247,7 @@ static int s_wakeOrder[3] {};
 static int s_wakeCount {};
 
 template <int Id>
-static void queueWaiter(Scheduler& scheduler)
+static void queueWaiter()
 {
     s_waitQueue->wait();
     s_wakeOrder[s_wakeCount++] = Id;
@@ -1250,7 +1259,7 @@ static void testWaitQueue(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::WaitQueue queue(scheduler);
+    Sync::WaitQueue queue;
     s_waitQueue = &queue;
     s_wakeCount = 0;
 
@@ -1287,7 +1296,7 @@ static void testWaitQueue(AddressSpace& space)
 static Sync::Semaphore* s_semaphore {};
 static int s_taken {};
 
-static void semaphoreTaker(Scheduler& scheduler)
+static void semaphoreTaker()
 {
     for (int i = 0; i < 3; i++) {
         s_semaphore->take();
@@ -1309,7 +1318,7 @@ static void testSemaphore(AddressSpace& space)
     Scheduler scheduler(ticks);
 
     // Counting without waiting
-    Sync::Semaphore counter(scheduler, 2, 3);
+    Sync::Semaphore counter(2, 3);
     CHECK(counter.tryTake());
     CHECK(counter.tryTake());
     CHECK(!counter.tryTake());
@@ -1319,7 +1328,7 @@ static void testSemaphore(AddressSpace& space)
     CHECK(counter.count() == 3);
 
     // A taker waits at 0; give hands the unit over, the count stays 0
-    Sync::Semaphore semaphore(scheduler, 0, 1);
+    Sync::Semaphore semaphore(0, 1);
     s_semaphore = &semaphore;
     s_taken = 0;
     Thread* t = new Thread(scheduler, space, semaphoreTaker);
@@ -1363,7 +1372,7 @@ static Sync::Semaphore* s_filledSlots {};
 static int s_consumedSum {};
 static bool s_consumedInOrder {};
 
-static void producer(Scheduler& scheduler)
+static void producer()
 {
     for (int i = 1; i <= itemCount; i++) {
         s_freeSlots->take();
@@ -1372,8 +1381,9 @@ static void producer(Scheduler& scheduler)
     }
 }
 
-static void consumer(Scheduler& scheduler)
+static void consumer()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     for (int i = 1; i <= itemCount; i++) {
         s_filledSlots->take();
         int value = s_buffer[i % bufferSize];
@@ -1391,8 +1401,8 @@ static void testProducerConsumer(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::Semaphore freeSlots(scheduler, bufferSize, bufferSize);
-    Sync::Semaphore filledSlots(scheduler, 0, bufferSize);
+    Sync::Semaphore freeSlots(bufferSize, bufferSize);
+    Sync::Semaphore filledSlots(0, bufferSize);
     s_freeSlots = &freeSlots;
     s_filledSlots = &filledSlots;
     s_consumedSum = 0;
@@ -1417,8 +1427,9 @@ static int s_mutexLogCount {};
 
 // Holds the mutex across yields: without it, the two would interleave
 template <int Id>
-static void mutexUser(Scheduler& scheduler)
+static void mutexUser()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     s_mutex->lock();
     s_mutexLog[s_mutexLogCount++] = Id * 10; // in
     for (int i = 0; i < 3; i++)
@@ -1433,7 +1444,7 @@ static void testMutex(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::Mutex mutex(scheduler);
+    Sync::Mutex mutex;
     s_mutex = &mutex;
     s_mutexLogCount = 0;
 
@@ -1473,7 +1484,7 @@ static bool s_ready {};
 static int s_wakeups {};
 static int s_sawReady {};
 
-static void conditionWaiter(Scheduler& scheduler)
+static void conditionWaiter()
 {
     s_mutex->lock();
     while (!s_ready) {
@@ -1490,8 +1501,8 @@ static void testConditionVariable(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::Mutex mutex(scheduler);
-    Sync::ConditionVariable condition(scheduler);
+    Sync::Mutex mutex;
+    Sync::ConditionVariable condition;
     s_mutex = &mutex;
     s_condition = &condition;
     s_ready = false;
@@ -1654,7 +1665,7 @@ static void typeText(Drivers::PS2Keyboard& keyboard, const char* text)
 static Drivers::CharacterQueue* s_queue {};
 static char s_line[8] {};
 
-static void lineReader(Scheduler& scheduler)
+static void lineReader()
 {
     for (int i = 0; i < 3; i++)
         s_line[i] = s_queue->read();
@@ -1667,7 +1678,7 @@ static void testKeyboard(AddressSpace& space)
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
     FakeInterruptController controller;
-    Drivers::CharacterQueue queue(scheduler);
+    Drivers::CharacterQueue queue;
     Drivers::PS2Keyboard keyboard(controller, queue);
     CHECK(controller.attachedIrq == Drivers::Irq::Keyboard);
     CHECK(controller.unmaskedIrq == Drivers::Irq::Keyboard);
@@ -2422,6 +2433,100 @@ static void testTranslate(AddressSpace& space)
 }
 
 // ------------------------------------------------------------
+// The exception table, MSRs, the page table walk, interrupt counts
+// ------------------------------------------------------------
+
+static void testExceptionTable()
+{
+    group("Exception table (faults that are expected)");
+
+    CHECK(Fault::exceptionTableSize() >= 3); // readMsr, writeMsr, readQword
+
+    // A read that works, then two that fault: the kernel goes on, the call says false
+    static uint64_t s_word = 0x1122334455667788ULL;
+    uint64_t value = 0;
+    CHECK(readQword(&s_word, &value) && value == 0x1122334455667788ULL);
+    uint64_t faultsBefore = IDT::interruptCount(13) + IDT::interruptCount(14);
+    CHECK(!readQword((const void*)0x8000000000000000ULL, &value)); // not canonical: #GP
+    CHECK(!readQword((const void*)0xDEAD0000, &value)); // not mapped: page fault
+    CHECK(IDT::interruptCount(13) + IDT::interruptCount(14) == faultsBefore + 2);
+
+    // EFER: long mode enabled and active; writing back the same value is harmless
+    uint64_t efer = 0;
+    CHECK(readMsr(msrEfer, &efer));
+    CHECK((efer & (1 << 8)) && (efer & (1 << 10))); // LME, LMA
+    CHECK(writeMsr(msrEfer, efer));
+    uint64_t again = 0;
+    CHECK(readMsr(msrEfer, &again) && again == efer);
+}
+
+static void testPageTableWalk(AddressSpace& space)
+{
+    group("Page table walk");
+
+    AddressSpace::WalkStep steps[4];
+    uint64_t text = (uint64_t)&_text_start;
+    CHECK(space.walk(text, steps) == 3); // PML4, PDPT, PD with a 2 MB page
+    CHECK(steps[0].index == 511 && (steps[2].entry & 0x80)); // PS
+    CHECK((steps[2].entry & 0x000FFFFFFFE00000ULL) == ((text - KERNEL_VIRTUAL_LOAD_OFFSET) & ~0x1FFFFFULL));
+
+    CHECK(space.walk(0xDEAD0000, steps) == 2); // PML4[0] present, PDPT[3] not
+    CHECK(!(steps[1].entry & 1) && steps[1].index == 3);
+
+    CHECK(space.walk(0, steps) == 3 && (steps[2].entry & 0x000FFFFFFFE00000ULL) == 0); // the identity map
+}
+
+static void testInterruptCounts(Scheduler& scheduler)
+{
+    group("Interrupt counts");
+
+    uint64_t timer = IDT::interruptCount(0x20);
+    scheduler.sleep(5);
+    CHECK(IDT::interruptCount(0x20) >= timer + 5); // one per millisecond
+    CHECK(IDT::interruptCount(0x99) == 0); // nothing arrives there
+}
+
+static void testRaiseAndBreakpoint(Scheduler& scheduler)
+{
+    group("Raising interrupts, breakpoints");
+
+    FakeSink sink;
+    Drivers::CharacterSink* previous = Core::setConsole(sink);
+
+    // A vector without a handler: counted, a message, nothing else
+    uint64_t before = IDT::interruptCount(0x30);
+    IDT::raise(0x30);
+    bool counted = IDT::interruptCount(0x30) == before + 1;
+    bool noHandler = sink.contains("interrupt 48 (0x30): no handler");
+
+    // The timer vector runs the scheduler's tick handler, as the PIT would
+    sink.clear();
+    uint64_t ticks = scheduler.ticks();
+    IOPort::disableInterrupts(); // no real tick in between
+    IDT::raise(0x20);
+    bool ticked = scheduler.ticks() == ticks + 1;
+    IOPort::enableInterrupts();
+
+    // A breakpoint reports and the code goes on, from int 3 and from the macro
+    sink.clear();
+    uint64_t breakpoints = IDT::interruptCount(3);
+    IDT::raise(3);
+    volatile int after = 0;
+    ATLOS_BREAKPOINT();
+    after = 1;
+    bool reported = sink.contains("EXCEPTION 3: Breakpoint") && sink.contains("Backtrace")
+        && sink.contains("==== continuing ====") && !sink.contains("KERNEL PANIC");
+    bool wentOn = after == 1 && IDT::interruptCount(3) == breakpoints + 2;
+
+    Core::setConsole(*previous);
+    CHECK(counted && noHandler);
+    CHECK(ticked);
+    CHECK(reported && wentOn);
+    CHECK(((IDT::entry(3).attributes >> 5) & 3) == 3); // ring 3 may use int3
+    CHECK(IDT::hasErrorCode(14) && IDT::hasErrorCode(8) && !IDT::hasErrorCode(3) && !IDT::hasErrorCode(0x20));
+}
+
+// ------------------------------------------------------------
 // Shell
 // ------------------------------------------------------------
 
@@ -2548,8 +2653,9 @@ static void testLineEditor()
     CHECK(capped);
 }
 
-static void longSleeper(Scheduler& scheduler)
+static void longSleeper()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     scheduler.sleep(100000);
 }
 
@@ -2581,9 +2687,11 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
 
     FakeTickSource ticks;
     Scheduler isolated(ticks);
-    Drivers::CharacterQueue input(isolated);
-    Process::Runtime runtime(pmm, space, scheduler, vfs);
-    Shell::Context context { pmm, space, scheduler, vfs, runtime, nullptr, nullptr };
+    Drivers::CharacterQueue input;
+    Process::Runtime runtime(pmm, space, vfs);
+    Fs::BlockDeviceList disks;
+    CHECK(disks.add(volume));
+    Shell::Context context { pmm, space, vfs, disks, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2668,7 +2776,38 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     bool ps = (runCommand(shell, sink, "ps"), sink.contains("sleeping"));
     scheduler.removeTask(*sleeper);
     delete sleeper;
-    bool help = (runCommand(shell, sink, "help"), sink.contains("md addr [len]") && sink.contains("vmmap"));
+
+    // Hardware: the commands decode what the CPU holds
+    bool cr = (runCommand(shell, sink, "cr"), sink.contains("PE ET PG") && sink.contains("LME LMA"));
+    bool rdmsr = (runCommand(shell, sink, "rdmsr 0xc0000080"), sink.contains("msr 0xc0000080: 0x"));
+    bool gdt = (runCommand(shell, sink, "gdt"), sink.contains("TSS (busy)") && sink.contains("0x18 code  dpl 3  64-bit"));
+    bool idt = (runCommand(shell, sink, "idt 14"), sink.contains("trap dpl 0  ist 0  Page fault"))
+        && (runCommand(shell, sink, "idt 8"), sink.contains("ist 1  Double fault"))
+        && (runCommand(shell, sink, "idt 0x80"), sink.contains("int  dpl 3  ist 0  system call"));
+    char ptCommand[48];
+    snprintf(ptCommand, sizeof(ptCommand), "pt 0x%lx", (uint64_t)&_text_start);
+    bool pt = (runCommand(shell, sink, ptCommand), sink.contains("PML4[511]") && sink.contains("2 MB page"))
+        && (runCommand(shell, sink, "pt 0xdead0000"), sink.contains("not mapped: PDPT[3] is not present"));
+    bool irq = (runCommand(shell, sink, "irq"), sink.contains("IRQ 0 timer"));
+    char port[48];
+    snprintf(port, sizeof(port), "port 0x0021: 0x%02x", IOPort::inportb(0x21)); // the PIC's mask
+    bool in = (runCommand(shell, sink, "in 0x21"), sink.contains(port));
+    bool badPort = (runCommand(shell, sink, "in 0x10000"), sink.contains("a port 0 .. 0xffff"))
+        && (runCommand(shell, sink, "out 0x80 0x100"), sink.contains("a value that fits"));
+
+    // help: the groups with the names; help <group> and help <command>: the usage
+    bool help = (runCommand(shell, sink, "help"), sink.contains("memory") && sink.contains("vmmap") && !sink.contains("md addr [len]"));
+    bool helpGroup = (runCommand(shell, sink, "help memory"), sink.contains("md addr [len]") && !sink.contains("cat file"));
+    bool helpCommand = (runCommand(shell, sink, "help md"), sink.contains("md addr [len]") && !sink.contains("vmmap"));
+    bool helpUnknown = (runCommand(shell, sink, "help frobnicate"), sink.contains("no command or group"));
+
+    // The RAM disk's sector 0 is the FAT boot sector: 0x55 0xAA ends it
+    bool disk = (runCommand(shell, sink, "disk"), sink.contains("ram") && sink.contains("sectors"));
+    bool diskRead = (runCommand(shell, sink, "disk read 0"), sink.contains("ram sector 0") && sink.contains("00000000000001f0") && sink.contains("55 aa"));
+    bool diskSecond = (runCommand(shell, sink, "disk read 1 2 ram"), sink.contains("ram sector 2") && sink.contains("00000000000005f0"));
+    bool diskBad = (runCommand(shell, sink, "disk read 0 9"), sink.contains("a count of 1 .. 8"))
+        && (runCommand(shell, sink, "disk read 0 1 nope"), sink.contains("no such device"))
+        && (runCommand(shell, sink, "disk read 99999"), sink.contains("can not read sector"));
     bool version = (runCommand(shell, sink, "version"), sink.contains("atlOS 0."));
     bool unknown = (runCommand(shell, sink, "frobnicate"), sink.contains("unknown command"));
     bool usageShown = (runCommand(shell, sink, "cat"), sink.contains("usage: cat file"));
@@ -2683,9 +2822,14 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(dump && written && tooWide && unaligned);
     CHECK(unmapped && unmappedWrite && badNumber);
     CHECK(mem && vmmap);
+    CHECK(cr && rdmsr);
+    CHECK(gdt && idt);
+    CHECK(pt && irq);
+    CHECK(in && badPort);
     CHECK(threads);
     CHECK(ps);
-    CHECK(help);
+    CHECK(help && helpGroup && helpCommand && helpUnknown);
+    CHECK(disk && diskRead && diskSecond && diskBad);
     CHECK(version);
     CHECK(unknown && usageShown && quote && nothing);
 
@@ -2833,6 +2977,12 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
         && sink.contains("CR2=0x0000000000000000 (user write, protection violation)") && !sink.contains("not reached")
         && !sink.contains("KERNEL PANIC");
 
+    // A breakpoint in ring 3: reported, the program goes on to exit 0
+    sink.clear();
+    int64_t breakpoint = runProgram(runtime, scheduler, "/disk0/BIN/BREAK.ELF");
+    bool breakpointOutput = sink.contains("before the breakpoint") && sink.contains("Breakpoint (in user mode)")
+        && sink.contains("after the breakpoint");
+
     // Pointers into the kernel, unmapped or not user: refused
     sink.clear();
     int64_t badptr = runProgram(runtime, scheduler, "/disk0/BIN/BADPTR.ELF");
@@ -2862,10 +3012,82 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(fault == 128 + 14);
     CHECK(faultReport);
     CHECK(badptr == 0 && badptrOutput);
+    CHECK(breakpoint == 0 && breakpointOutput);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
     // Address spaces, pages, kernel stacks: all given back
     CHECK(pmm.freeBlockCount() == freeBefore);
+}
+
+// ------------------------------------------------------------
+// The current task: what lets sync objects and Thread(entry) do without a scheduler
+// ------------------------------------------------------------
+
+static Threading::TCB* s_seenTask {};
+static Scheduler* s_seenScheduler {};
+static int s_wokenBySemaphore {};
+static Sync::Semaphore* s_crossSemaphore {};
+
+static void recordCurrent()
+{
+    s_seenTask = &Threading::currentTask();
+    s_seenScheduler = &Threading::currentScheduler();
+    Threading::yield(); // the free functions act on this thread's scheduler
+    Threading::sleep(0);
+}
+
+static void waitOnSemaphore()
+{
+    s_crossSemaphore->take();
+    s_wokenBySemaphore++;
+}
+
+static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
+{
+    group("Current task (no scheduler handed in)");
+
+    // The boot flow is the kernel scheduler's task 0
+    CHECK(&Threading::currentTask() == &kernelScheduler.current());
+    CHECK(&Threading::currentScheduler() == &kernelScheduler);
+
+    // Thread(entry): the caller's scheduler, the kernel address space
+    s_seenTask = nullptr;
+    Thread* t = new Thread(recordCurrent);
+    CHECK(t->getTCB().scheduler == &kernelScheduler);
+    CHECK(waitForExit(kernelScheduler, *t, 1000));
+    CHECK(s_seenTask == &t->getTCB() && s_seenScheduler == &kernelScheduler);
+    CHECK(&Threading::currentTask() == &kernelScheduler.current()); // back in the boot flow
+    delete t;
+
+    {
+        // A scheduler built here makes this flow its task 0 ...
+        FakeTickSource ticks;
+        Scheduler isolated(ticks);
+        CHECK(&Threading::currentScheduler() == &isolated);
+
+        Thread* u = new Thread(recordCurrent); // ... so this thread goes there
+        CHECK(u->getTCB().scheduler == &isolated);
+        CHECK(isolated.taskCount() == 2);
+        CHECK(waitForExit(isolated, *u, 1000));
+        CHECK(s_seenScheduler == &isolated);
+        delete u;
+
+        // A semaphore needs no scheduler: a waiter wakes on its own one
+        Sync::Semaphore semaphore(0, 1);
+        s_crossSemaphore = &semaphore;
+        s_wokenBySemaphore = 0;
+        Thread* w = new Thread(isolated, space, waitOnSemaphore);
+        isolated.yield();
+        CHECK(w->getTCB().state == ThreadState::Blocked);
+        semaphore.give(); // as from an interrupt handler: only the state changes
+        CHECK(w->getTCB().state == ThreadState::Ready);
+        CHECK(waitForExit(isolated, *w, 1000));
+        CHECK(s_wokenBySemaphore == 1);
+        delete w;
+    }
+    // ... and gives it back when it goes away
+    CHECK(&Threading::currentScheduler() == &kernelScheduler);
+    CHECK(&Threading::currentTask() == &kernelScheduler.current());
 }
 
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
@@ -2897,6 +3119,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testBlock(space);
     testRemove(space);
     testSchedulersAreIndependent(scheduler, space);
+    testCurrentTask(scheduler, space);
     testAtomic();
     testInterruptGuard();
     testSpinlock();
@@ -2914,6 +3137,10 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testFat16Write();
     testAtaDisk(vfs);
     testTranslate(space);
+    testExceptionTable();
+    testPageTableWalk(space);
+    testInterruptCounts(scheduler);
+    testRaiseAndBreakpoint(scheduler);
     testAddressSpaces(pmm, space);
     testElf();
     testUserPrograms(pmm, runtime, scheduler, vfs);

@@ -167,7 +167,10 @@ static constexpr uint32_t systemCallVector = 0x80;
  */
 void init();
 
-/// @brief The IDT entry of a vector (read only, for the self tests).
+/// @brief The IDT entry of a vector (read only: the self tests, the shell's idt).
 const IDTEntry& entry(uint32_t vector);
+
+/// @brief How many times vector has arrived since boot (the shell's irq).
+uint64_t interruptCount(uint32_t vector);
 
 }; // namespace IDT

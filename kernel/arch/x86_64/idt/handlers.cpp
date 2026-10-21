@@ -38,9 +38,11 @@ static Drivers::InterruptController* s_interruptController {};
  *
  * @param param
  */
+// Vectors nobody attached a handler to (the argument is the vector)
 static void defaultHandlerFunction(void* param)
 {
-    printf("defaultHandlerFunction: %x \n", (uintptr_t)param);
+    auto vector = (uintptr_t)param;
+    printf("interrupt %lu (0x%lx): no handler\n", vector, vector);
 }
 
 /**

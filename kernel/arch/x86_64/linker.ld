@@ -81,6 +81,11 @@ SECTIONS
         *(.fini_array.*)
          __dtors_end = .;
 
+        /* Exception table: (instruction that may fault, where to resume) pairs */
+        __extable_start = .;
+        KEEP(*(.extable))
+        __extable_end = .;
+
         _rodata_start = .;
         *(.rodata)
         *(.rodata.*)

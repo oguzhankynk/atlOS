@@ -60,6 +60,16 @@ inline bool isFromUserMode(const InterruptFrame& frame)
  */
 void printReport(const InterruptFrame& frame);
 
+/**
+ * @brief If the faulting instruction is in the exception table (code that
+ * expects it may fault, such as readMsr), make the frame resume at its
+ * recovery address and return true. The fault is then not an error.
+ */
+bool fixup(InterruptFrame& frame);
+
+/// @brief Number of entries in the exception table.
+uint32_t exceptionTableSize();
+
 /// @brief printReport, then panic with a backtrace of the faulting code.
 [[noreturn]] void reportException(const InterruptFrame& frame);
 

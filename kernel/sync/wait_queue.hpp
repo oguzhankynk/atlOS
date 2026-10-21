@@ -18,7 +18,7 @@ public:
     /// As many waiters as the scheduler has tasks.
     static constexpr uint32_t capacity = Threading::Scheduler::maxTasks;
 
-    explicit WaitQueue(Threading::Scheduler& scheduler);
+    WaitQueue() = default;
 
     /// Panics if threads are still waiting: they would never wake up.
     ~WaitQueue();
@@ -27,7 +27,8 @@ public:
     WaitQueue& operator=(const WaitQueue&) = delete;
 
     /**
-     * @brief Block the running thread until wakeOne/wakeAll picks it.
+     * @brief Block the running thread (Threading::currentTask()) on its
+     * scheduler until wakeOne/wakeAll picks it.
      *
      * The caller checks its condition and calls wait() under one
      * InterruptGuard, so a wake up from an interrupt can not fall between
@@ -36,8 +37,9 @@ public:
     void wait();
 
     /**
-     * @brief Make the longest waiting thread runnable. Safe in an interrupt
-     * handler. Does not switch threads; the woken one runs at the next yield.
+     * @brief Make the longest waiting thread runnable (on its own scheduler).
+     * Safe in an interrupt handler. Does not switch threads; the woken one
+     * runs at its scheduler's next yield.
      *
      * @return The woken thread, nullptr if nobody was waiting.
      */
@@ -49,11 +51,7 @@ public:
     bool isEmpty() const { return !m_count; }
     uint32_t waiterCount() const { return m_count; }
 
-    Threading::Scheduler& scheduler() { return m_scheduler; }
-
 private:
-    Threading::Scheduler& m_scheduler;
-
     // Ring buffer: m_waiters[m_head] waits longest
     Threading::TCB* m_waiters[capacity] {};
     uint32_t m_head {};

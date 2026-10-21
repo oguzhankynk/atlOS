@@ -43,6 +43,9 @@ public:
      */
     explicit Scheduler(Drivers::TickSource& ticks);
 
+    /// The constructing flow stops being this scheduler's task 0: the task it was before is current again.
+    ~Scheduler();
+
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
 
@@ -105,6 +108,27 @@ private:
 
     // Incremented by the timer interrupt, read by threads
     Sync::Atomic<uint64_t> m_ticks;
+
+    // What currentTask() was before this scheduler took the constructing flow over
+    TCB* m_previousTask {};
 };
+
+/**
+ * @brief The task running now. Every switch of every scheduler updates it, so
+ * code can find "this thread" and its scheduler without being handed one:
+ * the sync objects (WaitQueue, Mutex, ...), Thread(entry), the system calls.
+ *
+ * A boundary global like Core::setConsole (one CPU runs one task at a time);
+ * with several CPUs it becomes one per CPU. See kernel/sched/README.md.
+ */
+TCB& currentTask();
+
+/// The scheduler of the running task.
+Scheduler& currentScheduler();
+
+// The running task's scheduler, for threads
+void yield();
+void sleep(uint64_t ms);
+[[noreturn]] void exitThread();
 
 } // namespace Threading

@@ -17,6 +17,9 @@
  *
  */
 
+#include <stdio.h>
+
+#include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
 #include <arch/x86_64/gdt/gdt.hpp>
 #include <arch/x86_64/idt/fault.hpp>
@@ -374,7 +377,12 @@ void init()
             IDTEntry::PRESENT | IDTEntry::RING0 | IDTEntry::GateInt);
     }
 
-    // System calls: the only gate ring 3 may use with "int" (DPL 3); the
+    // A breakpoint (int3) may come from ring 3 too: a program's int3 reports
+    // and goes on instead of being a #GP
+    setEntry(static_cast<int>(ExternalInterrupts::Breakpoint), (void*)s_interruptTable[3],
+        (uint16_t)SegmentSelect::KERNELCODE, IDTEntry::PRESENT | IDTEntry::RING3 | IDTEntry::GateTrap);
+
+    // System calls: the gate ring 3 uses with "int $0x80" (DPL 3); the
     // others raise #GP when a program tries
     setEntry(systemCallVector, (void*)s_interruptTable[systemCallVector], (uint16_t)SegmentSelect::KERNELCODE,
         IDTEntry::PRESENT | IDTEntry::RING3 | IDTEntry::GateInt);
@@ -405,6 +413,14 @@ const IDTEntry& entry(uint32_t vector)
     return s_idt[vector];
 }
 
+// Per vector, counted on entry; interrupts may nest (trap gates), so atomically
+static uint64_t s_counts[idtTableLen];
+
+uint64_t interruptCount(uint32_t vector)
+{
+    return __atomic_load_n(&s_counts[vector], __ATOMIC_RELAXED);
+}
+
 static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAttr, uint8_t ist)
 {
     // Configure the IDT entry
@@ -423,9 +439,21 @@ static void setEntry(int index, void* handler, uint16_t selector, uint8_t typeAt
  */
 extern "C" void intHandler(InterruptFrame& regs)
 {
+    __atomic_fetch_add(&s_counts[regs.intNo & 0xFF], 1, __ATOMIC_RELAXED);
+
     // A system call: the result goes back in the frame's rax
     if (regs.intNo == systemCallVector && Fault::isFromUserMode(regs) && Process::runtime()) {
         Process::runtime()->systemCall(regs);
+        return;
+    }
+
+    // A breakpoint is a debugging aid: show where and what, then go on (rip is
+    // already after the int3)
+    if (regs.intNo == static_cast<uint32_t>(ExternalInterrupts::Breakpoint)) {
+        Fault::printReport(regs);
+        if (!Fault::isFromUserMode(regs))
+            Backtrace::print(regs.rip, regs.rbp);
+        printf("==== continuing ====\n");
         return;
     }
 
@@ -435,7 +463,9 @@ extern "C" void intHandler(InterruptFrame& regs)
             Fault::printReport(regs);
             Process::runtime()->exitCurrent(128 + (int64_t)regs.intNo);
         }
-        // In the kernel: report and panic, never return
+        // In the kernel: code that expects the fault resumes, anything else panics
+        if (Fault::fixup(regs))
+            return;
         Fault::reportException(regs);
     }
 

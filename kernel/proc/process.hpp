@@ -60,8 +60,8 @@ public:
     /// Top of every program's stack: one 2 MB page just below userEnd
     static constexpr uint64_t stackTop = 0x00007FFFFFFFFFF0ULL;
 
-    Runtime(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler,
-        Fs::Vfs& vfs);
+    /// Programs run on the caller's scheduler (Threading::currentScheduler()) when spawned.
+    Runtime(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Fs::Vfs& vfs);
 
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
@@ -90,13 +90,12 @@ public:
     [[noreturn]] void exitCurrent(int64_t code);
 
 private:
-    static void threadEntry(Threading::Scheduler& scheduler);
+    static void threadEntry();
     bool load(const char* path, Process& process);
     int64_t write(Process& process, uint64_t fd, uint64_t buffer, uint64_t size);
 
     Memory::PhysicalMemoryManager& m_pmm;
     Memory::AddressSpace& m_kernelSpace;
-    Threading::Scheduler& m_scheduler;
     Fs::Vfs& m_vfs;
 
     Process* m_processes[maxProcesses] {};

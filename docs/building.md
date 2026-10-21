@@ -9,7 +9,7 @@
 | Ninja | any | build (generator of the presets) |
 | `grub-mkrescue` + `xorriso` | GRUB 2 | bootable ISO |
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
-| `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed |
+| `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed; optional: without them `run` and `debug` boot without a disk, the disk self tests are skipped and `shelltest` is not available |
 | Doxygen | optional | API docs |
 | clang-format, clang-tidy | 14 (as in CI), optional | `format`, `format-check`, `tidy`; other versions may format differently |
 
@@ -56,6 +56,12 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 | `scripts/build.sh clean` | remove `build/` (all presets) |
 
 Commands can be chained: `scripts/build.sh clean all run`.
+
+QEMU emulates the same CPU everywhere, without KVM: an Intel Skylake
+(`Skylake-Client-v1`) without the features QEMU's emulator does not provide,
+written in `scripts/qemu-cpu`. `run`, `debug`, the tests and the screenshots
+use it, so `cpuinfo` and the tests see the same x86_64 processor on every
+machine. To try another model: `QEMU_CPU=Nehalem-v1 scripts/run-selftest.sh ...`.
 
 Builds are incremental. Each preset builds in `build/<preset>/`;
 nothing is written into the source tree.

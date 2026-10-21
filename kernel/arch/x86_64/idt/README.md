@@ -135,19 +135,66 @@ halts, instead of reporting forever. `haltWithStatus` ends in a `cli; hlt`
 loop; test builds first write the status to `ATLOS_DEBUG_EXIT_PORT` so the
 test machine can stop at once (see `docs/testing.md`).
 
-### Bugs this code had (and why they matter)
+### Faults that are expected: the exception table
 
-The first version added the interrupted code's `r12` to `rsp` after the call
-and popped the vector and error code into `rax`, overwriting it. Nothing
-noticed while IRQs were off; the first timer interrupt corrupted the stack. The
-*Interrupts* self test now puts known values in `rax` and `r12`, waits for an
-interrupt with `hlt` and checks they survived.
+Some kernel code may fault on purpose: reading an MSR the CPU may not have
+(`readMsr`), reading memory that may not be mapped (`readQword`). Such an
+instruction gets an entry in the **exception table**: its address and the
+address to resume at, in the section `.extable`, which the linker collects
+between `__extable_start` and `__extable_end`.
 
-`InterruptFrame` listed `rsi` before `rdi`, but `isr.S` pushes `rsi` first,
-so `rdi` is at the lower address: every register dump showed the two
-swapped, and nobody read them closely. The first system call, whose first
-argument is in `rdi`, made it obvious (`write` saw the buffer as the file
-descriptor). The user program tests depend on the order now.
+```
+msr.S:   1: rdmsr            ...   2: xor %eax, %eax; ret      .extable: .quad 1b, 2b
+```
+
+When an exception arrives in ring 0, `intHandler` first calls
+`Fault::fixup(frame)`: if `frame.rip` is in the table, it is replaced by the
+resume address and the handler returns, so `iretq` continues there and the
+function returns false. Anything else is a real bug and panics. Linux does
+the same (`__ex_table`, used by `copy_from_user`).
+
+### Breakpoints
+
+`int3` is a debugging aid, not an error: the handler prints the report
+(registers, and a backtrace for kernel code) and returns, and the code goes
+on after the `int3`. In the kernel `ATLOS_BREAKPOINT()` (`core/debug.hpp`)
+puts one anywhere; user programs call `breakpoint()` (`user/lib/atlos.h`).
+The breakpoint gate has DPL 3, so a program's `int3` reaches it instead of
+raising #GP. The shell's `int 3` tries it.
+
+### Raising a vector in software
+
+`IDT::raise(vector)` (`raise.cpp`, the shell's `int`) executes `int n` for
+any vector. `int` takes the vector as an immediate, so there is one small
+function per vector, generated from a template. `int n` never pushes an error
+code, but the stubs of vectors 8, 10–14, 17 and 21 expect one right below
+`rip`; for those `raise` builds the frame by hand (align the stack, push ss,
+rsp, rflags, cs, the return address and a 0 error code) and jumps to the
+stub, whose `iretq` returns past the jump. An IRQ vector then runs its
+handler as if the device had interrupted; an exception vector reports and
+halts like the real fault.
+
+### Counting interrupts
+
+`intHandler` counts every vector on entry (`IDT::interruptCount`, an
+atomic add, since trap gates let interrupts nest); the shell's `irq` lists
+the counts.
+
+### Pitfalls (and the tests that guard them)
+
+- **The stub must give back every register unchanged.** After the call it
+  drops exactly the vector and the error code (`addq $16, %rsp`) and pops
+  the 15 registers it pushed; touching `rax` or any other register on the way
+  corrupts the interrupted code, often only once the timer interrupt fires.
+  The *Interrupts* self test puts known values in `rax` and `r12`, waits for
+  an interrupt with `hlt` and checks they survived.
+- **`InterruptFrame` follows the push order of `isr.S`.** The stub pushes
+  `rax` first and `r15` last, so `r15` is at the lowest address and the
+  struct starts with it; `rsi` is pushed before `rdi`, so `rdi` comes first
+  in the struct. System calls read their arguments from the frame (`rdi`,
+  `rsi`, `rdx`): the user program tests fail if the order is wrong.
+- **`ExternalInterrupts` values are the vector numbers.** *Fault decoding*
+  checks a few of them (10, 14, 21).
 
 ### Deliberately not done
 

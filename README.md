@@ -21,7 +21,7 @@ Working:
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
-- A kernel shell (keyboard or serial terminal): files, `md`/`mw` memory dump and write, `vmmap`, `tasks`, `run`, ...
+- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, ... (`help` lists them by group)
 - User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`write`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)

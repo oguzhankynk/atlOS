@@ -45,135 +45,139 @@ void initializeCpuInfo(CPUInfo* cpuInfo)
         cpuid04hCommand(&cpuInfo->cacheList);
 }
 
+// Prints "name: " in a column, then the value
+#define LABEL "  %-10s "
+
+// Features as Linux names them in /proc/cpuinfo: edx of leaf 1, then ecx
+struct FeatureName {
+    const char* name;
+    uint32_t present; // the bit from CPUID
+};
+
+// Appends name to the current line, starting a new one at about 76 columns
+static void printFeature(const char* name, uint32_t& column)
+{
+    uint32_t length = strlen(name) + 1;
+    if (column + length > 76) {
+        printf("\n" LABEL, "");
+        column = 13;
+    }
+    printf("%s ", name);
+    column += length;
+}
+
+static void printCPUFeatures(const CPUFeatures* f)
+{
+    const FeatureName features[] = {
+        { "fpu", f->fpu },
+        { "vme", f->vme },
+        { "de", f->de },
+        { "pse", f->pse },
+        { "tsc", f->tsc },
+        { "msr", f->msr },
+        { "pae", f->pae },
+        { "mce", f->mce },
+        { "cx8", f->cx8 },
+        { "apic", f->apic },
+        { "sep", f->sep },
+        { "mtrr", f->mtrr },
+        { "pge", f->pge },
+        { "mca", f->mca },
+        { "cmov", f->cmov },
+        { "pat", f->pat },
+        { "pse36", f->pse36 },
+        { "pn", f->psn },
+        { "clflush", f->clfsh },
+        { "dts", f->ds },
+        { "acpi", f->acpi },
+        { "mmx", f->mmx },
+        { "fxsr", f->fxsr },
+        { "sse", f->sse },
+        { "sse2", f->sse2 },
+        { "ss", f->ss },
+        { "ht", f->htt },
+        { "tm", f->tm },
+        { "pbe", f->pbe },
+        { "sse3", f->sse3 },
+        { "pclmulqdq", f->pclmulqdq },
+        { "dtes64", f->dtes64 },
+        { "monitor", f->monitor },
+        { "ds_cpl", f->dsCpl },
+        { "vmx", f->vmx },
+        { "smx", f->smx },
+        { "est", f->eist },
+        { "tm2", f->tm2 },
+        { "ssse3", f->ssse3 },
+        { "cid", f->cnxtId },
+        { "sdbg", f->sdbg },
+        { "fma", f->fma },
+        { "cx16", f->cmpxchg16b },
+        { "xtpr", f->xTprUpdateControl },
+        { "pdcm", f->pdcm },
+        { "pcid", f->pcid },
+        { "dca", f->dca },
+        { "sse4_1", f->sse41 },
+        { "sse4_2", f->sse42 },
+        { "x2apic", f->x2APIC },
+        { "movbe", f->movbe },
+        { "popcnt", f->popcnt },
+        { "tsc_deadline_timer", f->tscDeadline },
+        { "aes", f->aesni },
+        { "xsave", f->xsave },
+        { "osxsave", f->osxsave },
+        { "avx", f->avx },
+        { "f16c", f->f16c },
+        { "rdrand", f->rdrand },
+        { "hypervisor", f->notUsed },
+    };
+
+    // Only what the CPU has
+    printf(LABEL, "features");
+    uint32_t column = 13;
+    for (const FeatureName& feature : features) {
+        if (feature.present)
+            printFeature(feature.name, column);
+    }
+    printf("\n");
+}
+
+static void printProcessorType(const ProcessorType* p)
+{
+    // The extended fields count only for family 15 (family) and 6 or 15 (model)
+    uint32_t family = p->family == 15 ? p->family + p->extendedFamily : p->family;
+    uint32_t model = (p->family == 6 || p->family == 15) ? (p->extendedModel << 4) | p->model : p->model;
+    printf(LABEL "%u, model %u, stepping %u\n", "family", family, model, p->stepping);
+}
+
+static void printCacheInfo(const CacheList* cacheList)
+{
+    static const char* const s_types[] = { "?", "d", "i", "" }; // data, instruction, unified
+
+    printf(LABEL, "caches");
+    if (!cacheList->cacheCount) {
+        printf("not reported (CPUID leaf 4 is Intel's)\n");
+        return;
+    }
+    for (int i = 0; i < cacheList->cacheCount; i++) {
+        const CacheInfo& c = cacheList->cacheInfo[i];
+        uint64_t size = (uint64_t)c.coherencyLineSize * c.physicalLinePartitions * c.associativity * c.numberOfSets;
+        if (i)
+            printf(LABEL, "");
+        printf("L%u%-2s %6lu KB  %2u-way  %u byte lines%s\n", c.cacheLevel, s_types[c.cacheType & 3], size / 1024,
+            c.associativity, c.coherencyLineSize, c.fullyAssociative ? ", fully associative" : "");
+    }
+}
+
 void printCPUInfo(const CPUInfo* cpuInfo)
 {
-    printf("CPU: %s\n", cpuInfo->cpu);
-    printf("Maksimum Index: %u\n", cpuInfo->maksimumIndex);
-    printCPUFeatures(&cpuInfo->cpuFeaturesInfo);
-    printf("\n");
+    printf(LABEL "%s\n", "vendor", cpuInfo->cpu);
     printProcessorType(&cpuInfo->processorType);
+    printf(LABEL "0x%x\n", "max leaf", cpuInfo->maksimumIndex);
+    printCPUFeatures(&cpuInfo->cpuFeaturesInfo);
     printCacheInfo(&cpuInfo->cacheList);
 }
 
-/// @brief Prints the CPU features.
-/// @param features: A pointer to CPU features to print.
-static void printCPUFeatures(const CPUFeatures* features)
-{
-    printf("SSE3: %u\t", features->sse3);
-    printf("PCLMULQDQ: %u\t", features->pclmulqdq);
-    printf("DTES64: %u\t", features->dtes64);
-    printf("MONITOR: %u\t", features->monitor);
-    printf("DS_CPL: %u\t", features->dsCpl);
-    printf("VMX: %u\t", features->vmx);
-    printf("SMX: %u\t", features->smx);
-    printf("EIST: %u\t", features->eist);
-    printf("TM2: %u\t", features->tm2);
-    printf("SSSE3: %u\t", features->ssse3);
-    printf("CNXT_ID: %u\t", features->cnxtId);
-    printf("SDBG: %u\t", features->sdbg);
-    printf("FMA: %u\t", features->fma);
-    printf("CMPXCHG16B: %u\t", features->cmpxchg16b);
-    printf("xTPR_Update_Control: %u\t", features->xTprUpdateControl);
-    printf("PDCM: %u\t", features->pdcm);
-    printf("Reserved1: %u\t", features->reserved1);
-    printf("PCID: %u\t", features->pcid);
-    printf("DCA: %u\t", features->dca);
-    printf("SSE4_1: %u\t", features->sse41);
-    printf("SSE4_2: %u\t", features->sse42);
-    printf("x2APIC: %u\t", features->x2APIC);
-    printf("MOVBE: %u\t", features->movbe);
-    printf("POPCNT: %u\t", features->popcnt);
-    printf("TSC_Deadline: %u\t", features->tscDeadline);
-    printf("AESNI: %u\t", features->aesni);
-    printf("XSAVE: %u\t", features->xsave);
-    printf("OSXSAVE: %u\t", features->osxsave);
-    printf("AVX: %u\t", features->avx);
-    printf("F16C: %u\t", features->f16c);
-    printf("RDRAND: %u\t", features->rdrand);
-    printf("Not_Used: %u\t", features->notUsed);
-    printf("FPU: %u\t", features->fpu);
-    printf("VME: %u\t", features->vme);
-    printf("DE: %u\t", features->de);
-    printf("PSE: %u\t", features->pse);
-    printf("TSC: %u\t", features->tsc);
-    printf("MSR: %u\t", features->msr);
-    printf("PAE: %u\t", features->pae);
-    printf("MCE: %u\t", features->mce);
-    printf("CX8: %u\t", features->cx8);
-    printf("APIC: %u\t", features->apic);
-    printf("Reserved2: %u\t", features->reserved2);
-    printf("SEP: %u\t", features->sep);
-    printf("MTRR: %u\t", features->mtrr);
-    printf("PGE: %u\t", features->pge);
-    printf("MCA: %u\t", features->mca);
-    printf("CMOV: %u\t", features->cmov);
-    printf("PAT: %u\t", features->pat);
-    printf("PSE_36: %u\t", features->pse36);
-    printf("PSN: %u\t", features->psn);
-    printf("CLFSH: %u\t", features->clfsh);
-    printf("Reserved3: %u\t", features->reserved3);
-
-    printf("DS : %u\t", features->ds);
-    printf("ACPI : %u\t", features->acpi);
-    printf("MMX : %u\t", features->mmx);
-    printf("FXSR : %u\t", features->fxsr);
-    printf("SSE : %u\t", features->sse);
-    printf("SSE2 : %u\t", features->sse2);
-    printf("SS : %u\t", features->ss);
-    printf("HTT : %u\t", features->htt);
-    printf("TM : %u\t", features->tm);
-    printf("Reserved4 : %u\t", features->reserved4);
-    printf("PBE : %u\t", features->pbe);
-}
-
-/// @brief Prints the processor type.
-/// @param processor: A pointer to the processor type information to print.
-static void printProcessorType(const ProcessorType* processor)
-{
-    printf("Stepping: %u\n", processor->stepping);
-    printf("Model: %u\n", processor->model);
-    printf("Family: %u\n", processor->family);
-    printf("Processor Type: %u\n", processor->processorType);
-    printf("Reserved: %u\n", processor->reserved);
-    printf("Extended Model: %u\n", processor->extendedModel);
-    printf("Extended Family: %u\n", processor->extendedFamily);
-}
-
-/// @brief Prints the cache information.
-/// @param cacheList: A pointer to the cache information to print.
-static void printCacheInfo(const CacheList* pCacheList)
-{
-    const char* cacheTypeStrs[] = {
-        "Null",
-        "D-Cache",
-        "I-Cache",
-        "Unified",
-    };
-
-    for (int i = 0; i < pCacheList->cacheCount; i++) {
-        const CacheInfo* pCacheInfo = &pCacheList->cacheInfo[i];
-
-        printf("Cache [%d]: \n", i);
-        printf("cacheType: %u -> %s cacheLevel: %u self: %u \n",
-            pCacheInfo->cacheType, cacheTypeStrs[pCacheInfo->cacheType],
-            pCacheInfo->cacheLevel, pCacheInfo->selfInitializing);
-
-        printf("fully: %u LogicalCore: %u Cores: %u\n",
-            pCacheInfo->fullyAssociative, pCacheInfo->logicalCore,
-            pCacheInfo->physicalCore);
-
-        printf("LineSize: %u Partitions: %u associativity: %u\n",
-            pCacheInfo->coherencyLineSize, pCacheInfo->physicalLinePartitions,
-            pCacheInfo->associativity);
-
-        printf("numberOfSets: %u \n", pCacheInfo->numberOfSets);
-
-        printf("writeBackInvalidate: %u cacheInclusiveness: %u complexCacheIndexing:%u \n",
-            pCacheInfo->writeBackInvalidate, pCacheInfo->cacheInclusiveness, pCacheInfo->complexCacheIndexing);
-
-        printf("\n");
-    }
-}
+#undef LABEL
 
 /// @brief Executes the CPUID command with EAX=0x00 and stores the maximum index and CPU string.
 /// @param pMaximumIndex: A pointer to store the maximum index.

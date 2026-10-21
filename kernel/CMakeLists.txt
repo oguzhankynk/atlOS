@@ -79,6 +79,8 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     ${ARCHDIR}/cpu/*.cpp
     ${ARCHDIR}/cpu/context.S
     ${ARCHDIR}/cpu/usermode.S
+    ${ARCHDIR}/cpu/msr.S
+    ${ARCHDIR}/cpu/probe.S
 )
 
 # Linked in a fixed order around the other objects, see the link rule below

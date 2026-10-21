@@ -142,6 +142,8 @@ could unmap the memory while the kernel reads it; atlOS is cooperative.)
 - `exit(code)`: the runtime marks the process exited, prints
   `[pid 1 HELLO.ELF exited with 0]`, switches CR3 back to the kernel's tables
   and ends the thread (`Scheduler::exit`).
+- A breakpoint (`int3`) in ring 3 reports the registers and the program goes
+  on.
 - A fault in ring 3 (`frame.cs & 3 == 3`): the exception is reported as
   usual (`Page fault (in user mode)`, the decoded error code) and the program
   ends with `128 + vector`, e.g. 142 for a page fault. The kernel does not

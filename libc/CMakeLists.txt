@@ -11,7 +11,7 @@ add_library(k STATIC ${LIBC_SOURCES})
 
 target_compile_options(k PRIVATE
     -O0 -g
-    -Wall -Wextra -Wno-unused-variable -Wno-unused-function
+    -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function
     -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-pic
     -fno-unwind-tables -fno-asynchronous-unwind-tables
     -mcmodel=large -mno-red-zone

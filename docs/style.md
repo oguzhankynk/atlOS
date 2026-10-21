@@ -104,7 +104,9 @@ state and stays a function over printf.
 - **Globals only at C/assembly boundaries** (interrupt dispatch, the user
   program runtime behind `int 0x80` and ring 3 faults, liballoc hooks,
   `operator new`, the panic/printf sink): one explicitly bound pointer per
-  boundary, set by the composition root.
+  boundary, set by the composition root. And one fact about the CPU: the
+  **current task** (`Threading::currentTask()`, set by every switch), which
+  sync objects and threads use to find the running thread and its scheduler.
 
 `git blame` ignores the mechanical style commits listed in
 `.git-blame-ignore-revs`; enable it once with

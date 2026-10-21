@@ -7,15 +7,11 @@
 #include <sync/wait_queue.hpp>
 
 #include <core/panic.hpp>
+#include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
 #include <sync/interrupt_guard.hpp>
 
 namespace Sync {
-
-WaitQueue::WaitQueue(Threading::Scheduler& scheduler)
-    : m_scheduler(scheduler)
-{
-}
 
 WaitQueue::~WaitQueue()
 {
@@ -30,12 +26,13 @@ void WaitQueue::wait()
     if (m_count == capacity)
         kernelPanic("WaitQueue: full");
 
-    m_waiters[(m_head + m_count) % capacity] = &m_scheduler.current();
+    Threading::TCB& self = Threading::currentTask();
+    m_waiters[(m_head + m_count) % capacity] = &self;
     m_count++;
 
     // Interrupts stay off until another thread runs: its saved RFLAGS
     // decide then. They are off again when this thread continues here.
-    m_scheduler.block();
+    self.scheduler->block();
 }
 
 Threading::TCB* WaitQueue::wakeOne()
@@ -50,7 +47,7 @@ Threading::TCB* WaitQueue::wakeOne()
     m_head = (m_head + 1) % capacity;
     m_count--;
 
-    m_scheduler.unblock(*tcb);
+    tcb->scheduler->unblock(*tcb);
     return tcb;
 }
 

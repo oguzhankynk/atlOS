@@ -68,7 +68,7 @@ def main():
     serial_port, monitor_port = free_port(), free_port()
 
     qemu = subprocess.Popen([
-        "qemu-system-x86_64", "-cdrom", iso, "-m", "512M", "-display", "none", "-no-reboot",
+        "qemu-system-x86_64", "-cpu", os.environ.get("QEMU_CPU") or open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "qemu-cpu")).read().strip(), "-cdrom", iso, "-m", "512M", "-display", "none", "-no-reboot",
         "-drive", f"file={os.path.join(work, 'disk.img')},format=raw,if=ide,index=0", "-boot", "d",
         "-serial", f"tcp:127.0.0.1:{serial_port},server=on,wait=on",
         "-monitor", f"tcp:127.0.0.1:{monitor_port},server=on,wait=off",

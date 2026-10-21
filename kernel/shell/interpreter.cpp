@@ -42,7 +42,10 @@ void Interpreter::run()
     if (!m_context.vfs.mountCount())
         printf(" none");
     m_context.vfs.listDirectory("/", printMount, nullptr);
-    printf("\n  \"help\" lists the commands, \"run /disk0/BIN/HELLO.ELF\" starts a user program\n\n");
+    if (m_context.vfs.find("disk0"))
+        printf("\n  \"help\" lists the commands, \"run /disk0/BIN/HELLO.ELF\" starts a user program\n\n");
+    else
+        printf("\n  \"help\" lists the commands (no disk: the user programs are on the test disk)\n\n");
 
     while (true) {
         // Programs that exited since the last prompt give their memory back

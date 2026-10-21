@@ -11,7 +11,8 @@ Drivers::BlockDevice drivers/disk/    PartitionDevice (+ offset) -> ATAPioDevice
 
 `storage.cpp` builds this stack at boot: it probes the ATA drives, reads each
 disk's partition table and mounts every FAT16 partition as `/disk0`,
-`/disk1`, ...
+`/disk1`, ... Every disk and partition goes into a `BlockDeviceList`, which
+the shell's `disk` command lists and reads sectors from.
 
 ## What is it for?
 

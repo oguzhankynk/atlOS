@@ -39,6 +39,13 @@ __attribute__((noreturn)) static inline void exit(long code)
     }
 }
 
+/* Stop for a moment: the kernel prints the registers, then the program goes on */
+static inline void breakpoint(void)
+{
+    __asm__ volatile("int3" ::
+                         : "memory");
+}
+
 static inline unsigned long strlen(const char* s)
 {
     unsigned long n = 0;

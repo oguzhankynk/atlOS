@@ -46,6 +46,8 @@ struct Registers {
     uint64_t cr3;
 } __attribute__((packed));
 
+class Scheduler;
+
 struct TCB {
     Registers regs; // Must stay first, switchTask takes &regs
     ThreadState state;
@@ -57,13 +59,15 @@ struct TCB {
     uint64_t stackSize;
 
     void* owner; // the user program this thread runs, nullptr for kernel threads
+
+    Scheduler* scheduler; // the scheduler that runs this task (set when it is queued)
 };
 
 class ThreadImpl;
-class Scheduler;
 
-/// A thread's code; it reaches its scheduler (yield, sleep, ...) through the argument
-using EntryPoint = void (*)(Scheduler& scheduler);
+/// A thread's code. It reaches its scheduler through Threading::yield(),
+/// Threading::sleep(), ... (the running task's scheduler).
+using EntryPoint = void (*)();
 
 class Thread {
 public:
@@ -74,6 +78,12 @@ public:
      * @param addToScheduler Queue the thread right away.
      */
     Thread(Scheduler& scheduler, Memory::AddressSpace& addressSpace, EntryPoint entry, bool addToScheduler = true);
+
+    /**
+     * @brief A thread on the caller's scheduler (Threading::currentScheduler())
+     * with its stack in the kernel address space (Memory::kernelAddressSpace()).
+     */
+    explicit Thread(EntryPoint entry, bool addToScheduler = true);
 
     Thread(const Thread&) = delete;
 

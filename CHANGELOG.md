@@ -7,6 +7,59 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+### Added
+
+- Shell commands for the hardware: `cr` (CR0, CR2, CR3, CR4, EFER by bit),
+  `rdmsr`/`wrmsr`, `in`/`out` (8, 16, 32 bit), `gdt`, `idt [vector]`,
+  `pt addr` (the page table walk), `irq` (interrupts per vector)
+- The exception table (`.extable`, `Fault::fixup`): `readMsr`, `writeMsr`
+  and `readQword` fault without a panic and return false
+- `IDT::interruptCount`, `AddressSpace::walk`, `IOPort::inportl`/`outportl`
+- The shell's `int vector` (`IDT::raise`): any vector in software; the
+  vectors with an error code get a hand built frame
+- Breakpoints report and continue: `int3` in the kernel prints the registers
+  and a backtrace, in ring 3 the registers; `ATLOS_BREAKPOINT()` for kernel
+  code, `breakpoint()` and `BREAK.ELF` for user programs
+- The shell's `disk` lists the disks and partitions (`Fs::BlockDeviceList`,
+  filled at boot); `disk read lba [count] [device]` dumps sectors in hex
+- Self tests for the exception table, the walk, the counts, raising, the
+  breakpoints and the commands (760 checks); the shell test runs them
+  (37 steps)
+
+### Changed
+
+- `help` shows the commands by group (general, files, memory, tasks, cpu,
+  devices, system); `help group` and `help command` show their usage
+
+- QEMU emulates the same CPU everywhere: an Intel Skylake
+  (`Skylake-Client-v1`) without the features its emulator lacks, in
+  `scripts/qemu-cpu`: run, debug, the tests and the screenshots
+- `cpuinfo` (`printCPUInfo`): one value per line, the family and model as
+  the CPU means them (with the extended fields), only the features the CPU
+  has, with their Linux names, wrapped to 80 columns, and the cache sizes
+- **No scheduler handed in**: `Threading::currentTask()` (set on every
+  switch) and `TCB::scheduler` let `WaitQueue`, `Semaphore(initial, max)`,
+  `Mutex`, `ConditionVariable` and `CharacterQueue` be created without a
+  scheduler; `Thread(entry)` uses the caller's scheduler and the kernel
+  address space; thread entry points are `void()` and use
+  `Threading::yield()`, `sleep(ms)`, `exitThread()`; `Process::Runtime` and
+  `Shell::Context` no longer take the scheduler
+
+### Fixed
+
+- `strncmp` compared an `int` counter with the `size_t` length (a
+  `-Wsign-compare` warning on every build); libc warnings are now errors, as
+  in the kernel
+
+- `scripts/build.sh run` failed with "mcopy: not found" on a machine without
+  mtools: the test disk tools are now looked up on every configure (no cached
+  paths), the disk script uses the ones CMake found and says which are
+  missing, and without them `run` and `debug` boot without a disk;
+  `scripts/build.sh` configures every time, so installing a tool takes effect
+  at once
+
 ## [0.3.0] - 2026-10-20
 
 User programs: static ELF64 files from the disk run in ring 3, each in an
@@ -182,7 +235,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oguzhankynk/atlOS/releases/tag/v0.1.0

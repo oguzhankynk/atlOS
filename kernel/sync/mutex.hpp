@@ -18,7 +18,7 @@ namespace Sync {
 
 class Mutex {
 public:
-    explicit Mutex(Threading::Scheduler& scheduler);
+    Mutex() = default;
 
     Mutex(const Mutex&) = delete;
     Mutex& operator=(const Mutex&) = delete;
@@ -33,7 +33,7 @@ public:
     void unlock();
 
     bool isLocked() const { return m_owner; }
-    bool isOwnedByCurrent() { return m_owner == &m_waiters.scheduler().current(); }
+    bool isOwnedByCurrent() const;
 
 private:
     WaitQueue m_waiters;

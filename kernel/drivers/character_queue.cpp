@@ -10,8 +10,8 @@
 
 namespace Drivers {
 
-CharacterQueue::CharacterQueue(Threading::Scheduler& scheduler)
-    : m_available(scheduler, 0, capacity)
+CharacterQueue::CharacterQueue()
+    : m_available(0, capacity)
 {
 }
 

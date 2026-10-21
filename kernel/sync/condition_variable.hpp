@@ -26,7 +26,7 @@ namespace Sync {
 
 class ConditionVariable {
 public:
-    explicit ConditionVariable(Threading::Scheduler& scheduler);
+    ConditionVariable() = default;
 
     ConditionVariable(const ConditionVariable&) = delete;
     ConditionVariable& operator=(const ConditionVariable&) = delete;

@@ -79,6 +79,7 @@ static Cxx::Uninitialized<Drivers::CharacterQueue> s_input;
 static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
 static Cxx::Uninitialized<Shell::Interpreter> s_shell;
 static Cxx::Uninitialized<Fs::Vfs> s_vfs;
+static Fs::BlockDeviceList s_disks; // the disks and partitions storage found
 static Cxx::Uninitialized<Process::Runtime> s_runtime;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
@@ -131,7 +132,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     // Disks: ATA PIO polls, it needs neither interrupts nor the scheduler
     Fs::Vfs& vfs = s_vfs.construct();
-    Fs::mountAtaDisks(vfs);
+    Fs::mountAtaDisks(vfs, s_disks);
 
     // Interrupt controller: the 8259 PIC (there is no APIC driver yet). The ISR
     // dispatcher is the one place that needs it without being handed it.
@@ -148,7 +149,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     // User programs: loaded from the VFS, run on threads of this scheduler.
     // The int 0x80 and ring 3 fault handlers reach it through setRuntime
-    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, scheduler, vfs);
+    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, vfs);
     Process::setRuntime(&runtime);
 
 #ifdef ATLOS_SELFTEST
@@ -161,12 +162,12 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 #endif
 
     // The shell reads the keyboard and COM1 through one queue
-    Drivers::CharacterQueue& input = s_input.construct(scheduler);
+    Drivers::CharacterQueue& input = s_input.construct();
     s_keyboard.construct(pic, input);
     serial.startReceiving(pic, input);
 
     // Runs in the boot flow (task 0) for good; reading sleeps in hlt
-    static Shell::Context s_context { pmm, kernelSpace, scheduler, vfs, runtime, &vga,
+    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, runtime, &vga,
         serial.isPresent() ? &serial : nullptr };
     s_shell.construct(input, s_context).run();
 }

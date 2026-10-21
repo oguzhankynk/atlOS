@@ -15,8 +15,8 @@ is left of the GDT:
   descriptors with DPL 3.
 - **The long mode bit.** The `L` flag of the code descriptor makes it a 64-bit
   segment.
-- **The TSS descriptor.** In long mode the TSS no longer stores a task's
-  registers (hardware task switching is gone); it only stores stack pointers:
+- **The TSS descriptor.** In long mode the TSS holds no task state (there is
+  no hardware task switching); it holds stack pointers:
 
 | Field | Used when |
 |---|---|
@@ -83,8 +83,8 @@ flowchart LR
 *TSS and double fault stack* (`kernel/tests/selftest.cpp`): the task register
 holds `0x28`, the descriptor is busy (type 11), the GDT limit covers 7 slots,
 IST1 points at an aligned stack top and only IDT entry 8 uses it. The double
-fault path itself was tried by loading an unmapped `rsp` and executing `int3`:
-the report appears on the IST stack instead of a reset.
+fault path itself can be tried by loading an unmapped `rsp` and executing
+`int3`: the report appears on the IST stack instead of a reset.
 
 ## References
 

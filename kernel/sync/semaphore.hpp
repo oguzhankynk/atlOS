@@ -19,7 +19,7 @@ public:
      * @brief A semaphore with initial units out of at most max.
      * max = 1 is a binary semaphore. Panics if max is 0 or initial > max.
      */
-    Semaphore(Threading::Scheduler& scheduler, uint32_t initial, uint32_t max);
+    Semaphore(uint32_t initial, uint32_t max);
 
     Semaphore(const Semaphore&) = delete;
     Semaphore& operator=(const Semaphore&) = delete;
