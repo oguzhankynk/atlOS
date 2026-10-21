@@ -148,7 +148,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 
     // User programs: loaded from the VFS, run on threads of this scheduler.
     // The int 0x80 and ring 3 fault handlers reach it through setRuntime
-    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, scheduler, vfs);
+    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, vfs);
     Process::setRuntime(&runtime);
 
 #ifdef ATLOS_SELFTEST
@@ -161,12 +161,12 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 #endif
 
     // The shell reads the keyboard and COM1 through one queue
-    Drivers::CharacterQueue& input = s_input.construct(scheduler);
+    Drivers::CharacterQueue& input = s_input.construct();
     s_keyboard.construct(pic, input);
     serial.startReceiving(pic, input);
 
     // Runs in the boot flow (task 0) for good; reading sleeps in hlt
-    static Shell::Context s_context { pmm, kernelSpace, scheduler, vfs, runtime, &vga,
+    static Shell::Context s_context { pmm, kernelSpace, vfs, runtime, &vga,
         serial.isPresent() ? &serial : nullptr };
     s_shell.construct(input, s_context).run();
 }

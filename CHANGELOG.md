@@ -7,6 +7,16 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Changed
+
+- **No scheduler handed in**: `Threading::currentTask()` (set on every
+  switch) and `TCB::scheduler` let `WaitQueue`, `Semaphore(initial, max)`,
+  `Mutex`, `ConditionVariable` and `CharacterQueue` be created without a
+  scheduler; `Thread(entry)` uses the caller's scheduler and the kernel
+  address space; thread entry points are `void()` and use
+  `Threading::yield()`, `sleep(ms)`, `exitThread()`; `Process::Runtime` and
+  `Shell::Context` no longer take the scheduler
+
 ### Fixed
 
 - `scripts/build.sh run` failed with "mcopy: not found" on a machine without

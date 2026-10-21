@@ -24,7 +24,7 @@ class CharacterQueue final : public CharacterSource {
 public:
     static constexpr uint32_t capacity = 128;
 
-    explicit CharacterQueue(Threading::Scheduler& scheduler);
+    CharacterQueue();
 
     CharacterQueue(const CharacterQueue&) = delete;
     CharacterQueue& operator=(const CharacterQueue&) = delete;

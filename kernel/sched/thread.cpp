@@ -110,7 +110,7 @@ void ThreadImpl::threadStartPoint(void* obj)
     thread->m_tcb.state = ThreadState::Running;
 
     // Call the entry point function
-    thread->m_entry(thread->m_scheduler);
+    thread->m_entry();
 
     // Thread has finished execution, leave the run queue for good
     thread->m_scheduler.exit();
@@ -131,6 +131,11 @@ Thread::~Thread()
     // The scheduler must not keep a pointer to the TCB we are about to free
     m_impl->m_scheduler.removeTask(*this);
     delete m_impl;
+}
+
+Thread::Thread(EntryPoint entry, bool addToScheduler)
+    : Thread(currentScheduler(), Memory::kernelAddressSpace(), entry, addToScheduler)
+{
 }
 
 TCB& Thread::getTCB()

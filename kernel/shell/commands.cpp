@@ -80,7 +80,7 @@ static void cmdVersion(Interpreter&, int, char**)
 
 static void cmdUptime(Interpreter& shell, int, char**)
 {
-    uint64_t ms = shell.context().scheduler.ticks();
+    uint64_t ms = Threading::currentScheduler().ticks();
     printf("up %lu.%03lu s\n", ms / 1000, ms % 1000);
 }
 
@@ -447,7 +447,8 @@ static const char* stateName(Threading::ThreadState state)
 
 static void cmdTasks(Interpreter& shell, int, char**)
 {
-    Threading::Scheduler& scheduler = shell.context().scheduler;
+    // The shell's own scheduler: the one it runs on
+    Threading::Scheduler& scheduler = Threading::currentScheduler();
     uint64_t now = scheduler.ticks();
 
     // The header uses the rows' widths, so the columns line up

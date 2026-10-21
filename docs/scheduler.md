@@ -12,26 +12,31 @@ middle of an update.
 #include <sched/scheduler.hpp>
 #include <sched/thread.hpp>
 
-void worker(Threading::Scheduler& scheduler)
+void worker()
 {
     for (int i = 0; i < 10; i++) {
         doSomething();
-        scheduler.yield();
+        Threading::yield(); // the running thread's scheduler
     }
 } // returning ends the thread
 
-auto* t = new Threading::Thread(scheduler, kernelSpace, worker); // queued right away
+auto* t = new Threading::Thread(worker); // on the caller's scheduler, queued right away
 ...
 delete t; // owner frees it (any state but running)
 ```
 
-- There is no global scheduler. A thread is created on a `Scheduler` and its
-  entry point gets that scheduler as its argument; that is how it yields,
-  sleeps or blocks.
-- Each thread gets its own 2 MB stack page from the `Memory::AddressSpace`
-  passed in, 16 byte aligned as the System V ABI requires; it is freed by the
-  destructor.
-- `Thread(scheduler, space, entry, false)` creates a thread without queueing it.
+- `Threading::currentTask()` is the task running now and
+  `Threading::currentScheduler()` its scheduler; every switch updates them.
+  `Threading::yield()`, `sleep(ms)` and `exitThread()` act on the running
+  thread's scheduler. So a thread, a semaphore or a mutex is created without
+  being handed a scheduler.
+- `Thread(entry)` goes to the caller's scheduler with a stack from the kernel
+  address space (`Memory::kernelAddressSpace()`); `Thread(scheduler, space,
+  entry)` says both explicitly (the self tests use it for their own
+  schedulers).
+- Each thread gets its own 2 MB stack page, 16 byte aligned as the System V
+  ABI requires; it is freed by the destructor.
+- `Thread(..., false)` creates a thread without queueing it.
 - Returning from the entry point calls `Scheduler::exit()`: the thread is
   taken out of the run queue and never runs again. The `Thread` object stays
   valid until its owner deletes it.

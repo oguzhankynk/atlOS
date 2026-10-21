@@ -11,9 +11,8 @@
 
 namespace Sync {
 
-Semaphore::Semaphore(Threading::Scheduler& scheduler, uint32_t initial, uint32_t max)
-    : m_waiters(scheduler)
-    , m_count(initial)
+Semaphore::Semaphore(uint32_t initial, uint32_t max)
+    : m_count(initial)
     , m_max(max)
 {
     if (!max || initial > max)

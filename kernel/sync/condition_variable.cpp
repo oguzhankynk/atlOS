@@ -8,11 +8,6 @@
 
 namespace Sync {
 
-ConditionVariable::ConditionVariable(Threading::Scheduler& scheduler)
-    : m_waiters(scheduler)
-{
-}
-
 void ConditionVariable::wait(Mutex& mutex)
 {
     // "Unlock and wait" must be one step, or a notify could come in between

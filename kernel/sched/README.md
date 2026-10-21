@@ -61,9 +61,14 @@ thread must cooperate.
   `cr3` switches the address space with the thread.
 - Waiting for an event (not a time) goes through `kernel/sync/`: a
   `WaitQueue` blocks threads and `unblock`s them, see `sync/README.md`.
-- **No global scheduler**: a thread's entry point receives its scheduler,
-  `void worker(Scheduler& scheduler)`. That is also why the self tests can
-  build their own schedulers on a fake tick source.
+- **The current task** (`Threading::currentTask()`): the TCB running now. Each
+  switch sets it, each TCB knows its scheduler (`tcb.scheduler`). Code finds
+  "this thread" and its scheduler from it instead of being handed a
+  scheduler: `Threading::yield()`, `sleep(ms)`, `exitThread()`, the sync
+  objects, `Thread(entry)`, the system calls. There is still no global
+  scheduler: several can exist (the self tests build their own on a fake tick
+  source), and the current task says which one runs. See *The current task*
+  below.
 - Each `Thread` gets a 2 MB stack page from the `AddressSpace` it is given;
   the initial stack is laid out like "just after a `call`", as the System V ABI
   requires (`rsp % 16 == 8` on entry). Its `rbp` starts at 0, which ends a
@@ -86,6 +91,49 @@ in `rdi`, so its first "return" starts it.
   saving only the callee-saved ones (`rbx`, `rbp`, `r12`–`r15`). Saving all is
   easier to reason about.
 - No SIMD state is saved (the kernel is built without SSE).
+
+## The current task
+
+Before, everything that had to block or wake a thread took the scheduler in
+its constructor: `WaitQueue(scheduler)`, then `Semaphore(scheduler, 0, 1)`,
+`Mutex(scheduler)`, `ConditionVariable(scheduler)`, the keyboard's
+`CharacterQueue(scheduler)`, `Thread(scheduler, space, entry)`, and thread
+entry points got it as `void worker(Scheduler&)`. A mutex, a plain value,
+depended on the scheduler object, and the chain grew with every user.
+
+What all of them really need is not "a scheduler" but **"the thread that is
+running now"** (to block it) and "the scheduler of a given thread" (to make
+it runnable again). Most kernels keep exactly that: Linux has `current`,
+xv6 has `myproc()`. atlOS does the same:
+
+```
+currentTask()        TCB of the running task          set by Scheduler::switchTo
+tcb.scheduler        the scheduler that runs a TCB    set by addTask (task 0: the constructor)
+currentScheduler()   currentTask().scheduler
+```
+
+```mermaid
+sequenceDiagram
+    participant T as thread A
+    participant Q as WaitQueue
+    participant S as A's scheduler
+    participant I as IRQ handler
+    T->>Q: wait()
+    Q->>Q: self = currentTask()
+    Q->>S: self.scheduler->block()
+    S->>S: switch to another task (currentTask() = it)
+    I->>Q: wakeOne()
+    Q->>S: tcb->scheduler->unblock(tcb)
+```
+
+It is a **boundary global** (`docs/style.md`): one CPU runs one task at a
+time, so "the current task" is a fact about the CPU, not a choice of
+design. With several CPUs it becomes one value per CPU (read through `gs`).
+
+Schedulers nest: a scheduler constructed by a flow makes that flow its
+task 0, so `currentTask()` is its boot TCB from then on; its destructor gives
+the previous task back. The self tests build schedulers this way inside the
+kernel's task 0.
 
 ## Flow: two threads yielding
 

@@ -41,11 +41,9 @@ static constexpr uint64_t maxFileSize = 16ULL * 1024 * 1024;
 /// At most this many bytes per write call
 static constexpr uint64_t maxWriteSize = 4096;
 
-Runtime::Runtime(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler,
-    Fs::Vfs& vfs)
+Runtime::Runtime(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Fs::Vfs& vfs)
     : m_pmm(pmm)
     , m_kernelSpace(kernelSpace)
-    , m_scheduler(scheduler)
     , m_vfs(vfs)
 {
 }
@@ -146,20 +144,21 @@ int Runtime::spawn(const char* path)
 
     // A kernel thread whose first act is to drop to ring 3. It runs on the
     // program's tables (cr3) and shows the program's name in "tasks"
-    process->thread = new Threading::Thread(m_scheduler, m_kernelSpace, threadEntry, false);
+    Threading::Scheduler& scheduler = Threading::currentScheduler();
+    process->thread = new Threading::Thread(scheduler, m_kernelSpace, threadEntry, false);
     Threading::TCB& tcb = process->thread->getTCB();
     tcb.regs.cr3 = process->space->pml4Physical();
     tcb.owner = process;
     tcb.name = process->name;
-    m_scheduler.addTask(*process->thread);
+    scheduler.addTask(*process->thread);
 
     m_processes[m_count++] = process;
     return (int)process->pid;
 }
 
-void Runtime::threadEntry(Threading::Scheduler& scheduler)
+void Runtime::threadEntry()
 {
-    auto* process = static_cast<Process*>(scheduler.current().owner);
+    auto* process = static_cast<Process*>(Threading::currentTask().owner);
     enterUserMode(process->entry, process->stackTop);
 }
 
@@ -182,7 +181,7 @@ void Runtime::reap()
 
 Process* Runtime::current()
 {
-    return static_cast<Process*>(m_scheduler.current().owner);
+    return static_cast<Process*>(Threading::currentTask().owner);
 }
 
 const Process* Runtime::find(uint32_t pid) const
@@ -245,7 +244,7 @@ void Runtime::exitCurrent(int64_t code)
     // thread is switched away from for the last time
     m_kernelSpace.activate();
     process->thread->getTCB().regs.cr3 = m_kernelSpace.pml4Physical();
-    m_scheduler.exit();
+    Threading::exitThread();
 }
 
 } // namespace Process

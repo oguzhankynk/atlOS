@@ -23,6 +23,13 @@ Memory::HeapStatistics Memory::heapStatistics()
     return { allocated, inUse };
 }
 
+Memory::AddressSpace& Memory::kernelAddressSpace()
+{
+    if (!s_heapAddressSpace)
+        kernelPanic("kernelAddressSpace before Memory::setHeapAddressSpace");
+    return *s_heapAddressSpace;
+}
+
 static Memory::AddressSpace& heapAddressSpace()
 {
     if (!s_heapAddressSpace)

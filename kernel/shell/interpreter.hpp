@@ -41,7 +41,6 @@ namespace Shell {
 struct Context {
     Memory::PhysicalMemoryManager& pmm;
     Memory::AddressSpace& space;
-    Threading::Scheduler& scheduler;
     Fs::Vfs& vfs;
     Process::Runtime& runtime;
     Drivers::VGATextConsole* screen; ///< for clear, may be null

@@ -84,8 +84,12 @@ also turns interrupts off again after idling when the caller had them off
 
 ## How atlOS does it
 
-- **Every object takes its scheduler** in the constructor (`Semaphore sem(scheduler, 0, 1)`), like `Thread`. No global scheduler; the
-  self tests create objects on their own schedulers.
+- **No scheduler handed in**: `Semaphore sem(0, 1);`, `Mutex m;`,
+  `ConditionVariable cv;`. `WaitQueue::wait()` blocks the running task
+  (`Threading::currentTask()`) on its own scheduler; `wakeOne()` makes a
+  waiter runnable on *its* scheduler (`tcb->scheduler`). So one object works
+  across schedulers, and can be a global or a member of anything (see
+  `kernel/sched/README.md`, *The current task*).
 - `Atomic<T>` (`atomic.hpp`): `load`, `store`, `exchange`, `compareExchange`,
   `fetchAdd`, `fetchSub` over the `__atomic` builtins, always sequentially
   consistent. 1 to 8 bytes (16 byte atomics need `cmpxchg16b`, not needed).

@@ -10,6 +10,36 @@ extern "C" void switchTask(Threading::Registers* from, Threading::Registers* to)
 
 namespace Threading {
 
+// The task the CPU runs now, see currentTask()
+static TCB* s_currentTask {};
+
+TCB& currentTask()
+{
+    if (!s_currentTask)
+        kernelPanic("currentTask before the first Scheduler");
+    return *s_currentTask;
+}
+
+Scheduler& currentScheduler()
+{
+    return *currentTask().scheduler;
+}
+
+void yield()
+{
+    currentScheduler().yield();
+}
+
+void sleep(uint64_t ms)
+{
+    currentScheduler().sleep(ms);
+}
+
+void exitThread()
+{
+    currentScheduler().exit();
+}
+
 static bool isRunnable(const TCB* tcb)
 {
     return tcb->state == ThreadState::Ready || tcb->state == ThreadState::Running;
@@ -19,12 +49,23 @@ Scheduler::Scheduler(Drivers::TickSource& ticks)
 {
     m_bootTcb.state = ThreadState::Running;
     m_bootTcb.name = "kernel"; // the flow that constructed the scheduler (kernelMain)
+    m_bootTcb.scheduler = this;
+
+    // The constructing flow now runs as this scheduler's task 0
+    m_previousTask = s_currentTask;
+    s_currentTask = &m_bootTcb;
     m_readyQueue[0] = &m_bootTcb;
     m_threadCount = 1;
     m_currentThreadIndex = 0;
 
     if (!ticks.start(tickPeriodNs, onTick, this))
         kernelPanic("Scheduler: the tick source does not support a 1 ms period");
+}
+
+Scheduler::~Scheduler()
+{
+    if (s_currentTask == &m_bootTcb)
+        s_currentTask = m_previousTask;
 }
 
 void Scheduler::onTick(void* scheduler)
@@ -67,6 +108,7 @@ void Scheduler::switchTo(uint32_t nextIndex)
 
     to->state = ThreadState::Running;
     m_currentThreadIndex = nextIndex;
+    s_currentTask = to;
 
     // Interrupts and system calls from ring 3 land on the thread's own kernel stack
     if (to->stackBase)
@@ -110,6 +152,7 @@ void Scheduler::schedule()
 void Scheduler::addTask(Thread& thread)
 {
     if (m_threadCount < maxTasks) {
+        thread.getTCB().scheduler = this;
         m_readyQueue[m_threadCount++] = &thread.getTCB();
     } else {
         printf("Scheduler: run queue full, %s is not added\n", thread.getName());

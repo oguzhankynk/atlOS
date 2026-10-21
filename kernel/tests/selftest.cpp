@@ -907,8 +907,9 @@ static volatile uint64_t s_countA {};
 static volatile uint64_t s_countB {};
 static volatile bool s_frameAligned {};
 
-static void counterA(Scheduler& scheduler)
+static void counterA()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     // After "push rbp" the frame must be 16 byte aligned if the thread was
     // started with an ABI conformant stack
     s_frameAligned = ((uintptr_t)__builtin_frame_address(0) % 16) == 0;
@@ -919,8 +920,9 @@ static void counterA(Scheduler& scheduler)
     }
 }
 
-static void counterB(Scheduler& scheduler)
+static void counterB()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     for (uint64_t i = 0; i < rounds; i++) {
         s_countB = s_countB + 1;
         scheduler.yield();
@@ -963,7 +965,7 @@ static void testThreadStack(Scheduler& scheduler, AddressSpace& space)
 
 static int s_threadFrames {};
 
-static void backtraceInThread(Scheduler& scheduler)
+static void backtraceInThread()
 {
     uint64_t addresses[Backtrace::maxFrames];
     s_threadFrames = backtraceHere(addresses, Backtrace::maxFrames);
@@ -1014,8 +1016,9 @@ static void testRoundRobin(AddressSpace& space)
 
 static volatile uint64_t s_sleptTicks {};
 
-static void sleeper(Scheduler& scheduler)
+static void sleeper()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     uint64_t t0 = scheduler.ticks();
     scheduler.sleep(50);
     s_sleptTicks = scheduler.ticks() - t0;
@@ -1070,8 +1073,9 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
 
 static volatile int s_blockStage {};
 
-static void blocker(Scheduler& scheduler)
+static void blocker()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     s_blockStage = 1;
     scheduler.block();
     s_blockStage = 2;
@@ -1099,7 +1103,7 @@ static void testBlock(AddressSpace& space)
 
 static volatile bool s_ran {};
 
-static void neverRuns(Scheduler&)
+static void neverRuns()
 {
     s_ran = true;
 }
@@ -1238,7 +1242,7 @@ static int s_wakeOrder[3] {};
 static int s_wakeCount {};
 
 template <int Id>
-static void queueWaiter(Scheduler& scheduler)
+static void queueWaiter()
 {
     s_waitQueue->wait();
     s_wakeOrder[s_wakeCount++] = Id;
@@ -1250,7 +1254,7 @@ static void testWaitQueue(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::WaitQueue queue(scheduler);
+    Sync::WaitQueue queue;
     s_waitQueue = &queue;
     s_wakeCount = 0;
 
@@ -1287,7 +1291,7 @@ static void testWaitQueue(AddressSpace& space)
 static Sync::Semaphore* s_semaphore {};
 static int s_taken {};
 
-static void semaphoreTaker(Scheduler& scheduler)
+static void semaphoreTaker()
 {
     for (int i = 0; i < 3; i++) {
         s_semaphore->take();
@@ -1309,7 +1313,7 @@ static void testSemaphore(AddressSpace& space)
     Scheduler scheduler(ticks);
 
     // Counting without waiting
-    Sync::Semaphore counter(scheduler, 2, 3);
+    Sync::Semaphore counter(2, 3);
     CHECK(counter.tryTake());
     CHECK(counter.tryTake());
     CHECK(!counter.tryTake());
@@ -1319,7 +1323,7 @@ static void testSemaphore(AddressSpace& space)
     CHECK(counter.count() == 3);
 
     // A taker waits at 0; give hands the unit over, the count stays 0
-    Sync::Semaphore semaphore(scheduler, 0, 1);
+    Sync::Semaphore semaphore(0, 1);
     s_semaphore = &semaphore;
     s_taken = 0;
     Thread* t = new Thread(scheduler, space, semaphoreTaker);
@@ -1363,7 +1367,7 @@ static Sync::Semaphore* s_filledSlots {};
 static int s_consumedSum {};
 static bool s_consumedInOrder {};
 
-static void producer(Scheduler& scheduler)
+static void producer()
 {
     for (int i = 1; i <= itemCount; i++) {
         s_freeSlots->take();
@@ -1372,8 +1376,9 @@ static void producer(Scheduler& scheduler)
     }
 }
 
-static void consumer(Scheduler& scheduler)
+static void consumer()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     for (int i = 1; i <= itemCount; i++) {
         s_filledSlots->take();
         int value = s_buffer[i % bufferSize];
@@ -1391,8 +1396,8 @@ static void testProducerConsumer(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::Semaphore freeSlots(scheduler, bufferSize, bufferSize);
-    Sync::Semaphore filledSlots(scheduler, 0, bufferSize);
+    Sync::Semaphore freeSlots(bufferSize, bufferSize);
+    Sync::Semaphore filledSlots(0, bufferSize);
     s_freeSlots = &freeSlots;
     s_filledSlots = &filledSlots;
     s_consumedSum = 0;
@@ -1417,8 +1422,9 @@ static int s_mutexLogCount {};
 
 // Holds the mutex across yields: without it, the two would interleave
 template <int Id>
-static void mutexUser(Scheduler& scheduler)
+static void mutexUser()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     s_mutex->lock();
     s_mutexLog[s_mutexLogCount++] = Id * 10; // in
     for (int i = 0; i < 3; i++)
@@ -1433,7 +1439,7 @@ static void testMutex(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::Mutex mutex(scheduler);
+    Sync::Mutex mutex;
     s_mutex = &mutex;
     s_mutexLogCount = 0;
 
@@ -1473,7 +1479,7 @@ static bool s_ready {};
 static int s_wakeups {};
 static int s_sawReady {};
 
-static void conditionWaiter(Scheduler& scheduler)
+static void conditionWaiter()
 {
     s_mutex->lock();
     while (!s_ready) {
@@ -1490,8 +1496,8 @@ static void testConditionVariable(AddressSpace& space)
 
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
-    Sync::Mutex mutex(scheduler);
-    Sync::ConditionVariable condition(scheduler);
+    Sync::Mutex mutex;
+    Sync::ConditionVariable condition;
     s_mutex = &mutex;
     s_condition = &condition;
     s_ready = false;
@@ -1654,7 +1660,7 @@ static void typeText(Drivers::PS2Keyboard& keyboard, const char* text)
 static Drivers::CharacterQueue* s_queue {};
 static char s_line[8] {};
 
-static void lineReader(Scheduler& scheduler)
+static void lineReader()
 {
     for (int i = 0; i < 3; i++)
         s_line[i] = s_queue->read();
@@ -1667,7 +1673,7 @@ static void testKeyboard(AddressSpace& space)
     FakeTickSource ticks;
     Scheduler scheduler(ticks);
     FakeInterruptController controller;
-    Drivers::CharacterQueue queue(scheduler);
+    Drivers::CharacterQueue queue;
     Drivers::PS2Keyboard keyboard(controller, queue);
     CHECK(controller.attachedIrq == Drivers::Irq::Keyboard);
     CHECK(controller.unmaskedIrq == Drivers::Irq::Keyboard);
@@ -2548,8 +2554,9 @@ static void testLineEditor()
     CHECK(capped);
 }
 
-static void longSleeper(Scheduler& scheduler)
+static void longSleeper()
 {
+    Scheduler& scheduler = Threading::currentScheduler();
     scheduler.sleep(100000);
 }
 
@@ -2581,9 +2588,9 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
 
     FakeTickSource ticks;
     Scheduler isolated(ticks);
-    Drivers::CharacterQueue input(isolated);
-    Process::Runtime runtime(pmm, space, scheduler, vfs);
-    Shell::Context context { pmm, space, scheduler, vfs, runtime, nullptr, nullptr };
+    Drivers::CharacterQueue input;
+    Process::Runtime runtime(pmm, space, vfs);
+    Shell::Context context { pmm, space, vfs, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2868,6 +2875,77 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
+// ------------------------------------------------------------
+// The current task: what lets sync objects and Thread(entry) do without a scheduler
+// ------------------------------------------------------------
+
+static Threading::TCB* s_seenTask {};
+static Scheduler* s_seenScheduler {};
+static int s_wokenBySemaphore {};
+static Sync::Semaphore* s_crossSemaphore {};
+
+static void recordCurrent()
+{
+    s_seenTask = &Threading::currentTask();
+    s_seenScheduler = &Threading::currentScheduler();
+    Threading::yield(); // the free functions act on this thread's scheduler
+    Threading::sleep(0);
+}
+
+static void waitOnSemaphore()
+{
+    s_crossSemaphore->take();
+    s_wokenBySemaphore++;
+}
+
+static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
+{
+    group("Current task (no scheduler handed in)");
+
+    // The boot flow is the kernel scheduler's task 0
+    CHECK(&Threading::currentTask() == &kernelScheduler.current());
+    CHECK(&Threading::currentScheduler() == &kernelScheduler);
+
+    // Thread(entry): the caller's scheduler, the kernel address space
+    s_seenTask = nullptr;
+    Thread* t = new Thread(recordCurrent);
+    CHECK(t->getTCB().scheduler == &kernelScheduler);
+    CHECK(waitForExit(kernelScheduler, *t, 1000));
+    CHECK(s_seenTask == &t->getTCB() && s_seenScheduler == &kernelScheduler);
+    CHECK(&Threading::currentTask() == &kernelScheduler.current()); // back in the boot flow
+    delete t;
+
+    {
+        // A scheduler built here makes this flow its task 0 ...
+        FakeTickSource ticks;
+        Scheduler isolated(ticks);
+        CHECK(&Threading::currentScheduler() == &isolated);
+
+        Thread* u = new Thread(recordCurrent); // ... so this thread goes there
+        CHECK(u->getTCB().scheduler == &isolated);
+        CHECK(isolated.taskCount() == 2);
+        CHECK(waitForExit(isolated, *u, 1000));
+        CHECK(s_seenScheduler == &isolated);
+        delete u;
+
+        // A semaphore needs no scheduler: a waiter wakes on its own one
+        Sync::Semaphore semaphore(0, 1);
+        s_crossSemaphore = &semaphore;
+        s_wokenBySemaphore = 0;
+        Thread* w = new Thread(isolated, space, waitOnSemaphore);
+        isolated.yield();
+        CHECK(w->getTCB().state == ThreadState::Blocked);
+        semaphore.give(); // as from an interrupt handler: only the state changes
+        CHECK(w->getTCB().state == ThreadState::Ready);
+        CHECK(waitForExit(isolated, *w, 1000));
+        CHECK(s_wokenBySemaphore == 1);
+        delete w;
+    }
+    // ... and gives it back when it goes away
+    CHECK(&Threading::currentScheduler() == &kernelScheduler);
+    CHECK(&Threading::currentTask() == &kernelScheduler.current());
+}
+
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
     Process::Runtime& runtime)
 {
@@ -2897,6 +2975,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testBlock(space);
     testRemove(space);
     testSchedulersAreIndependent(scheduler, space);
+    testCurrentTask(scheduler, space);
     testAtomic();
     testInterruptGuard();
     testSpinlock();
