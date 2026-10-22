@@ -6,8 +6,11 @@
 [![Release](https://img.shields.io/github/v/release/oguzhankynk/atlOS)](https://github.com/oguzhankynk/atlOS/releases)
 
 atlOS is an experimental x86_64 operating system written in C++17 for learning
-and research. It boots with GRUB (multiboot2) into a higher half kernel and is
-small enough to read end to end.
+and research. 
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="atlOS booting in QEMU, then help, lspci, smbios, ls, a user program with arguments and tasks in the shell" width="720">
+</p>
 
 ## Status
 
@@ -57,7 +60,7 @@ cmake --build --preset default --target run
 ```
 
 `scripts/build.sh run` shows the boot messages, then the shell, on the
-terminal (see the [screenshot](#screenshot) below).
+terminal; the GIF at the top shows the same on the VGA screen.
 
 ## Source layout
 
@@ -117,7 +120,3 @@ user mode all start there. The subsystem READMEs link the pages they build on.
 
 MIT, see [LICENSE](LICENSE). Third party code and its licenses:
 [THIRD_PARTY.md](THIRD_PARTY.md).
-
-## Screenshot
-
-<img src="docs/images/ss.png" alt="atlOS boot" width="480">
