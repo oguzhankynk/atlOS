@@ -76,7 +76,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
 | tasks | `tasks`, `ps`, `run program.elf [args]` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
-| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `acpi [SIGNATURE]`, `apic`, `int vector` |
+| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `acpi [SIGNATURE]`, `apic`, `smbios [type]`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
@@ -244,6 +244,26 @@ I/O APIC id 0, version 0x20, 24 pins (GSI 0 .. 23), at 0xfec00000
 IRQ 1 (the keyboard) and IRQ 4 (COM1) are unmasked: their drivers asked for
 them. IRQ 0 is masked because the scheduler ticks on the APIC timer.
 
+### Looking at SMBIOS
+
+`smbios` lists the structures of the firmware's SMBIOS 2.x table (see
+`kernel/firmware/smbios/README.md`): handle, type, length, the number of
+strings. `smbios type` shows every structure of one type: types 0 (BIOS),
+1 (system), 2 (baseboard), 4 (processor) and 17 (memory device) decoded
+field by field, any type with its strings and its formatted area dumped.
+
+```
+atlOS:/> smbios 17
+handle 0x1100, type 17 Memory device, 40 bytes
+  locator        DIMM 0
+  size           512 MB
+  type           0x07 RAM, form factor 0x09, width unknown
+  manufacturer   QEMU
+  strings: 1 "DIMM 0" 2 "QEMU"
+0000000000000000  11 28 00 11 00 10 fe ff  ff ff ff ff 00 02 09 00  |.(..............|
+...
+```
+
 ### Running a program
 
 `run program.elf [args]` starts the program (`Runtime::spawn`) with
@@ -291,7 +311,8 @@ sequenceDiagram
   `md`/`mw` on a buffer of the test, refusing unmapped memory, `help` by
   group, `disk read` of the RAM disk's boot sector, `lspci` on a made up
   bus (BARs, capabilities, bad addresses), `acpi` on made up tables (the
-  list, the decoded MADT, a wrong checksum), `apic` without an APIC, `tasks` with a
+  list, the decoded MADT, a wrong checksum), `apic` without an APIC, `smbios`
+  on a made up table (the list, types 1, 4 and 17, errors), `tasks` with a
   sleeping thread), *VMM translate and mappings*.
 - End to end (`scripts/run-shelltest.py`, `scripts/build.sh shelltest`, CI):
   boots the normal kernel with COM1 on a TCP socket and types commands the

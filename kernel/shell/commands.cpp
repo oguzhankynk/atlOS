@@ -29,6 +29,12 @@
 #include <drivers/vga_console.hpp>
 #include <firmware/acpi/acpi.hpp>
 #include <firmware/acpi/madt.hpp>
+#include <firmware/smbios/baseboard_information.hpp>
+#include <firmware/smbios/bios_information.hpp>
+#include <firmware/smbios/memory_device.hpp>
+#include <firmware/smbios/processor_information.hpp>
+#include <firmware/smbios/smbios.hpp>
+#include <firmware/smbios/system_information.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
@@ -890,6 +896,186 @@ static void cmdApic(Interpreter& shell, int argc, char**)
 }
 
 // ------------------------------------------------------------
+// SMBIOS
+// ------------------------------------------------------------
+
+static void printField(const char* name, const char* value)
+{
+    if (value[0])
+        printf("  %-14s %s\n", name, value);
+}
+
+/// Since 2.6 the first three UUID fields are stored little endian, before that big endian
+static void printUuid(const uint8_t* u, bool littleEndian)
+{
+    if (littleEndian)
+        printf("  %-14s %02x%02x%02x%02x-%02x%02x-%02x%02x-", "UUID", u[3], u[2], u[1], u[0], u[5], u[4], u[7], u[6]);
+    else
+        printf("  %-14s %02x%02x%02x%02x-%02x%02x-%02x%02x-", "UUID", u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7]);
+    printf("%02x%02x-%02x%02x%02x%02x%02x%02x\n", u[8], u[9], u[10], u[11], u[12], u[13], u[14], u[15]);
+}
+
+static void printSize(const char* name, uint64_t kb)
+{
+    constexpr uint64_t kbPerGb = 1024ULL * 1024;
+    if (kb >= kbPerGb && kb % kbPerGb == 0)
+        printf("  %-14s %lu GB\n", name, kb / kbPerGb);
+    else if (kb >= 1024 && kb % 1024 == 0)
+        printf("  %-14s %lu MB\n", name, kb / 1024);
+    else
+        printf("  %-14s %lu KB\n", name, kb);
+}
+
+static void printSmbiosFields(const Firmware::SmbiosTables& tables, const Firmware::SmbiosStructure& s)
+{
+    switch (s.type()) {
+    case Firmware::SmbiosBios: {
+        Firmware::BiosInformation info;
+        if (!Firmware::decodeBiosInformation(s, info))
+            break;
+        printField("vendor", info.vendor);
+        printField("version", info.version);
+        printField("release date", info.releaseDate);
+        printf("  %-14s %u KB at 0x%x\n", "ROM", info.romSizeKb, info.startSegment * 16);
+        printf("  %-14s 0x%016lx\n", "characteristics", info.characteristics);
+        if (info.hasRelease)
+            printf("  %-14s %u.%u\n", "BIOS release", info.releaseMajor, info.releaseMinor);
+        return;
+    }
+    case Firmware::SmbiosSystem: {
+        Firmware::SystemInformation info;
+        if (!Firmware::decodeSystemInformation(s, info))
+            break;
+        printField("manufacturer", info.manufacturer);
+        printField("product", info.product);
+        printField("version", info.version);
+        printField("serial number", info.serialNumber);
+        if (info.hasUuid)
+            printUuid(info.uuid, tables.majorVersion() > 2 || (tables.majorVersion() == 2 && tables.minorVersion() >= 6));
+        printField("SKU", info.sku);
+        printField("family", info.family);
+        return;
+    }
+    case Firmware::SmbiosBaseboard: {
+        Firmware::BaseboardInformation info;
+        if (!Firmware::decodeBaseboardInformation(s, info))
+            break;
+        printField("manufacturer", info.manufacturer);
+        printField("product", info.product);
+        printField("version", info.version);
+        printField("serial number", info.serialNumber);
+        printField("asset tag", info.assetTag);
+        printField("location", info.locationInChassis);
+        if (info.boardType)
+            printf("  %-14s 0x%02x%s\n", "board type", info.boardType, info.boardType == 0x0A ? " (motherboard)" : "");
+        return;
+    }
+    case Firmware::SmbiosProcessor: {
+        Firmware::ProcessorInformation info;
+        if (!Firmware::decodeProcessorInformation(s, info))
+            break;
+        printField("socket", info.socket);
+        printField("manufacturer", info.manufacturer);
+        printField("version", info.version);
+        printf("  %-14s type %u, family 0x%02x, id 0x%016lx\n", "processor", info.processorType, info.family, info.id);
+        printf("  %-14s %u MHz (max %u MHz, external clock %u MHz)\n", "speed", info.currentSpeedMhz, info.maxSpeedMhz,
+            info.externalClockMhz);
+        printf("  %-14s 0x%02x (%s, %s)\n", "status", info.status, info.status & 0x40 ? "populated" : "empty socket",
+            (info.status & 7) == 1 ? "enabled" : "not enabled");
+        if (info.coreCount)
+            printf("  %-14s %u (%u enabled), %u thread(s)\n", "cores", info.coreCount, info.coresEnabled, info.threadCount);
+        printField("serial number", info.serialNumber);
+        printField("part number", info.partNumber);
+        return;
+    }
+    case Firmware::SmbiosMemoryDevice: {
+        Firmware::MemoryDevice info;
+        if (!Firmware::decodeMemoryDevice(s, info))
+            break;
+        printField("locator", info.deviceLocator);
+        printField("bank", info.bankLocator);
+        if (!info.sizeKnown)
+            printf("  %-14s unknown\n", "size");
+        else if (!info.sizeKb)
+            printf("  %-14s no module installed\n", "size");
+        else
+            printSize("size", info.sizeKb);
+        const char* typeName = Firmware::smbiosMemoryTypeName(info.memoryType);
+        printf("  %-14s 0x%02x %s, form factor 0x%02x", "type", info.memoryType, typeName, info.formFactor);
+        if (info.totalWidth == 0xFFFF) // 0xFFFF: not known
+            printf(", width unknown\n");
+        else
+            printf(", width %u bits (data %u)\n", info.totalWidth, info.dataWidth);
+        if (info.speedMts)
+            printf("  %-14s %u MT/s (configured %u MT/s)\n", "speed", info.speedMts, info.configuredSpeedMts);
+        printField("manufacturer", info.manufacturer);
+        printField("part number", info.partNumber);
+        printField("serial number", info.serialNumber);
+        return;
+    }
+    default:
+        return;
+    }
+    printf("  (too short for its type)\n");
+}
+
+static void printSmbiosStructure(const Firmware::SmbiosTables& tables, const Firmware::SmbiosStructure& s)
+{
+    const char* name = Firmware::smbiosTypeName(s.type());
+    printf("handle 0x%04x, type %u%s%s, %u bytes\n", s.handle(), s.type(), name[0] ? " " : "", name, s.length());
+    printSmbiosFields(tables, s);
+
+    // The strings, by number, then the formatted area as it is
+    if (s.stringCount()) {
+        printf("  strings:");
+        for (uint32_t n = 1; n <= s.stringCount(); n++)
+            printf(" %u \"%s\"", n, s.string(n));
+        printf("\n");
+    }
+    for (uint32_t line = 0; line < s.length(); line += 16)
+        printDumpLine(line, s.data() + line, s.length() - line < 16 ? s.length() - line : 16);
+}
+
+static void cmdSmbios(Interpreter& shell, int argc, char** argv)
+{
+    if (!usage("smbios", argc, 1, 2))
+        return;
+
+    const Firmware::SmbiosTables& tables = shell.context().smbios;
+    if (!tables.isLoaded()) {
+        printf("smbios: no SMBIOS 2.x entry point was found\n");
+        return;
+    }
+
+    // smbios type: every structure of that type
+    if (argc == 2) {
+        uint64_t type;
+        if (!parseNumber(argv[1], type) || type > 255) {
+            printf("smbios: a type 0 .. 255 (0 BIOS, 1 system, 2 board, 4 processor, 17 memory)\n");
+            return;
+        }
+        uint32_t shown = 0;
+        for (const Firmware::SmbiosStructure* s; (s = tables.find(type, shown)); shown++)
+            printSmbiosStructure(tables, *s);
+        if (!shown)
+            printf("smbios: no structure of type %lu\n", type);
+        return;
+    }
+
+    // smbios: one line per structure
+    printf("SMBIOS %u.%u, %u structures in %u bytes at 0x%lx\n", tables.majorVersion(), tables.minorVersion(),
+        tables.count(), tables.tableLength(), tables.tableAddress());
+    printf("  handle  type  length  strings  name\n");
+    for (uint32_t i = 0; i < tables.count(); i++) {
+        const Firmware::SmbiosStructure& s = tables.at(i);
+        printf("  0x%04x  %4u  %6u  %7u  %s\n", s.handle(), s.type(), s.length(), s.stringCount(),
+            Firmware::smbiosTypeName(s.type()));
+    }
+    if (tables.truncated())
+        printf("  (a structure runs past the table: the list stops there)\n");
+}
+
+// ------------------------------------------------------------
 // System
 // ------------------------------------------------------------
 
@@ -1359,6 +1545,7 @@ static const Command s_commands[] = {
     { "devices", "lspci", "lspci [bus:dev.fn]", "the PCI functions; one in detail", cmdLspci },
     { "devices", "acpi", "acpi [SIGNATURE]", "the ACPI tables; one decoded and dumped", cmdAcpi },
     { "devices", "apic", "apic", "the local and I/O APICs, where each IRQ goes", cmdApic },
+    { "devices", "smbios", "smbios [type]", "the firmware's SMBIOS structures; one type decoded", cmdSmbios },
     { "devices", "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
     { "system", "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "system", "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },

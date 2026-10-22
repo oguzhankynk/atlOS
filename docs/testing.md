@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 842 passed, 0 failed
+[SELFTEST] done: 882 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -81,6 +81,8 @@ backtrace in it into function names.
 | ACPI tables (made up) | an RSDP, XSDT and RSDT built in memory: both root tables, a wrong checksum listed but not found, a table outside the physmap skipped, broken RSDPs and root tables refused, the RSDP from the multiboot tags |
 | MADT (made up) | every entry kind, the 64 bit local APIC address, an unknown kind; the ISA routes from the overrides; entries past the end or of length 0 |
 | ACPI and the APIC on this machine | QEMU's FADT and MADT; the local APIC (CPUID's id, enabled), IRQ 0 on the GSI the MADT says, IRQ 2 not routed, the 8259s masked; the PIT through the I/O APIC; the APIC timer periodic on `0x40`, 50 ms of the PIT are 40 to 60 ticks. Skipped without ACPI |
+| SMBIOS (made up) | a 2.8 table built byte by byte: the walk, `find` by type and index, strings by number, fields beyond the length read as 0; the five decoders (a 2.0 length processor, memory sizes in KB and extended); bad entry points refused; a structure past the table and unended strings stop the walk; `findSmbios` on 16 byte boundaries, `_SM3_` seen but not read |
+| SMBIOS on this machine | SeaBIOS's table: BIOS, system by "QEMU", a populated processor socket, memory devices adding up to 512 MB, the end of table last. Skipped without a 2.x entry point |
 | Block devices and the MBR (RAM disk) | range checks, partition table parsing (bad signature, entries beyond the disk), a partition as its own device |
 | FAT16 8.3 names | path component to the on disk 11 bytes and back |
 | FAT16 (RAM disk) | a hand built volume: lookup (case, deleted entries, labels, LFN parts, ".."), reads across clusters out of order, broken chains (too short, a free cluster, out of range, a looping directory), the VFS on top, volumes that are not FAT16 |
@@ -97,7 +99,7 @@ backtrace in it into function names.
 | Address spaces (a second one, user pages) | a new address space shares the kernel half and the identity map; user pages only in the user range, 2 MB aligned, zeroed, with the asked flags; built while inactive, seen after `activate()`; the destructor gives back pages and tables; kernel pages appear in every address space |
 | Shell parser | words, quotes, limits; hex and decimal numbers, overflow |
 | Shell line editor | echo, Backspace and DEL, `\r\n` as one Enter, Ctrl+C, skipped escape sequences, history (order, duplicates, full), the length limit |
-| Shell commands (RAM disk) | every command on a FAT16 volume in RAM with the output captured: paths and `cd`, files, `echo >`/`>>`, `md`/`mw` on a test buffer, unmapped memory refused, `mem`, `vmmap`, `tasks` with a sleeping thread, `lspci` on a made up bus, `acpi` on made up tables, errors |
+| Shell commands (RAM disk) | every command on a FAT16 volume in RAM with the output captured: paths and `cd`, files, `echo >`/`>>`, `md`/`mw` on a test buffer, unmapped memory refused, `mem`, `vmmap`, `tasks` with a sleeping thread, `lspci` on a made up bus, `acpi` and `smbios` on made up tables, errors |
 
 ### Other machines
 
@@ -152,7 +154,8 @@ types commands the way a terminal does (`\r` for Enter, DEL for Backspace,
 `ESC [ A` for Up, Ctrl+C), checking each answer: `ls`, `cat`, `cd`, writing
 with `echo >`/`>>`, `rm`/`rmdir`, `mw`/`md`, `help` by group, `disk` and
 `disk read 0` (the MBR's `55 aa`), `lspci` and `lspci 00:01.1`, `irq`, `acpi`,
-`acpi APIC` and `apic` (the timer periodic, COM1 unmasked), `vmmap`, `tasks`, `run` of a user
+`acpi APIC` and `apic` (the timer periodic, COM1 unmasked), `smbios`, `smbios 1` and
+`smbios 17` (512 MB), `vmmap`, `tasks`, `run` of a user
 program and of one that faults (the shell must still answer), typing a name
 into `ASK.ELF` (and Ctrl+C into it once), `CLOCK.ELF`, `FILES.ELF` and the
 file it wrote, `ARGS.ELF` and `CAT.ELF` with arguments, the example of

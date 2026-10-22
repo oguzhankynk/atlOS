@@ -133,6 +133,14 @@ def main():
             check("IDE controller" in out and "I/O ports at" in out and "0000000000000000  86 80 10 70" in out,
                   "lspci of one function", out)
 
+            # SMBIOS: SeaBIOS's 2.x table
+            out = serial.command("smbios\r")
+            check("SMBIOS 2." in out and "Processor" in out and "End of table" in out, "smbios", out)
+            out = serial.command("smbios 1\r")
+            check("manufacturer   QEMU" in out and "UUID" in out, "smbios 1: the system", out)
+            out = serial.command("smbios 17\r")
+            check("size           512 MB" in out, "smbios 17: the memory", out)
+
             out = serial.command("ls /disk0\r")
             check("HELLO.TXT" in out and "DOCS/" in out and "22000" in out, "ls /disk0", out)
 

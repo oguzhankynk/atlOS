@@ -1,148 +1,186 @@
 /**
  * @file smbios.cpp
  * @author Oguzhan KAYNAK
- * @brief Functions for SMBIOS initialization and management.
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- *
+ * @brief Finding the SMBIOS entry point and walking the structure table.
  */
+
+#include <firmware/smbios/smbios.hpp>
 
 #include <stdio.h>
 #include <string.h>
 
-#include <firmware/smbios/smbios.hpp>
+#include <mm/vmm.hpp>
 
-SMBIOS::SMBIOS()
+namespace Firmware {
+
+/// The checksum of "_DMI_" covers 15 bytes: the intermediate anchor to the end
+static constexpr size_t intermediateSize = 15;
+static constexpr size_t intermediateOffset = 0x10;
+
+/// The formatted area starts with type, length and handle
+static constexpr uint32_t structureHeaderSize = 4;
+
+static uint8_t byteSum(const void* data, size_t size)
 {
-    const char* ptr = (char*)0x000F0000;
-    int length = 0;
+    auto bytes = static_cast<const uint8_t*>(data);
+    uint8_t sum = 0;
+    for (size_t i = 0; i < size; i++)
+        sum += bytes[i];
+    return sum;
+}
 
-    for (; ptr < (const char*)0x000FFFFF; ptr += 16) {
-        if (memcmp((const void*)ptr, "_SM_", 4) == 0) {
-            length = static_cast<uint8_t>(ptr[5]);
-            uint8_t checksum = 0;
+bool smbiosEntryIsValid(const SmbiosEntryPoint& entry)
+{
+    auto bytes = reinterpret_cast<const uint8_t*>(&entry);
+    // 0x1F, or 0x1E from firmware that followed an error in the 2.1 specification
+    return memcmp(entry.anchor, "_SM_", 4) == 0 && entry.length >= 0x1E && entry.length <= 0x20 && byteSum(&entry, entry.length) == 0
+        && memcmp(entry.intermediateAnchor, "_DMI_", 5) == 0 && byteSum(bytes + intermediateOffset, intermediateSize) == 0;
+}
 
-            for (int i = 0; i < length; i++)
-                checksum += ptr[i];
+const SmbiosEntryPoint* findSmbios(const void* area, size_t size, bool& seenVersion3)
+{
+    seenVersion3 = false;
+    auto bytes = static_cast<const uint8_t*>(area);
+    for (size_t offset = 0; offset + sizeof(SmbiosEntryPoint) <= size; offset += 16) {
+        if (memcmp(bytes + offset, "_SM3_", 5) == 0)
+            seenVersion3 = true;
+        auto entry = reinterpret_cast<const SmbiosEntryPoint*>(bytes + offset);
+        if (smbiosEntryIsValid(*entry))
+            return entry;
+    }
+    return nullptr;
+}
 
-            if (checksum == 0) {
-                // printf("Found at %p \n", ptr);
-                break;
-            }
+uint16_t SmbiosStructure::word(uint32_t offset) const
+{
+    return byte(offset) | (byte(offset + 1) << 8);
+}
+
+uint32_t SmbiosStructure::dword(uint32_t offset) const
+{
+    return word(offset) | ((uint32_t)word(offset + 2) << 16);
+}
+
+uint64_t SmbiosStructure::qword(uint32_t offset) const
+{
+    return dword(offset) | ((uint64_t)dword(offset + 4) << 32);
+}
+
+const char* SmbiosStructure::string(uint8_t number) const
+{
+    // The set ends with an empty string: the strlen of each one stays inside it
+    const char* s = m_strings;
+    for (uint8_t n = 1; number && *s; n++) {
+        if (n == number)
+            return s;
+        s += strlen(s) + 1;
+    }
+    return "";
+}
+
+uint32_t SmbiosStructure::stringCount() const
+{
+    uint32_t count = 0;
+    for (const char* s = m_strings; *s; s += strlen(s) + 1)
+        count++;
+    return count;
+}
+
+const char* smbiosTypeName(uint8_t type)
+{
+    switch (type) {
+    case 0:
+        return "BIOS";
+    case 1:
+        return "System";
+    case 2:
+        return "Baseboard";
+    case 3:
+        return "Chassis";
+    case 4:
+        return "Processor";
+    case 7:
+        return "Cache";
+    case 8:
+        return "Port connector";
+    case 9:
+        return "System slot";
+    case 11:
+        return "OEM strings";
+    case 16:
+        return "Physical memory array";
+    case 17:
+        return "Memory device";
+    case 19:
+        return "Memory array mapped address";
+    case 32:
+        return "System boot";
+    case 127:
+        return "End of table";
+    default:
+        return type >= 128 ? "OEM specific" : "";
+    }
+}
+
+bool SmbiosTables::load(const SmbiosEntryPoint& entry)
+{
+    m_loaded = false;
+    m_truncated = false;
+    m_count = 0;
+
+    if (!smbiosEntryIsValid(entry)) {
+        printf("SMBIOS: the entry point is not valid\n");
+        return false;
+    }
+    if (entry.tableAddress + (uint64_t)entry.tableLength > Memory::physmapSize) {
+        printf("SMBIOS: the table at 0x%x is outside the physmap\n", entry.tableAddress);
+        return false;
+    }
+
+    m_loaded = true;
+    m_major = entry.majorVersion;
+    m_minor = entry.minorVersion;
+    m_tableAddress = entry.tableAddress;
+    m_tableLength = entry.tableLength;
+
+    auto table = static_cast<const uint8_t*>(Memory::physToVirt(entry.tableAddress));
+    uint32_t offset = 0;
+    while (offset + structureHeaderSize <= m_tableLength && m_count < maxStructures) {
+        uint8_t length = table[offset + 1];
+        if (length < structureHeaderSize || length > m_tableLength - offset) {
+            m_truncated = true;
+            break;
         }
+
+        // The strings: up to the two NULs in a row (an empty set is just those two)
+        uint32_t stringsStart = offset + length;
+        uint32_t end = stringsStart;
+        while (end + 1 < m_tableLength && (table[end] || table[end + 1]))
+            end++;
+        if (end + 1 >= m_tableLength) {
+            m_truncated = true;
+            break;
+        }
+
+        uint8_t type = table[offset];
+        m_structures[m_count++] = SmbiosStructure(table + offset, reinterpret_cast<const char*>(table + stringsStart),
+            end + 2 - stringsStart);
+        offset = end + 2;
+        if (type == SmbiosEndOfTable)
+            break;
     }
+    if (m_truncated)
+        printf("SMBIOS: a structure at offset 0x%x runs past the table\n", offset);
+    return true;
+}
 
-    if (ptr == (char*)0x00100000) {
-        /* Error, SMBIOS could not be located */
-        return;
+const SmbiosStructure* SmbiosTables::find(uint8_t type, uint32_t index) const
+{
+    for (uint32_t i = 0; i < m_count; i++) {
+        if (m_structures[i].type() == type && index-- == 0)
+            return &m_structures[i];
     }
-
-    memcpy(m_SMBIOSEntryPoint.signature, ptr, 4);
-    m_SMBIOSEntryPoint.checksum = *(ptr + 4);
-    m_SMBIOSEntryPoint.length = *(ptr + 5);
-    m_SMBIOSEntryPoint.majorVersion = *(ptr + 6);
-    m_SMBIOSEntryPoint.minorVersion = *(ptr + 7);
-    m_SMBIOSEntryPoint.maximumStructureSize = *(uint16_t*)(ptr + 8);
-    m_SMBIOSEntryPoint.entryPointRevision = *(ptr + 10);
-    memcpy(m_SMBIOSEntryPoint.formattedArea, ptr + 11, 5);
-    memcpy(m_SMBIOSEntryPoint.intermediateAnchor, ptr + 16, 5);
-    m_SMBIOSEntryPoint.intermediateChecksum = *(ptr + 21);
-    m_SMBIOSEntryPoint.structureTableLength = *(uint16_t*)(ptr + 22);
-    m_SMBIOSEntryPoint.structureTableAddress = *(uint32_t*)(ptr + 24);
-    m_SMBIOSEntryPoint.numberOfStructures = *(uint16_t*)(ptr + 28);
-    m_SMBIOSEntryPoint.bcdRevision = *(ptr + 30);
-
-    // printEntryPoint();
-
-    void* pBIOSInformationEnd = m_BIOSInformation.scan((void*)(uintptr_t)m_SMBIOSEntryPoint.structureTableAddress);
-
-    void* pSystemInformationEnd = m_SystemInformation.scan(pBIOSInformationEnd);
-
-    void* pSystemEnclosureChassisEnd = m_SystemEnclosureChassis.scan(pSystemInformationEnd);
-
-    void* pProcessorInformationEnd = m_ProcessorInformation.scan(pSystemEnclosureChassisEnd);
-
-    void* pPhysicalMemoryArrayEnd = m_PhysicalMemoryArray.scan(pProcessorInformationEnd);
-
-    void* pMemoryDeviceEnd = m_MemoryDevice.scan(pPhysicalMemoryArrayEnd);
-
-    void* pMemoryArrayMappedAddressEnd = m_MemoryArrayMappedAddress.scan(pMemoryDeviceEnd);
-
-    void* pSystemBootInformationEnd = m_SystemBootInformation.scan(pMemoryArrayMappedAddressEnd);
-
-    m_EndOfTable.scan(pSystemBootInformationEnd);
+    return nullptr;
 }
 
-void SMBIOS::printEntryPoint() const
-{
-    printf("Signature: %c%c%c%c\n", m_SMBIOSEntryPoint.signature[0], m_SMBIOSEntryPoint.signature[1], m_SMBIOSEntryPoint.signature[2], m_SMBIOSEntryPoint.signature[3]);
-    printf("Checksum: %d\n", m_SMBIOSEntryPoint.checksum);
-    printf("Length: %u\n", m_SMBIOSEntryPoint.length);
-    printf("Major Version: %u\n", m_SMBIOSEntryPoint.majorVersion);
-    printf("Minor Version: %u\n", m_SMBIOSEntryPoint.minorVersion);
-    printf("Maximum Structure Size: %u\n", m_SMBIOSEntryPoint.maximumStructureSize);
-    printf("Entry Point Revision: %d\n", m_SMBIOSEntryPoint.entryPointRevision);
-    printf("Formatted Area: %c%c%c%c%c\n", m_SMBIOSEntryPoint.formattedArea[0], m_SMBIOSEntryPoint.formattedArea[1], m_SMBIOSEntryPoint.formattedArea[2], m_SMBIOSEntryPoint.formattedArea[3], m_SMBIOSEntryPoint.formattedArea[4]);
-    printf("Intermediate Anchor: %c%c%c%c%c\n", m_SMBIOSEntryPoint.intermediateAnchor[0], m_SMBIOSEntryPoint.intermediateAnchor[1], m_SMBIOSEntryPoint.intermediateAnchor[2], m_SMBIOSEntryPoint.intermediateAnchor[3], m_SMBIOSEntryPoint.intermediateAnchor[4]);
-    printf("Intermediate Checksum: %d\n", m_SMBIOSEntryPoint.intermediateChecksum);
-    printf("Structure Table Length: %u\n", m_SMBIOSEntryPoint.structureTableLength);
-    printf("Structure Table Address: %p\n", m_SMBIOSEntryPoint.structureTableAddress);
-    printf("Number of Structures: %d\n", m_SMBIOSEntryPoint.numberOfStructures);
-    printf("BCD Revision: %d\n", m_SMBIOSEntryPoint.bcdRevision);
-}
-
-void SMBIOS::printBIOSInformation() const
-{
-    m_BIOSInformation.print();
-}
-
-void SMBIOS::printSystemInformation() const
-{
-    m_SystemInformation.print();
-}
-
-void SMBIOS::printBaseBoardInformation() const
-{
-    m_BaseBoardInformation.print();
-}
-
-void SMBIOS::printSystemEnclosureChassis() const
-{
-    m_SystemEnclosureChassis.print();
-}
-
-void SMBIOS::printProcessorInformation() const
-{
-    m_ProcessorInformation.print();
-}
-
-void SMBIOS::printPhysicalMemoryArray() const
-{
-    m_PhysicalMemoryArray.print();
-}
-
-void SMBIOS::printMemoryDevice() const
-{
-    m_MemoryDevice.print();
-}
-
-void SMBIOS::printMemoryArrayMappedAddress() const
-{
-    m_MemoryArrayMappedAddress.print();
-}
-
-void SMBIOS::printSystemBootInformation() const
-{
-    m_SystemBootInformation.print();
-}
+} // namespace Firmware

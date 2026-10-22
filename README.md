@@ -22,8 +22,9 @@ Working:
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
-- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, `lspci`, `acpi`, `apic`, ... (`help` lists them by group)
+- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, `lspci`, `acpi`, `apic`, `smbios`, ... (`help` lists them by group)
 - User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`read`/`write` on the keyboard, the screen and files, `open`/`close`, `sleep`, `yield`, `getpid`, `uptime`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
+- SMBIOS 2.x: the BIOS, system, board, processor and memory module structures (`smbios`, like `dmidecode`)
 - PCI and PCIe: every bus scanned through the configuration ports, `lspci` with the BARs and capabilities
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
@@ -72,7 +73,7 @@ kernel/
   sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
   drivers/       apic/, pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR), pci/
   fs/            file system interface, fat16, vfs, mounting the disks
-  firmware/      acpi/ (the tables, the MADT), bios, smbios
+  firmware/      acpi/ (the tables, the MADT), smbios/ (the 2.x structures)
   lib/           small header-only helpers
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
@@ -90,7 +91,8 @@ The subsystem directories have a README that explains the concept, the usual way
 with diagrams and references:
 [mm](kernel/mm/README.md), [sched](kernel/sched/README.md),
 [drivers](kernel/drivers/README.md), [interrupts](kernel/arch/x86_64/idt/README.md),
-[ACPI](kernel/firmware/acpi/README.md), [APIC](kernel/drivers/apic/README.md).
+[ACPI](kernel/firmware/acpi/README.md), [APIC](kernel/drivers/apic/README.md),
+[SMBIOS](kernel/firmware/smbios/README.md).
 
 ## Documentation
 

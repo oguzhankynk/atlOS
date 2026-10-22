@@ -23,6 +23,7 @@ class VGATextConsole;
 
 namespace Firmware {
 class AcpiTables;
+class SmbiosTables;
 }
 
 namespace Fs {
@@ -53,6 +54,7 @@ struct Context {
     Fs::BlockDeviceList& disks; ///< the disk command reads them
     Drivers::PciConfigSpace& pci; ///< lspci reads it
     const Firmware::AcpiTables& acpi; ///< the acpi command lists them
+    const Firmware::SmbiosTables& smbios; ///< the smbios command
     Drivers::ApicInterruptController* apic; ///< the apic command; nullptr: the PIC is in use
     const Drivers::ApicTimer* apicTimer; ///< nullptr: the PIT ticks
     Process::Runtime& runtime;

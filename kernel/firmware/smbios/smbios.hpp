@@ -1,100 +1,151 @@
 /**
  * @file smbios.hpp
  * @author Oguzhan KAYNAK
- * @brief SMBIOS fields and CIM MOF properties
- *
- * Copyright © 2024 Oguzhan KAYNAK
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software
- * without  restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
+ * @brief SMBIOS 2.x: finding the entry point in the BIOS area, walking the
+ * structure table, reading a structure's fields and strings.
  */
 
 #pragma once
 
-#include <firmware/smbios/baseboard_information.hpp>
-#include <firmware/smbios/bios_information.hpp>
-#include <firmware/smbios/end_of_table.hpp>
-#include <firmware/smbios/memory_array_mapped_address.hpp>
-#include <firmware/smbios/memory_device.hpp>
-#include <firmware/smbios/physical_memory_array.hpp>
-#include <firmware/smbios/processor_information.hpp>
-#include <firmware/smbios/system_boot_information.hpp>
-#include <firmware/smbios/system_enclosure_chassis.hpp>
-#include <firmware/smbios/system_information.hpp>
+#include <stddef.h>
+#include <stdint.h>
 
-/// @brief Structure representing the SMBIOS Entry Point.
-/// @brief Structure representing the SMBIOS Entry Point.
-struct SMBIOSEntryPoint {
-    char signature[4]; ///< Signature identifying the SMBIOS Entry Point.
-    uint8_t checksum; ///< Checksum of the Entry Point structure.
-    uint8_t length; ///< Length of the Entry Point structure.
-    uint8_t majorVersion; ///< Major version of the SMBIOS specification.
-    uint8_t minorVersion; ///< Minor version of the SMBIOS specification.
-    uint16_t maximumStructureSize; ///< Maximum size of the SMBIOS structure.
-    uint8_t entryPointRevision; ///< Revision of the Entry Point structure.
-    char formattedArea[5]; ///< Formatted area.
-    char intermediateAnchor[5]; ///< Intermediate anchor string.
-    uint8_t intermediateChecksum; ///< Checksum of the intermediate structure.
-    uint16_t structureTableLength; ///< Length of the structure table.
-    uint32_t structureTableAddress; ///< Address of the structure table.
-    uint16_t numberOfStructures; ///< Number of structures in the structure table.
-    uint8_t bcdRevision; ///< BCD revision.
+namespace Firmware {
+
+/// Where a BIOS puts the 2.x entry point: on a 16 byte boundary in 0xF0000 .. 0xFFFFF
+static constexpr uint64_t smbiosAreaStart = 0xF0000;
+static constexpr uint64_t smbiosAreaSize = 0x10000;
+
+/// The SMBIOS 2.1 entry point (31 bytes)
+struct [[gnu::packed]] SmbiosEntryPoint {
+    char anchor[4]; ///< "_SM_"
+    uint8_t checksum; ///< the length bytes add up to 0
+    uint8_t length; ///< 0x1F
+    uint8_t majorVersion;
+    uint8_t minorVersion;
+    uint16_t maxStructureSize;
+    uint8_t revision;
+    uint8_t formattedArea[5];
+    char intermediateAnchor[5]; ///< "_DMI_"
+    uint8_t intermediateChecksum; ///< the 15 bytes from intermediateAnchor add up to 0
+    uint16_t tableLength; ///< of the structure table, in bytes
+    uint32_t tableAddress; ///< physical address of the structure table
+    uint16_t structureCount;
+    uint8_t bcdRevision;
 };
 
-/// @brief Class for handling SMBIOS data.
-class SMBIOS {
+/// The anchors, both checksums and a sane length
+bool smbiosEntryIsValid(const SmbiosEntryPoint& entry);
+
+/**
+ * @brief Look for a valid 2.x entry point ("_SM_") on the 16 byte boundaries
+ * of [area, area + size). A 3.0 entry point ("_SM3_") is not read; seenVersion3
+ * tells whether there was one.
+ * @return The entry point, or nullptr.
+ */
+const SmbiosEntryPoint* findSmbios(const void* area, size_t size, bool& seenVersion3);
+
+/**
+ * @brief One structure of the table: the formatted area (type, length, handle,
+ * then the fields of its type) followed by its strings, each ended by a NUL,
+ * the set ended by one more NUL. Fields refer to strings by number, from 1.
+ */
+class SmbiosStructure {
 public:
-    /// @brief Default constructor.
-    SMBIOS();
+    SmbiosStructure() = default;
+    SmbiosStructure(const uint8_t* data, const char* strings, uint32_t stringsSize)
+        : m_data(data)
+        , m_strings(strings)
+        , m_stringsSize(stringsSize)
+    {
+    }
 
-    /// @brief Prints the SMBIOS entry point information.
-    void printEntryPoint() const;
+    uint8_t type() const { return m_data[0]; }
+    uint8_t length() const { return m_data[1]; } ///< of the formatted area
+    uint16_t handle() const { return word(2); }
+    const uint8_t* data() const { return m_data; }
+    uint32_t stringsSize() const { return m_stringsSize; }
 
-    /// @brief Prints the BIOS information.
-    void printBIOSInformation() const;
+    /// The formatted area has [offset, offset + size): older versions have shorter structures
+    bool has(uint32_t offset, uint32_t size) const { return offset + size <= length(); }
 
-    /// @brief Prints the system information.
-    void printSystemInformation() const;
+    /// Little endian fields; 0 beyond the formatted area
+    uint8_t byte(uint32_t offset) const { return has(offset, 1) ? m_data[offset] : 0; }
+    uint16_t word(uint32_t offset) const;
+    uint32_t dword(uint32_t offset) const;
+    uint64_t qword(uint32_t offset) const;
 
-    /// @brief Prints the baseboard information.
-    void printBaseBoardInformation() const;
+    /// String number (1 ..); "" for 0 (none) and for a number past the last string
+    const char* string(uint8_t number) const;
 
-    /// @brief Prints the baseboard information.
-    void printSystemEnclosureChassis() const;
+    /// The string whose number is the byte at offset
+    const char* stringAt(uint32_t offset) const { return string(byte(offset)); }
 
-    /// @brief Prints the Processor Information.
-    void printProcessorInformation() const;
-
-    /// @brief Prints the PhysicalMemoryArray Information.
-    void printPhysicalMemoryArray() const;
-
-    /// @brief Prints the PhysicalMemoryArray Information.
-    void printMemoryDevice() const;
-
-    /// @brief Prints the MemoryArrayMappedAddress.
-    void printMemoryArrayMappedAddress() const;
-
-    /// @brief Prints the SystemBootInformation.
-    void printSystemBootInformation() const;
+    uint32_t stringCount() const;
 
 private:
-    SMBIOSEntryPoint m_SMBIOSEntryPoint; ///< SMBIOS entry point structure.
-    BIOSInformation m_BIOSInformation; ///< BIOS information structure.
-    SystemInformation m_SystemInformation; ///< System information structure.
-    BaseBoardInformation m_BaseBoardInformation; ///< BaseBoardInformation structure.
-    SystemEnclosureChassis m_SystemEnclosureChassis; ///< SystemEnclosureChassis structure.
-    ProcessorInformation m_ProcessorInformation; ///< ProcessorInformation structure.
-    PhysicalMemoryArray m_PhysicalMemoryArray; ///< PhysicalMemoryArray structure.
-    MemoryDevice m_MemoryDevice; ///< MemoryDevice structure.
-    MemoryArrayMappedAddress m_MemoryArrayMappedAddress; ///< MemoryDevice structure.
-    SystemBootInformation m_SystemBootInformation; ///< System Boot Information
-    EndOfTable m_EndOfTable; ///< System Boot Information
+    const uint8_t* m_data {};
+    const char* m_strings {};
+    uint32_t m_stringsSize {};
 };
+
+/// The kinds of structure atlOS decodes (one file each); smbiosTypeName knows more
+enum SmbiosType : uint8_t {
+    SmbiosBios = 0,
+    SmbiosSystem = 1,
+    SmbiosBaseboard = 2,
+    SmbiosProcessor = 4,
+    SmbiosMemoryDevice = 17,
+    SmbiosEndOfTable = 127,
+};
+
+/// The name of a structure type ("Processor"), "" for one atlOS does not know
+const char* smbiosTypeName(uint8_t type);
+
+/**
+ * @brief The structures of the table the entry point describes, read in
+ * place through the physmap.
+ */
+class SmbiosTables {
+public:
+    static constexpr uint32_t maxStructures = 128;
+
+    SmbiosTables() = default;
+    SmbiosTables(const SmbiosTables&) = delete;
+    SmbiosTables& operator=(const SmbiosTables&) = delete;
+
+    /**
+     * @brief Check the entry point and list the structures, up to the end of
+     * table structure (type 127) or the table's length. A structure that runs
+     * past the table ends the list there (truncated()).
+     * @return false (nothing listed) if the entry point is not valid or the table is outside the physmap.
+     */
+    bool load(const SmbiosEntryPoint& entry);
+
+    bool isLoaded() const { return m_loaded; }
+    uint8_t majorVersion() const { return m_major; }
+    uint8_t minorVersion() const { return m_minor; }
+    uint64_t tableAddress() const { return m_tableAddress; }
+    uint32_t tableLength() const { return m_tableLength; }
+
+    /// A structure ran past the end of the table; the ones before it are listed
+    bool truncated() const { return m_truncated; }
+
+    uint32_t count() const { return m_count; }
+    const SmbiosStructure& at(uint32_t index) const { return m_structures[index]; }
+
+    /// The index-th structure (from 0) of this type, or nullptr
+    const SmbiosStructure* find(uint8_t type, uint32_t index = 0) const;
+
+private:
+    bool m_loaded {};
+    bool m_truncated {};
+    uint8_t m_major {};
+    uint8_t m_minor {};
+    uint64_t m_tableAddress {};
+    uint32_t m_tableLength {};
+    SmbiosStructure m_structures[maxStructures] {};
+    uint32_t m_count {};
+};
+
+} // namespace Firmware

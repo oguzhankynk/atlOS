@@ -35,9 +35,14 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   the routes
 - `AddressSpace::mapDevice` (uncached MMIO mappings), `Drivers::pitBusyWait`
   (PIT channel 2, polled)
+- SMBIOS 2.x: `Firmware::findSmbios` (the BIOS area, `_SM_` and `_DMI_`
+  checked; a `_SM3_` is reported, not read), `SmbiosTables` (a walk bounded
+  by the table length), `SmbiosStructure` (fields beyond the length read as
+  0, strings by number), decoders for types 0, 1, 2, 4 and 17; the shell's
+  `smbios [type]`
 - Self tests for the scan, `lspci`, the system calls, the arguments, the ACPI
-  tables, the MADT and the APIC (842 checks); the shell test types into a
-  program and reads the APIC (49 steps)
+  tables, the MADT, the APIC and SMBIOS (882 checks); the shell test types
+  into a program and reads the APIC and SMBIOS (52 steps)
 
 ### Changed
 
@@ -46,6 +51,11 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - With ACPI the IRQs arrive through the I/O APIC and the scheduler ticks on
   the local APIC timer; the 8259 PIC stays masked. Without ACPI the PIC and
   the PIT are used as before
+
+### Removed
+
+- The old SMBIOS code (`firmware/bios/`, the types 3, 16, 19, 32 and 127
+  classes), which was not called and read the structures in a fixed order
 
 ## [0.4.0] - 2026-10-22
 

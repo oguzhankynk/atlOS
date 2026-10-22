@@ -65,6 +65,7 @@
 #include <drivers/tee_sink.hpp>
 #include <firmware/acpi/acpi.hpp>
 #include <firmware/acpi/madt.hpp>
+#include <firmware/smbios/smbios.hpp>
 #include <shell/interpreter.hpp>
 
 #include <core/halt.hpp>
@@ -80,6 +81,7 @@ static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
 static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
 static Cxx::Uninitialized<Firmware::AcpiTables> s_acpi;
 static Firmware::MadtInfo s_madt;
+static Cxx::Uninitialized<Firmware::SmbiosTables> s_smbios;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
 static Cxx::Uninitialized<Drivers::LocalApic> s_localApic;
@@ -184,6 +186,17 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     else
         printf("ACPI: no tables\n");
 
+    // SMBIOS: what the firmware says about the board, the processors and the
+    // memory modules. Only the 2.x entry point, which a BIOS puts below 1 MB
+    Firmware::SmbiosTables& smbios = s_smbios.construct();
+    bool smbiosVersion3 = false;
+    const Firmware::SmbiosEntryPoint* smbiosEntry
+        = Firmware::findSmbios(Memory::physToVirt(Firmware::smbiosAreaStart), Firmware::smbiosAreaSize, smbiosVersion3);
+    if (smbiosEntry && smbios.load(*smbiosEntry))
+        printf("SMBIOS: %u.%u, %u structures\n", smbios.majorVersion(), smbios.minorVersion(), smbios.count());
+    else
+        printf("SMBIOS: %s\n", smbiosVersion3 ? "only a 3.0 entry point, not read" : "no entry point");
+
     // Interrupt controller: the APIC if the MADT describes one, else the 8259
     // PIC. The PIC is set up in both cases: with the APIC it stays masked.
     // The ISR dispatcher is the one place that needs the controller without
@@ -221,7 +234,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 #ifdef ATLOS_SELFTEST
     SelfTest::Interrupts tested { acpi, interrupts, apic, apicTimer,
         apicTimer ? Drivers::ApicInterruptController::timerVector : Drivers::PIC::vectorBase };
-    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime, input, tested);
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime, input, tested, smbios);
     Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
 #endif
 
@@ -234,7 +247,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     serial.startReceiving(interrupts, input);
 
     // Runs in the boot flow (task 0) for good; reading sleeps in hlt
-    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, s_pci, acpi, apic, apicTimer, runtime, &vga,
+    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, s_pci, acpi, smbios, apic, apicTimer, runtime, &vga,
         serial.isPresent() ? &serial : nullptr };
     s_shell.construct(input, s_context).run();
 }

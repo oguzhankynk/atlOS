@@ -46,6 +46,12 @@
 #include <drivers/vga_console.hpp>
 #include <firmware/acpi/acpi.hpp>
 #include <firmware/acpi/madt.hpp>
+#include <firmware/smbios/baseboard_information.hpp>
+#include <firmware/smbios/bios_information.hpp>
+#include <firmware/smbios/memory_device.hpp>
+#include <firmware/smbios/processor_information.hpp>
+#include <firmware/smbios/smbios.hpp>
+#include <firmware/smbios/system_information.hpp>
 #include <fs/fat16.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
@@ -2945,6 +2951,202 @@ static void testApicOnMachine(Scheduler& scheduler, const Interrupts& interrupts
 }
 
 // ------------------------------------------------------------
+// SMBIOS
+// ------------------------------------------------------------
+
+// A made up SMBIOS 2.8 table: BIOS, system, a processor of the 2.0 length,
+// two memory devices (16 GB through the extended size, 512 KB), an OEM
+// structure without strings, the end of table
+static const uint8_t s_fakeSmbiosTable[] = {
+    // type 0, handle 0x0000
+    0, 0x18, 0x00, 0x00, 1, 2, 0x00, 0xE8, 3, 0, 0x08, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0xFF, 0xFF,
+    'a', 't', 'l', 'O', 'S', ' ', 'B', 'I', 'O', 'S', 0, '1', '.', '0', 0, '1', '0', '/', '2', '2', '/', '2', '0', '2', '6', 0, 0,
+    // type 1, handle 0x0100: UUID 00112233-4455-6677-8899-aabbccddeeff (little endian fields)
+    1, 0x1B, 0x00, 0x01, 1, 2, 0, 3, 0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD,
+    0xEE, 0xFF, 6, 0, 4,
+    'a', 't', 'l', 'O', 'S', 0, 'T', 'e', 's', 't', ' ', 'P', 'C', 0, 'S', 'N', '-', '1', 0, 'F', 'a', 'm', 'i', 'l', 'y', 0, 0,
+    // type 4, handle 0x0400, 2.0 length: no serial number, no core count
+    4, 0x1A, 0x00, 0x04, 1, 3, 0xC6, 2, 0x63, 0x06, 0x09, 0x00, 0xFF, 0xFB, 0x8B, 0x07, 3, 0x8C, 100, 0, 0xB8, 0x0B,
+    0xD0, 0x07, 0x41, 1,
+    'C', 'P', 'U', ' ', '0', 0, 'G', 'e', 'n', 'u', 'i', 'n', 'e', 0, 'T', 'e', 's', 't', ' ', 'C', 'P', 'U', 0, 0,
+    // type 17, handle 0x1100: size 0x7FFF, the extended size 16384 MB, DDR4 3200
+    17, 0x28, 0x00, 0x11, 0x00, 0x10, 0xFE, 0xFF, 72, 0, 64, 0, 0xFF, 0x7F, 0x09, 0, 1, 2, 0x1A, 0x80, 0x00, 0x80, 0x0C,
+    3, 4, 0, 5, 1, 0x00, 0x40, 0, 0, 0x75, 0x0B, 0, 0, 0, 0, 0, 0,
+    'D', 'I', 'M', 'M', ' ', '0', 0, 'B', 'A', 'N', 'K', ' ', '0', 0, 'R', 'A', 'M', 0, 'S', 'N', '-', '2', 0, 'P', 'A', 'R',
+    'T', '-', '1', 0, 0,
+    // type 17, handle 0x1101, 2.1 length: 512 KB (bit 15: in KB)
+    17, 0x15, 0x01, 0x11, 0x00, 0x10, 0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x82, 0x09, 0, 1, 0, 0x07, 0, 0,
+    'D', 'I', 'M', 'M', ' ', '1', 0, 0,
+    // type 200 (OEM), handle 0xC800, no strings
+    200, 5, 0x00, 0xC8, 0x42, 0, 0,
+    // type 127, the end
+    127, 4, 0xFF, 0xFF, 0, 0
+};
+
+struct FakeSmbios {
+    alignas(16) uint8_t table[sizeof(s_fakeSmbiosTable)];
+    Firmware::SmbiosEntryPoint entry;
+};
+
+static void sealSmbios(Firmware::SmbiosEntryPoint& entry)
+{
+    auto bytes = reinterpret_cast<uint8_t*>(&entry);
+    entry.intermediateChecksum = 0;
+    entry.intermediateChecksum = -byteSum(bytes + 0x10, 15);
+    entry.checksum = 0;
+    entry.checksum = -byteSum(bytes, entry.length);
+}
+
+static void buildFakeSmbios(FakeSmbios& fake, AddressSpace& space)
+{
+    memcpy(fake.table, s_fakeSmbiosTable, sizeof(fake.table));
+    uint64_t physical = 0;
+    space.translate(fake.table, physical);
+
+    memset(&fake.entry, 0, sizeof(fake.entry));
+    memcpy(fake.entry.anchor, "_SM_", 4);
+    fake.entry.length = sizeof(fake.entry);
+    fake.entry.majorVersion = 2;
+    fake.entry.minorVersion = 8;
+    fake.entry.maxStructureSize = 0x3F;
+    memcpy(fake.entry.intermediateAnchor, "_DMI_", 5);
+    fake.entry.tableLength = sizeof(fake.table);
+    fake.entry.tableAddress = static_cast<uint32_t>(physical);
+    fake.entry.structureCount = 7;
+    fake.entry.bcdRevision = 0x28;
+    sealSmbios(fake.entry);
+}
+
+static void testSmbios(AddressSpace& space)
+{
+    group("SMBIOS (made up)");
+
+    static FakeSmbios s_fake;
+    buildFakeSmbios(s_fake, space);
+    static Firmware::SmbiosTables s_tables;
+    CHECK(Firmware::smbiosEntryIsValid(s_fake.entry));
+    CHECK(s_tables.load(s_fake.entry) && s_tables.isLoaded() && !s_tables.truncated());
+    CHECK(s_tables.count() == 7 && s_tables.majorVersion() == 2 && s_tables.minorVersion() == 8);
+    CHECK(s_tables.at(6).type() == Firmware::SmbiosEndOfTable && s_tables.at(5).handle() == 0xC800);
+
+    // Finding by type; the strings by number
+    const Firmware::SmbiosStructure* second = s_tables.find(Firmware::SmbiosMemoryDevice, 1);
+    CHECK(second && second->handle() == 0x1101 && !s_tables.find(Firmware::SmbiosMemoryDevice, 2) && !s_tables.find(3));
+    const Firmware::SmbiosStructure& bios = s_tables.at(0);
+    CHECK(bios.stringCount() == 3 && !strcmp(bios.string(1), "atlOS BIOS") && !strcmp(bios.string(3), "10/22/2026"));
+    CHECK(!strcmp(bios.string(0), "") && !strcmp(bios.string(4), ""));
+    CHECK(s_tables.at(5).stringCount() == 0 && s_tables.at(5).stringsSize() == 2 && !strcmp(s_tables.at(5).string(1), ""));
+    CHECK(bios.word(0x06) == 0xE800 && bios.byte(0x18) == 0 && bios.qword(0x20) == 0); // beyond the formatted area
+
+    // The decoders
+    Firmware::BiosInformation biosInfo;
+    CHECK(Firmware::decodeBiosInformation(bios, biosInfo) && !strcmp(biosInfo.vendor, "atlOS BIOS")
+        && !strcmp(biosInfo.version, "1.0") && biosInfo.romSizeKb == 64 && biosInfo.startSegment == 0xE800);
+    CHECK(biosInfo.characteristics == 0x08 && biosInfo.hasRelease && biosInfo.releaseMajor == 1 && biosInfo.releaseMinor == 2);
+
+    Firmware::SystemInformation system;
+    CHECK(Firmware::decodeSystemInformation(s_tables.at(1), system) && !strcmp(system.manufacturer, "atlOS")
+        && !strcmp(system.product, "Test PC") && !strcmp(system.version, "") && !strcmp(system.serialNumber, "SN-1"));
+    CHECK(system.hasUuid && system.uuid[0] == 0x33 && system.uuid[15] == 0xFF && system.wakeUpType == 6
+        && !strcmp(system.sku, "") && !strcmp(system.family, "Family"));
+
+    Firmware::ProcessorInformation cpu;
+    CHECK(Firmware::decodeProcessorInformation(s_tables.at(2), cpu) && !strcmp(cpu.socket, "CPU 0")
+        && !strcmp(cpu.manufacturer, "Genuine") && !strcmp(cpu.version, "Test CPU"));
+    CHECK(cpu.family == 0xC6 && cpu.id == 0x078BFBFF00090663ULL && cpu.externalClockMhz == 100 && cpu.maxSpeedMhz == 3000
+        && cpu.currentSpeedMhz == 2000 && cpu.status == 0x41);
+    CHECK(cpu.coreCount == 0 && !strcmp(cpu.serialNumber, "")); // not in a 2.0 structure
+
+    Firmware::MemoryDevice dimm;
+    CHECK(Firmware::decodeMemoryDevice(s_tables.at(3), dimm) && dimm.sizeKnown && dimm.sizeKb == 16ULL * 1024 * 1024
+        && dimm.memoryType == 0x1A && !strcmp(Firmware::smbiosMemoryTypeName(dimm.memoryType), "DDR4"));
+    CHECK(dimm.speedMts == 3200 && dimm.configuredSpeedMts == 2933 && !strcmp(dimm.deviceLocator, "DIMM 0")
+        && !strcmp(dimm.partNumber, "PART-1") && !strcmp(dimm.assetTag, "") && dimm.totalWidth == 72);
+    CHECK(second && Firmware::decodeMemoryDevice(*second, dimm) && dimm.sizeKb == 512 && dimm.speedMts == 0
+        && !strcmp(dimm.manufacturer, "") && !strcmp(dimm.bankLocator, ""));
+
+    // A structure of another type, or too short for its own
+    CHECK(!Firmware::decodeBiosInformation(s_tables.at(1), biosInfo) && !Firmware::decodeMemoryDevice(bios, dimm));
+    Firmware::BaseboardInformation board;
+    CHECK(!Firmware::decodeBaseboardInformation(s_tables.at(1), board));
+    CHECK(!strcmp(Firmware::smbiosTypeName(4), "Processor") && !strcmp(Firmware::smbiosTypeName(200), "OEM specific")
+        && !strcmp(Firmware::smbiosTypeName(99), ""));
+
+    // Entry points that are refused: anchor, checksum, "_DMI_", a table beyond the physmap
+    Firmware::SmbiosEntryPoint entry = s_fake.entry;
+    entry.anchor[3] = 'X';
+    sealSmbios(entry);
+    CHECK(!s_tables.load(entry) && !s_tables.isLoaded() && s_tables.count() == 0);
+    entry = s_fake.entry;
+    entry.checksum++;
+    CHECK(!Firmware::smbiosEntryIsValid(entry));
+    entry = s_fake.entry;
+    entry.intermediateAnchor[0] = 'X';
+    sealSmbios(entry);
+    CHECK(!Firmware::smbiosEntryIsValid(entry));
+    entry = s_fake.entry;
+    entry.intermediateChecksum++;
+    entry.checksum--; // the outer sum still 0
+    CHECK(!Firmware::smbiosEntryIsValid(entry));
+
+    // A structure longer than the table, strings without their end: the list stops there
+    CHECK(s_tables.load(s_fake.entry));
+    auto tableStart = static_cast<const uint8_t*>(physToVirt(s_tables.tableAddress()));
+    auto processorOffset = static_cast<uint32_t>(s_tables.at(2).data() - tableStart);
+    s_fake.table[processorOffset + 1] = 0xFF;
+    CHECK(s_tables.load(s_fake.entry) && s_tables.truncated() && s_tables.count() == 2);
+    s_fake.table[processorOffset + 1] = 0x1A;
+    entry = s_fake.entry;
+    entry.tableLength = processorOffset + 0x1A + 4; // inside the processor's strings
+    sealSmbios(entry);
+    CHECK(s_tables.load(entry) && s_tables.truncated() && s_tables.count() == 2);
+
+    // Finding the entry point: 16 byte boundaries only; a 3.0 one is seen but not read
+    alignas(16) static uint8_t s_area[256];
+    memset(s_area, 0, sizeof(s_area));
+    memcpy(s_area + 0x20, "_SM3_", sizeof("_SM3_")); // the NUL too: the scan reads 5 bytes
+    memcpy(s_area + 0x40, &s_fake.entry, sizeof(s_fake.entry));
+    bool version3 = false;
+    CHECK(Firmware::findSmbios(s_area, sizeof(s_area), version3) == reinterpret_cast<void*>(s_area + 0x40) && version3);
+    memset(s_area + 0x40, 0, sizeof(s_fake.entry));
+    CHECK(Firmware::findSmbios(s_area, sizeof(s_area), version3) == nullptr && version3);
+    memcpy(s_area + 0x48, &s_fake.entry, sizeof(s_fake.entry));
+    memset(s_area + 0x20, 0, 5);
+    CHECK(Firmware::findSmbios(s_area, sizeof(s_area), version3) == nullptr && !version3);
+}
+
+static void testSmbiosOnMachine(const Firmware::SmbiosTables& tables)
+{
+    group("SMBIOS on this machine");
+
+    if (!tables.isLoaded()) {
+        printf("[SELFTEST] skipped: no SMBIOS 2.x entry point\n");
+        return;
+    }
+
+    // QEMU's SeaBIOS: a BIOS, a system by "QEMU", a processor, 512 MB of memory devices, the end
+    CHECK(tables.majorVersion() == 2 && tables.count() >= 5 && !tables.truncated());
+    CHECK(tables.at(tables.count() - 1).type() == Firmware::SmbiosEndOfTable);
+    Firmware::BiosInformation bios;
+    const Firmware::SmbiosStructure* s = tables.find(Firmware::SmbiosBios);
+    CHECK(s && Firmware::decodeBiosInformation(*s, bios) && bios.vendor[0]);
+    Firmware::SystemInformation system;
+    s = tables.find(Firmware::SmbiosSystem);
+    CHECK(s && Firmware::decodeSystemInformation(*s, system) && !strcmp(system.manufacturer, "QEMU"));
+    Firmware::ProcessorInformation cpu;
+    s = tables.find(Firmware::SmbiosProcessor);
+    CHECK(s && Firmware::decodeProcessorInformation(*s, cpu) && (cpu.status & 0x40));
+
+    uint64_t totalKb = 0;
+    Firmware::MemoryDevice dimm;
+    for (uint32_t i = 0; (s = tables.find(Firmware::SmbiosMemoryDevice, i)); i++) {
+        if (Firmware::decodeMemoryDevice(*s, dimm))
+            totalKb += dimm.sizeKb;
+    }
+    CHECK(totalKb == 512ULL * 1024); // the test scripts start QEMU with -m 512M
+}
+
+// ------------------------------------------------------------
 // Shell
 // ------------------------------------------------------------
 
@@ -3115,7 +3317,11 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     buildFakeAcpi(s_fakeAcpi, space);
     static Firmware::AcpiTables s_acpi;
     CHECK(s_acpi.load(s_fakeAcpi.rsdp));
-    Shell::Context context { pmm, space, vfs, disks, pci, s_acpi, nullptr, nullptr, runtime, nullptr, nullptr };
+    static FakeSmbios s_fakeSmbios;
+    buildFakeSmbios(s_fakeSmbios, space);
+    static Firmware::SmbiosTables s_smbios;
+    CHECK(s_smbios.load(s_fakeSmbios.entry));
+    Shell::Context context { pmm, space, vfs, disks, pci, s_acpi, s_smbios, nullptr, nullptr, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -3258,6 +3464,19 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
         && (runCommand(shell, sink, "acpi AP"), sink.contains("a signature of 4 letters"));
     bool apicPic = (runCommand(shell, sink, "apic"), sink.contains("the 8259 PIC delivers the IRQs"));
 
+    // smbios on the made up table: the list, one type decoded, errors
+    bool smbiosList = (runCommand(shell, sink, "smbios"), sink.contains("SMBIOS 2.8, 7 structures"))
+        && sink.contains("0x1100    17      40        5  Memory device") && sink.contains("OEM specific");
+    bool smbiosMemory = (runCommand(shell, sink, "smbios 17"), sink.contains("locator        DIMM 0"))
+        && sink.contains("size           16 GB") && sink.contains("0x1a DDR4") && sink.contains("size           512 KB")
+        && sink.contains("3200 MT/s (configured 2933 MT/s)") && sink.contains("strings: 1 \"DIMM 0\" 2 \"BANK 0\"");
+    bool smbiosSystem = (runCommand(shell, sink, "smbios 1"), sink.contains("UUID           00112233-4455-6677-8899-aabbccddeeff"))
+        && sink.contains("product        Test PC") && !sink.contains("version   ");
+    bool smbiosCpu = (runCommand(shell, sink, "smbios 4"), sink.contains("2000 MHz (max 3000 MHz, external clock 100 MHz)"))
+        && sink.contains("0x41 (populated, enabled)") && sink.contains("0000000000000000  04 1a 00 04");
+    bool smbiosBad = (runCommand(shell, sink, "smbios 3"), sink.contains("no structure of type 3"))
+        && (runCommand(shell, sink, "smbios 300"), sink.contains("a type 0 .. 255"));
+
     bool diskBad = (runCommand(shell, sink, "disk read 0 9"), sink.contains("a count of 1 .. 8"))
         && (runCommand(shell, sink, "disk read 0 1 nope"), sink.contains("no such device"))
         && (runCommand(shell, sink, "disk read 99999"), sink.contains("can not read sector"));
@@ -3285,6 +3504,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(disk && diskRead && diskSecond && diskBad);
     CHECK(lspci && lspciBars && lspciDetails && lspciBad);
     CHECK(acpiList && acpiMadt && acpiBad && apicPic);
+    CHECK(smbiosList && smbiosMemory && smbiosSystem && smbiosCpu && smbiosBad);
     CHECK(version);
     CHECK(unknown && usageShown && quote && nothing);
 
@@ -3602,7 +3822,8 @@ static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
 }
 
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
-    Process::Runtime& runtime, Drivers::CharacterQueue& input, const Interrupts& interrupts)
+    Process::Runtime& runtime, Drivers::CharacterQueue& input, const Interrupts& interrupts,
+    const Firmware::SmbiosTables& smbios)
 {
     printf("[SELFTEST] start\n");
 
@@ -3647,6 +3868,8 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testAcpiTables(space);
     testMadt(space);
     testApicOnMachine(scheduler, interrupts);
+    testSmbios(space);
+    testSmbiosOnMachine(smbios);
     testFat16Names();
     testFat16();
     testFat16Write();

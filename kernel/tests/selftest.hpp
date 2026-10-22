@@ -28,6 +28,7 @@ class InterruptController;
 
 namespace Firmware {
 class AcpiTables;
+class SmbiosTables;
 }
 
 namespace Fs {
@@ -60,10 +61,12 @@ struct Interrupts {
  * @param runtime Runs the user programs from the test disk (/disk0/BIN).
  * @param input The runtime's keyboard queue: the tests type into it.
  * @param interrupts The interrupt controller and tick in use (the APIC tests).
+ * @param smbios The machine's SMBIOS tables (empty if there were none).
  *
  * @return Number of failed checks.
  */
 int run(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
-    Process::Runtime& runtime, Drivers::CharacterQueue& input, const Interrupts& interrupts);
+    Process::Runtime& runtime, Drivers::CharacterQueue& input, const Interrupts& interrupts,
+    const Firmware::SmbiosTables& smbios);
 
 } // namespace SelfTest
