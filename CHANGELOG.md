@@ -7,6 +7,8 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
 ### Added
 
 - PCI and PCIe: `Drivers::PciConfigSpace` (ports `0xCF8`/`0xCFC`,
@@ -44,8 +46,13 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   tables, the MADT, the APIC and SMBIOS (882 checks); the shell test types
   into a program and reads the APIC and SMBIOS (52 steps)
 
+- An animated GIF of the boot and the shell at the top of the README
+  (`scripts/make-demo-gif.py`)
+
 ### Changed
 
+- The banner puts the version and the description on two lines (a
+  development build's `git describe` made it wrap)
 - `run` waits until the program exits; the keys typed meanwhile go to the
   program
 - With ACPI the IRQs arrive through the I/O APIC and the scheduler ticks on
@@ -285,7 +292,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0
