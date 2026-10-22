@@ -30,9 +30,10 @@ same binary). Doxygen gets the version through `ATLOS_VERSION`.
 
 ## Branches
 
-- `development`: day to day work, the default branch
-- `master`: released versions only; every commit on it is a release merge
-  and carries a `vX.Y.Z` tag
+- `development`: day to day work
+- `master`: released versions only, the default branch (what GitHub shows
+  first is the last release); every commit on it is a release merge and
+  carries a `vX.Y.Z` tag
 
 ## Making a release
 
