@@ -46,6 +46,7 @@ void atlOSBanner()
     printf("\n");
     for (const char* line : s_banner)
         printf("%s\n", line);
-    printf("\n  " BRIGHT "atlOS %s" RESET DIM " (%s)  x86_64, a small kernel to learn how an OS works" RESET "\n\n",
-        ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
+    // Two lines: a development build's git describe is long, and the screen has 80 columns
+    printf("\n  " BRIGHT "atlOS %s" RESET DIM " (%s)" RESET "\n", ATLOS_VERSION_STRING, ATLOS_GIT_DESCRIBE);
+    printf("  " DIM "x86_64, a small kernel to learn how an OS works" RESET "\n\n");
 }

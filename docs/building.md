@@ -45,7 +45,7 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 |---|---|
 | `scripts/build.sh` / `scripts/build.sh all` | build libc, kernel and `build/default/atlOS.iso` |
 | `scripts/build.sh iso` | build the ISO |
-| `scripts/build.sh run` | boot the ISO in QEMU with the test disk, the serial console (boot messages, then the shell) on the terminal (Ctrl-C quits); see the [screenshot](images/ss.png) |
+| `scripts/build.sh run` | boot the ISO in QEMU with the test disk, the serial console (boot messages, then the shell) on the terminal (Ctrl-C quits); the VGA screen looks like [the README's GIF](images/demo.gif) |
 | `scripts/build.sh debug` | boot the ISO in QEMU halted, waiting for gdb on `localhost:1234`; serial on `telnet localhost 4321` |
 | `scripts/build.sh selftest` | build the self test kernel in `build/selftest/` and run it, see [testing.md](testing.md) |
 | `scripts/build.sh crashtest` | build a kernel that faults on purpose in `build/crashtest/` and check its report |
@@ -132,3 +132,11 @@ test disk as `/BIN/<NAME>.ELF`. Run one from the shell:
 types a few shell commands over the serial port and saves the VGA screen
 (QEMU's `screendump`) as `boot.png` and `shell.png`, e.g. for the wiki.
 
+
+`scripts/make-demo-gif.py <iso> <disk.img> <out.gif>` records the animated
+GIF of the README (`docs/images/demo.gif`): the boot from SeaBIOS through
+GRUB to the prompt, then a few commands typed one key at a time. The boot is
+faster than a screendump, so it runs in 20 ms slices with the VM stopped for
+each picture and plays slowed down; repeated pictures become one longer
+frame, and the 16 colors of text mode keep the file small. Record it from a
+committed tree, on a release tag the banner shows just `(vX.Y.Z)`.

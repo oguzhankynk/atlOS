@@ -19,9 +19,22 @@
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <core/version.hpp>
+#include <drivers/apic/apic.hpp>
+#include <drivers/apic/apic_timer.hpp>
+#include <drivers/apic/io_apic.hpp>
+#include <drivers/apic/local_apic.hpp>
 #include <drivers/disk/block_device.hpp>
+#include <drivers/pci/pci.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/vga_console.hpp>
+#include <firmware/acpi/acpi.hpp>
+#include <firmware/acpi/madt.hpp>
+#include <firmware/smbios/baseboard_information.hpp>
+#include <firmware/smbios/bios_information.hpp>
+#include <firmware/smbios/memory_device.hpp>
+#include <firmware/smbios/processor_information.hpp>
+#include <firmware/smbios/smbios.hpp>
+#include <firmware/smbios/system_information.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
@@ -530,6 +543,539 @@ static void cmdDisk(Interpreter& shell, int argc, char** argv)
 }
 
 // ------------------------------------------------------------
+// PCI
+// ------------------------------------------------------------
+
+using Drivers::PciAddress;
+using Drivers::PciConfigSpace;
+using Drivers::PciDevice;
+
+// "bb:dd.f" in hex, e.g. "00:1f.2"
+static bool parsePciAddress(const char* text, PciAddress& address)
+{
+    uint32_t parts[3] {};
+    const char separators[3] = { ':', '.', '\0' };
+    const uint32_t limits[3] = { 0xFF, 0x1F, 0x7 };
+    for (int part = 0; part < 3; part++) {
+        int digits = 0;
+        for (; *text && *text != separators[part]; text++, digits++) {
+            char c = *text;
+            uint32_t digit;
+            if (c >= '0' && c <= '9')
+                digit = c - '0';
+            else if (c >= 'a' && c <= 'f')
+                digit = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F')
+                digit = c - 'A' + 10;
+            else
+                return false;
+            parts[part] = parts[part] * 16 + digit;
+        }
+        if (!digits || digits > 2 || parts[part] > limits[part] || *text != separators[part])
+            return false;
+        if (*text)
+            text++;
+    }
+    address = { (uint8_t)parts[0], (uint8_t)parts[1], (uint8_t)parts[2] };
+    return true;
+}
+
+static void printBars(PciConfigSpace& config, PciAddress address, int count)
+{
+    for (int i = 0; i < count; i++) {
+        uint32_t bar = config.read32(address, (uint8_t)(Drivers::PciBar0 + i * 4));
+        if (!bar)
+            continue;
+        // Bit 0: I/O ports or memory. Memory bits 2..1: 64 bit takes this BAR and the next
+        if (bar & 1) {
+            printf("  BAR%d      I/O ports at 0x%x\n", i, bar & ~3U);
+        } else if (((bar >> 1) & 3) == 2 && i + 1 < count) {
+            uint64_t high = config.read32(address, (uint8_t)(Drivers::PciBar0 + (i + 1) * 4));
+            printf("  BAR%d      memory at 0x%lx (64 bit%s)\n", i, (high << 32) | (bar & ~0xFU),
+                bar & 8 ? ", prefetchable" : "");
+            i++;
+        } else {
+            printf("  BAR%d      memory at 0x%x (32 bit%s)\n", i, bar & ~0xFU, bar & 8 ? ", prefetchable" : "");
+        }
+    }
+}
+
+static void printCapabilities(PciConfigSpace& config, PciAddress address)
+{
+    if (!(config.read16(address, Drivers::PciStatus) & Drivers::pciStatusCapabilities))
+        return;
+
+    // A linked list in the configuration space: each entry is id, next
+    printf("  capabilities:");
+    uint8_t offset = config.read8(address, Drivers::PciCapabilities) & 0xFC;
+    for (int i = 0; offset && i < 48; i++) {
+        uint8_t id = config.read8(address, offset);
+        const char* name = Drivers::pciCapabilityName(id);
+        if (name)
+            printf(" %s (0x%02x)", name, offset);
+        else
+            printf(" 0x%02x (0x%02x)", id, offset);
+        offset = config.read8(address, (uint8_t)(offset + 1)) & 0xFC;
+    }
+    printf("\n");
+}
+
+static void printPciDetails(PciConfigSpace& config, const PciDevice& device)
+{
+    PciAddress address = device.address;
+    const char* vendor = Drivers::pciVendorName(device.vendorId);
+    printf("%02x:%02x.%x  %s\n", address.bus, address.device, address.function,
+        Drivers::pciClassName(device.classCode, device.subclass));
+    printf("  vendor    0x%04x %s\n", device.vendorId, vendor ? vendor : "");
+    printf("  device    0x%04x  revision 0x%02x\n", device.deviceId, device.revision);
+    printf("  class     0x%02x  subclass 0x%02x  prog if 0x%02x\n", device.classCode, device.subclass, device.progIf);
+
+    uint16_t command = config.read16(address, Drivers::PciCommand);
+    printf("  command   0x%04x %s%s%s%s\n", command, command & Drivers::PciCommandIo ? " I/O" : "",
+        command & Drivers::PciCommandMemory ? " memory" : "",
+        command & Drivers::PciCommandBusMaster ? " bus-master" : "",
+        command & Drivers::PciCommandNoInterrupts ? " no-INTx" : "");
+
+    // Header type 0: a device with 6 BARs; 1: a bridge to another bus, 2 BARs
+    if (device.headerType == 1) {
+        printf("  header    1 (PCI to PCI bridge), bus %u behind it\n", config.read8(address, Drivers::PciSecondaryBus));
+        printBars(config, address, 2);
+    } else {
+        printf("  header    %u%s\n", device.headerType, device.headerType == 0 ? " (device)" : "");
+        if (device.headerType == 0)
+            printBars(config, address, 6);
+    }
+
+    uint8_t pin = config.read8(address, Drivers::PciInterruptPin);
+    if (pin >= 1 && pin <= 4)
+        printf("  interrupt pin INT%c, line %u\n", 'A' + pin - 1, config.read8(address, Drivers::PciInterruptLine));
+    printCapabilities(config, address);
+
+    // The standard header, as the registers above read it
+    uint8_t header[64];
+    for (uint32_t offset = 0; offset < sizeof(header); offset += 4) {
+        uint32_t value = config.read32(address, (uint8_t)offset);
+        memcpy(header + offset, &value, 4);
+    }
+    for (uint32_t line = 0; line < sizeof(header); line += 16)
+        printDumpLine(line, header + line, 16);
+}
+
+static void cmdLspci(Interpreter& shell, int argc, char** argv)
+{
+    if (!usage("lspci", argc, 1, 2))
+        return;
+
+    static PciDevice s_devices[128];
+    PciConfigSpace& config = shell.context().pci;
+    uint32_t count = Drivers::scanPci(config, s_devices, sizeof(s_devices) / sizeof(s_devices[0]));
+
+    // lspci bb:dd.f: one function in detail
+    if (argc == 2) {
+        PciAddress address;
+        if (!parsePciAddress(argv[1], address)) {
+            printf("lspci: an address like 00:1f.2 (bus:device.function, hex)\n");
+            return;
+        }
+        for (uint32_t i = 0; i < count; i++) {
+            const PciAddress& found = s_devices[i].address;
+            if (found.bus == address.bus && found.device == address.device && found.function == address.function) {
+                printPciDetails(config, s_devices[i]);
+                return;
+            }
+        }
+        printf("lspci: no function at %s\n", argv[1]);
+        return;
+    }
+
+    // lspci: one line per function
+    for (uint32_t i = 0; i < count; i++) {
+        const PciDevice& device = s_devices[i];
+        const char* vendor = Drivers::pciVendorName(device.vendorId);
+        printf("  %02x:%02x.%x  %04x:%04x  %02x%02x  %-16s %s\n", device.address.bus, device.address.device,
+            device.address.function, device.vendorId, device.deviceId, device.classCode, device.subclass,
+            vendor ? vendor : "", Drivers::pciClassName(device.classCode, device.subclass));
+    }
+    printf("  %u function(s)\n", count);
+}
+
+// ------------------------------------------------------------
+// ACPI and the APIC
+// ------------------------------------------------------------
+
+static const char* acpiTableName(const char* signature)
+{
+    static const struct {
+        const char* signature;
+        const char* name;
+    } s_names[] = {
+        { "APIC", "interrupt controllers (MADT)" },
+        { "FACP", "fixed hardware (FADT)" },
+        { "HPET", "high precision event timer" },
+        { "MCFG", "PCIe configuration space (ECAM)" },
+        { "SSDT", "secondary AML code" },
+        { "WAET", "emulated devices" },
+        { "SRAT", "memory and processor affinity" },
+        { "BGRT", "boot logo" },
+        { "DMAR", "DMA remapping (Intel VT-d)" },
+    };
+    for (const auto& entry : s_names) {
+        if (!memcmp(entry.signature, signature, 4))
+            return entry.name;
+    }
+    return "";
+}
+
+/// "as the bus does" for 0, otherwise the polarity and the trigger mode
+static void printIntiFlags(uint16_t flags)
+{
+    uint16_t polarity = flags & Firmware::MadtPolarityMask;
+    uint16_t trigger = flags & Firmware::MadtTriggerMask;
+    printf("%s, %s", polarity == Firmware::MadtPolarityLow ? "active low" : polarity ? "active high"
+                                                                                     : "bus polarity",
+        trigger == Firmware::MadtTriggerLevel ? "level" : trigger ? "edge"
+                                                                  : "bus trigger");
+}
+
+static void printMadt(const Firmware::AcpiTableHeader& table)
+{
+    static Firmware::MadtInfo s_madt;
+    if (!Firmware::parseMadt(table, s_madt)) {
+        printf("  the entries run past the end of the table\n");
+        return;
+    }
+    printf("  local APIC at 0x%lx%s\n", s_madt.localApicAddress, s_madt.hasLegacyPics ? ", 8259 PICs too" : "");
+    for (uint32_t i = 0; i < s_madt.cpuCount; i++) {
+        const auto& cpu = s_madt.cpus[i];
+        printf("  processor %u  APIC id %u%s\n", cpu.processorId, cpu.apicId, cpu.enabled ? "" : "  (disabled)");
+    }
+    for (uint32_t i = 0; i < s_madt.ioApicCount; i++) {
+        const auto& io = s_madt.ioApics[i];
+        printf("  I/O APIC id %u at 0x%x, from GSI %u\n", io.id, io.address, io.gsiBase);
+    }
+    for (uint32_t i = 0; i < s_madt.overrideCount; i++) {
+        const auto& o = s_madt.overrides[i];
+        printf("  override  IRQ %u -> GSI %u, ", o.irq, o.gsi);
+        printIntiFlags(o.flags);
+        printf("\n");
+    }
+    for (uint32_t i = 0; i < s_madt.nmiCount; i++) {
+        const auto& nmi = s_madt.nmis[i];
+        if (nmi.processorId == 0xFF)
+            printf("  NMI on LINT%u of every processor, ", nmi.lint);
+        else
+            printf("  NMI on LINT%u of processor %u, ", nmi.lint, nmi.processorId);
+        printIntiFlags(nmi.flags);
+        printf("\n");
+    }
+    if (s_madt.skippedCount)
+        printf("  %u other entr%s\n", s_madt.skippedCount, s_madt.skippedCount == 1 ? "y" : "ies");
+}
+
+static void cmdAcpi(Interpreter& shell, int argc, char** argv)
+{
+    if (!usage("acpi", argc, 1, 2))
+        return;
+
+    const Firmware::AcpiTables& acpi = shell.context().acpi;
+    if (!acpi.isLoaded()) {
+        printf("acpi: the firmware gave no ACPI tables\n");
+        return;
+    }
+
+    // acpi SIG: one table, decoded if atlOS reads it, and dumped
+    if (argc == 2) {
+        if (strlen(argv[1]) != 4) {
+            printf("acpi: a signature of 4 letters, like APIC\n");
+            return;
+        }
+        for (uint32_t i = 0; i < acpi.count(); i++) {
+            const Firmware::AcpiTables::Table& table = acpi.at(i);
+            const Firmware::AcpiTableHeader& h = *table.header;
+            if (memcmp(h.signature, argv[1], 4) != 0)
+                continue;
+            printf("%.4s  %s\n", h.signature, acpiTableName(h.signature));
+            printf("  at 0x%lx, %u bytes, revision %u, checksum %s\n", table.physical, h.length, h.revision,
+                table.checksumValid ? "valid" : "WRONG");
+            printf("  OEM %.6s %.8s (revision 0x%x), creator %.4s (revision 0x%x)\n", h.oemId, h.oemTableId,
+                h.oemRevision, reinterpret_cast<const char*>(&h.creatorId), h.creatorRevision);
+            if (!memcmp(h.signature, "APIC", 4))
+                printMadt(h);
+            auto bytes = reinterpret_cast<const uint8_t*>(&h);
+            uint32_t length = h.length < 512 ? h.length : 512;
+            for (uint32_t line = 0; line < length; line += 16)
+                printDumpLine(table.physical + line, bytes + line, length - line < 16 ? length - line : 16);
+            if (length < h.length)
+                printf("  (the first 512 bytes; md 0x%lx shows the rest)\n", (uint64_t)Memory::physToVirt(table.physical + 512));
+            return;
+        }
+        printf("acpi: no %s table\n", argv[1]);
+        return;
+    }
+
+    // acpi: the root table and what it lists
+    printf("ACPI revision %u (%s), %.4s at 0x%lx\n", acpi.revision(), acpi.oemId(), acpi.root()->signature,
+        acpi.rootPhysical());
+    printf("  sig   physical    length  rev  OEM\n");
+    for (uint32_t i = 0; i < acpi.count(); i++) {
+        const Firmware::AcpiTables::Table& table = acpi.at(i);
+        const Firmware::AcpiTableHeader& h = *table.header;
+        printf("  %.4s  0x%08lx  %6u  %3u  %-6.6s %-8.8s  %s%s\n", h.signature, table.physical, h.length, h.revision,
+            h.oemId, h.oemTableId, acpiTableName(h.signature), table.checksumValid ? "" : "  (wrong checksum)");
+    }
+    printf("  %u table(s)\n", acpi.count());
+}
+
+static void printLvt(const char* name, uint32_t value)
+{
+    // Bits 10..8, the delivery mode: fixed (a vector), NMI, or ExtINT (the 8259 behind the pin)
+    uint32_t mode = (value >> 8) & 7;
+    printf("  %-6s 0x%08x  ", name, value);
+    if (mode == 0)
+        printf("vector 0x%02x", value & 0xFF);
+    else
+        printf("%s", mode == 4 ? "NMI" : mode == 7 ? "ExtINT"
+                : mode == 2                        ? "SMI"
+                                                   : "mode ?");
+    printf("%s\n", value & Drivers::LocalApic::LvtMasked ? "  masked" : "");
+}
+
+static void cmdApic(Interpreter& shell, int argc, char**)
+{
+    if (!usage("apic", argc, 1, 1))
+        return;
+
+    Drivers::ApicInterruptController* apic = shell.context().apic;
+    if (!apic) {
+        printf("apic: the 8259 PIC delivers the IRQs (%s)\n",
+            Drivers::LocalApic::isPresent() ? "no MADT with an I/O APIC" : "the processor has no local APIC");
+        return;
+    }
+
+    // The local APIC: its registers, the timer's state
+    using Drivers::LocalApic;
+    LocalApic& local = apic->localApic();
+    uint32_t spurious = local.read(LocalApic::RegisterSpurious);
+    printf("local APIC id %u, version 0x%02x, %u LVT entries, at 0x%lx\n", local.id(), local.version(),
+        local.lvtCount(), local.physAddress());
+    printf("  spurious 0x%03x (%s, vector 0x%02x), task priority %u, error status 0x%x\n", spurious,
+        spurious & 0x100 ? "enabled" : "disabled", spurious & 0xFF, local.read(LocalApic::RegisterTaskPriority),
+        local.read(LocalApic::RegisterErrorStatus));
+    uint32_t timer = local.read(LocalApic::RegisterLvtTimer);
+    printLvt("timer", timer);
+    printLvt("LINT0", local.read(LocalApic::RegisterLvtLint0));
+    printLvt("LINT1", local.read(LocalApic::RegisterLvtLint1));
+    printLvt("error", local.read(LocalApic::RegisterLvtError));
+    if (const Drivers::ApicTimer* apicTimer = shell.context().apicTimer)
+        printf("  timer: %s, %lu Hz (bus clock / %u), count %u of %u\n",
+            timer & LocalApic::LvtTimerPeriodic ? "periodic" : "one shot", apicTimer->frequency(),
+            Drivers::ApicTimer::divider, local.read(LocalApic::RegisterTimerCurrentCount), apicTimer->initialCount());
+    else
+        printf("  timer: not used, the PIT ticks\n");
+
+    // The I/O APICs, then where each ISA IRQ goes
+    for (uint32_t i = 0; i < apic->ioApicCount(); i++) {
+        const Drivers::IoApic& io = apic->ioApic(i);
+        printf("I/O APIC id %u, version 0x%02x, %u pins (GSI %u .. %u), at 0x%lx\n", io.id(), io.version(),
+            io.pinCount(), io.gsiBase(), io.gsiBase() + io.pinCount() - 1, io.physAddress());
+    }
+    printf("  IRQ  GSI  pin  entry               vector  trigger  polarity  to APIC\n");
+    for (uint8_t irq = 0; irq < Drivers::ApicInterruptController::irqCount; irq++) {
+        const Drivers::IoApic* io;
+        uint32_t pin;
+        if (!apic->locate(static_cast<Drivers::Irq>(irq), io, pin)) {
+            printf("  %3u  (not routed)\n", irq);
+            continue;
+        }
+        uint64_t entry = io->redirection(pin);
+        printf("  %3u  %3u  %3u  0x%016lx  0x%02x    %-7s  %-8s  %lu%s\n", irq, io->gsiBase() + pin, pin, entry,
+            (unsigned)(entry & 0xFF), entry & Drivers::IoApic::RedirectionLevel ? "level" : "edge",
+            entry & Drivers::IoApic::RedirectionActiveLow ? "low" : "high", entry >> Drivers::IoApic::destinationShift,
+            entry & Drivers::IoApic::RedirectionMasked ? "  masked" : "");
+    }
+}
+
+// ------------------------------------------------------------
+// SMBIOS
+// ------------------------------------------------------------
+
+static void printField(const char* name, const char* value)
+{
+    if (value[0])
+        printf("  %-14s %s\n", name, value);
+}
+
+/// Since 2.6 the first three UUID fields are stored little endian, before that big endian
+static void printUuid(const uint8_t* u, bool littleEndian)
+{
+    if (littleEndian)
+        printf("  %-14s %02x%02x%02x%02x-%02x%02x-%02x%02x-", "UUID", u[3], u[2], u[1], u[0], u[5], u[4], u[7], u[6]);
+    else
+        printf("  %-14s %02x%02x%02x%02x-%02x%02x-%02x%02x-", "UUID", u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7]);
+    printf("%02x%02x-%02x%02x%02x%02x%02x%02x\n", u[8], u[9], u[10], u[11], u[12], u[13], u[14], u[15]);
+}
+
+static void printSize(const char* name, uint64_t kb)
+{
+    constexpr uint64_t kbPerGb = 1024ULL * 1024;
+    if (kb >= kbPerGb && kb % kbPerGb == 0)
+        printf("  %-14s %lu GB\n", name, kb / kbPerGb);
+    else if (kb >= 1024 && kb % 1024 == 0)
+        printf("  %-14s %lu MB\n", name, kb / 1024);
+    else
+        printf("  %-14s %lu KB\n", name, kb);
+}
+
+static void printSmbiosFields(const Firmware::SmbiosTables& tables, const Firmware::SmbiosStructure& s)
+{
+    switch (s.type()) {
+    case Firmware::SmbiosBios: {
+        Firmware::BiosInformation info;
+        if (!Firmware::decodeBiosInformation(s, info))
+            break;
+        printField("vendor", info.vendor);
+        printField("version", info.version);
+        printField("release date", info.releaseDate);
+        printf("  %-14s %u KB at 0x%x\n", "ROM", info.romSizeKb, info.startSegment * 16);
+        printf("  %-14s 0x%016lx\n", "characteristics", info.characteristics);
+        if (info.hasRelease)
+            printf("  %-14s %u.%u\n", "BIOS release", info.releaseMajor, info.releaseMinor);
+        return;
+    }
+    case Firmware::SmbiosSystem: {
+        Firmware::SystemInformation info;
+        if (!Firmware::decodeSystemInformation(s, info))
+            break;
+        printField("manufacturer", info.manufacturer);
+        printField("product", info.product);
+        printField("version", info.version);
+        printField("serial number", info.serialNumber);
+        if (info.hasUuid)
+            printUuid(info.uuid, tables.majorVersion() > 2 || (tables.majorVersion() == 2 && tables.minorVersion() >= 6));
+        printField("SKU", info.sku);
+        printField("family", info.family);
+        return;
+    }
+    case Firmware::SmbiosBaseboard: {
+        Firmware::BaseboardInformation info;
+        if (!Firmware::decodeBaseboardInformation(s, info))
+            break;
+        printField("manufacturer", info.manufacturer);
+        printField("product", info.product);
+        printField("version", info.version);
+        printField("serial number", info.serialNumber);
+        printField("asset tag", info.assetTag);
+        printField("location", info.locationInChassis);
+        if (info.boardType)
+            printf("  %-14s 0x%02x%s\n", "board type", info.boardType, info.boardType == 0x0A ? " (motherboard)" : "");
+        return;
+    }
+    case Firmware::SmbiosProcessor: {
+        Firmware::ProcessorInformation info;
+        if (!Firmware::decodeProcessorInformation(s, info))
+            break;
+        printField("socket", info.socket);
+        printField("manufacturer", info.manufacturer);
+        printField("version", info.version);
+        printf("  %-14s type %u, family 0x%02x, id 0x%016lx\n", "processor", info.processorType, info.family, info.id);
+        printf("  %-14s %u MHz (max %u MHz, external clock %u MHz)\n", "speed", info.currentSpeedMhz, info.maxSpeedMhz,
+            info.externalClockMhz);
+        printf("  %-14s 0x%02x (%s, %s)\n", "status", info.status, info.status & 0x40 ? "populated" : "empty socket",
+            (info.status & 7) == 1 ? "enabled" : "not enabled");
+        if (info.coreCount)
+            printf("  %-14s %u (%u enabled), %u thread(s)\n", "cores", info.coreCount, info.coresEnabled, info.threadCount);
+        printField("serial number", info.serialNumber);
+        printField("part number", info.partNumber);
+        return;
+    }
+    case Firmware::SmbiosMemoryDevice: {
+        Firmware::MemoryDevice info;
+        if (!Firmware::decodeMemoryDevice(s, info))
+            break;
+        printField("locator", info.deviceLocator);
+        printField("bank", info.bankLocator);
+        if (!info.sizeKnown)
+            printf("  %-14s unknown\n", "size");
+        else if (!info.sizeKb)
+            printf("  %-14s no module installed\n", "size");
+        else
+            printSize("size", info.sizeKb);
+        const char* typeName = Firmware::smbiosMemoryTypeName(info.memoryType);
+        printf("  %-14s 0x%02x %s, form factor 0x%02x", "type", info.memoryType, typeName, info.formFactor);
+        if (info.totalWidth == 0xFFFF) // 0xFFFF: not known
+            printf(", width unknown\n");
+        else
+            printf(", width %u bits (data %u)\n", info.totalWidth, info.dataWidth);
+        if (info.speedMts)
+            printf("  %-14s %u MT/s (configured %u MT/s)\n", "speed", info.speedMts, info.configuredSpeedMts);
+        printField("manufacturer", info.manufacturer);
+        printField("part number", info.partNumber);
+        printField("serial number", info.serialNumber);
+        return;
+    }
+    default:
+        return;
+    }
+    printf("  (too short for its type)\n");
+}
+
+static void printSmbiosStructure(const Firmware::SmbiosTables& tables, const Firmware::SmbiosStructure& s)
+{
+    const char* name = Firmware::smbiosTypeName(s.type());
+    printf("handle 0x%04x, type %u%s%s, %u bytes\n", s.handle(), s.type(), name[0] ? " " : "", name, s.length());
+    printSmbiosFields(tables, s);
+
+    // The strings, by number, then the formatted area as it is
+    if (s.stringCount()) {
+        printf("  strings:");
+        for (uint32_t n = 1; n <= s.stringCount(); n++)
+            printf(" %u \"%s\"", n, s.string(n));
+        printf("\n");
+    }
+    for (uint32_t line = 0; line < s.length(); line += 16)
+        printDumpLine(line, s.data() + line, s.length() - line < 16 ? s.length() - line : 16);
+}
+
+static void cmdSmbios(Interpreter& shell, int argc, char** argv)
+{
+    if (!usage("smbios", argc, 1, 2))
+        return;
+
+    const Firmware::SmbiosTables& tables = shell.context().smbios;
+    if (!tables.isLoaded()) {
+        printf("smbios: no SMBIOS 2.x entry point was found\n");
+        return;
+    }
+
+    // smbios type: every structure of that type
+    if (argc == 2) {
+        uint64_t type;
+        if (!parseNumber(argv[1], type) || type > 255) {
+            printf("smbios: a type 0 .. 255 (0 BIOS, 1 system, 2 board, 4 processor, 17 memory)\n");
+            return;
+        }
+        uint32_t shown = 0;
+        for (const Firmware::SmbiosStructure* s; (s = tables.find(type, shown)); shown++)
+            printSmbiosStructure(tables, *s);
+        if (!shown)
+            printf("smbios: no structure of type %lu\n", type);
+        return;
+    }
+
+    // smbios: one line per structure
+    printf("SMBIOS %u.%u, %u structures in %u bytes at 0x%lx\n", tables.majorVersion(), tables.minorVersion(),
+        tables.count(), tables.tableLength(), tables.tableAddress());
+    printf("  handle  type  length  strings  name\n");
+    for (uint32_t i = 0; i < tables.count(); i++) {
+        const Firmware::SmbiosStructure& s = tables.at(i);
+        printf("  0x%04x  %4u  %6u  %7u  %s\n", s.handle(), s.type(), s.length(), s.stringCount(),
+            Firmware::smbiosTypeName(s.type()));
+    }
+    if (tables.truncated())
+        printf("  (a structure runs past the table: the list stops there)\n");
+}
+
+// ------------------------------------------------------------
 // System
 // ------------------------------------------------------------
 
@@ -589,13 +1135,21 @@ static void cmdTasks(Interpreter& shell, int, char**)
 static void cmdRun(Interpreter& shell, int argc, char** argv)
 {
     char path[Interpreter::maxPath];
-    if (!usage("run", argc, 2, 2) || !resolve(shell, argv[1], path))
+    if (!usage("run", argc, 2, Interpreter::maxWords) || !resolve(shell, argv[1], path))
         return;
 
-    // The program starts on its own thread and runs while the shell waits for keys
-    int pid = shell.context().runtime.spawn(path);
+    // The program's argv: its path, then the words after it ("run P.ELF a b")
+    const char* arguments[Interpreter::maxWords];
+    arguments[0] = path;
+    for (int i = 2; i < argc; i++)
+        arguments[i - 1] = argv[i];
+
+    // The program runs on its own thread; the shell sleeps until it exits, so
+    // the keys typed meanwhile go to the program (Ctrl+C ends it)
+    Process::Runtime& runtime = shell.context().runtime;
+    int pid = runtime.spawn(path, argc - 1, arguments);
     if (pid > 0)
-        printf("started pid %d\n", pid);
+        runtime.wait((uint32_t)pid);
 }
 
 // ------------------------------------------------------------
@@ -779,7 +1333,8 @@ static void cmdGdt(Interpreter&, int, char**)
     }
 }
 
-// What a vector is: an exception, a PIC IRQ (0x20 + line), or the system call gate
+// What a vector is: an exception, an ISA IRQ (0x20 + line, PIC or I/O APIC), the
+// system call gate, or the local APIC's own
 static void vectorName(uint32_t vector, char* name, size_t size)
 {
     static const char* const s_irqs[16] = { "timer", "keyboard", "cascade", "COM2", "COM1", "LPT2", "floppy", "LPT1",
@@ -790,6 +1345,10 @@ static void vectorName(uint32_t vector, char* name, size_t size)
         snprintf(name, size, "IRQ %u %s", vector - 0x20, s_irqs[vector - 0x20]);
     else if (vector == IDT::systemCallVector)
         snprintf(name, size, "system call");
+    else if (vector == Drivers::ApicInterruptController::timerVector)
+        snprintf(name, size, "APIC timer");
+    else if (vector == Drivers::ApicInterruptController::spuriousVector)
+        snprintf(name, size, "APIC spurious");
     else
         name[0] = '\0';
 }
@@ -823,12 +1382,14 @@ static void cmdIdt(Interpreter&, int argc, char** argv)
         return;
     }
 
-    // The exceptions, the PIC IRQs and the system call gate; the rest go to the default stubs
+    // The exceptions, the ISA IRQs and the system call gate; the rest go to the default stubs
     printf("  vec  handler             type dpl    ist\n");
     for (uint32_t v = 0; v < 0x30; v++)
         printIdtEntry(v);
+    printIdtEntry(Drivers::ApicInterruptController::timerVector);
     printIdtEntry(IDT::systemCallVector);
-    printf("  (48 .. 255: interrupt gates, no handler attached; \"idt n\" shows one)\n");
+    printIdtEntry(Drivers::ApicInterruptController::spuriousVector);
+    printf("  (the others: interrupt gates, no handler attached; \"idt n\" shows one)\n");
 }
 
 static void cmdPt(Interpreter& shell, int argc, char** argv)
@@ -969,7 +1530,7 @@ static const Command s_commands[] = {
     { "memory", "vmmap", "vmmap", "the page table mappings", cmdVmmap },
     { "tasks", "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
     { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
-    { "tasks", "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
+    { "tasks", "run", "run program.elf [args]", "run a user program (ring 3) until it exits", cmdRun },
     { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
     { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
     { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
@@ -981,6 +1542,10 @@ static const Command s_commands[] = {
     { "memory", "pt", "pt addr", "the page table walk for an address", cmdPt },
     { "devices", "irq", "irq", "how often each vector has arrived", cmdIrq },
     { "devices", "disk", "disk [read lba [count] [device]]", "the disks; dump sectors (count 1 .. 8)", cmdDisk },
+    { "devices", "lspci", "lspci [bus:dev.fn]", "the PCI functions; one in detail", cmdLspci },
+    { "devices", "acpi", "acpi [SIGNATURE]", "the ACPI tables; one decoded and dumped", cmdAcpi },
+    { "devices", "apic", "apic", "the local and I/O APICs, where each IRQ goes", cmdApic },
+    { "devices", "smbios", "smbios [type]", "the firmware's SMBIOS structures; one type decoded", cmdSmbios },
     { "devices", "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
     { "system", "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "system", "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },

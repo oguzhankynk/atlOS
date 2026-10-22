@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # The one place the version is written; see docs/releasing.md
-project(atlOS VERSION 0.4.0 LANGUAGES C CXX ASM)
+project(atlOS VERSION 0.5.0 LANGUAGES C CXX ASM)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "atlOS")
     message(FATAL_ERROR "Configure with the cross toolchain: cmake --preset default")

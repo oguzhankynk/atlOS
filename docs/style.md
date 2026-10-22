@@ -77,8 +77,9 @@ A change to a subsystem updates its README in the same commit series.
 ## Design
 
 Agreed direction, introduced subsystem by subsystem. Done: the interrupt
-controller and timer (`Drivers::PIC`, `Drivers::PIT` behind
-`InterruptController` / `TickSource`), the physical memory manager
+controllers and timers (`Drivers::ApicInterruptController`, `Drivers::PIC`,
+`Drivers::ApicTimer`, `Drivers::PIT` behind `InterruptController` /
+`TickSource`), the physical memory manager
 (`Memory::PhysicalMemoryManager`), the kernel address space
 (`Memory::AddressSpace`) and the scheduler (`Threading::Scheduler`; threads
 get it as their entry point argument), all built by `kernelMain` in
@@ -94,8 +95,8 @@ state and stays a function over printf.
 - **Dependencies are passed in**, by constructor reference, so they are
   visible in the signatures and the construction order is checked by the
   compiler: `AddressSpace kernelSpace(pmm); Heap heap(kernelSpace);`
-- **Hardware behind interfaces:** `InterruptController` (PIC, later APIC),
-  `TickSource` (PIT, later APIC timer/HPET), `CharacterSink` (serial, VGA),
+- **Hardware behind interfaces:** `InterruptController` (APIC, PIC),
+  `TickSource` (APIC timer, PIT), `CharacterSink` (serial, VGA),
   `BlockDevice` and `FileSystem`.
 - **`kernelMain` is the composition root.** It creates the objects in order,
   in static storage that is constructed explicitly (there is no heap yet and

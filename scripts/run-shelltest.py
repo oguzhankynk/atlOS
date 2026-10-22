@@ -126,6 +126,21 @@ def main():
             out = serial.command("disk read 0\r")
             check("ata0 sector 0" in out and "55 aa" in out, "disk read dumps the MBR", out)
 
+            # QEMU's pc machine: the i440FX host bridge, the PIIX3 with its IDE function
+            out = serial.command("lspci\r")
+            check("00:00.0  8086:1237  0600  Intel" in out and "IDE controller" in out, "lspci", out)
+            out = serial.command("lspci 00:01.1\r")
+            check("IDE controller" in out and "I/O ports at" in out and "0000000000000000  86 80 10 70" in out,
+                  "lspci of one function", out)
+
+            # SMBIOS: SeaBIOS's 2.x table
+            out = serial.command("smbios\r")
+            check("SMBIOS 2." in out and "Processor" in out and "End of table" in out, "smbios", out)
+            out = serial.command("smbios 1\r")
+            check("manufacturer   QEMU" in out and "UUID" in out, "smbios 1: the system", out)
+            out = serial.command("smbios 17\r")
+            check("size           512 MB" in out, "smbios 17: the memory", out)
+
             out = serial.command("ls /disk0\r")
             check("HELLO.TXT" in out and "DOCS/" in out and "22000" in out, "ls /disk0", out)
 
@@ -184,7 +199,17 @@ def main():
             out = serial.command("pt 0xffffffff80400000\r")
             check("PML4[511]" in out and "2 MB page, physical 0x400000" in out, "pt", out)
             out = serial.command("irq\r")
-            check("IRQ 0 timer" in out and "IRQ 4 COM1" in out, "irq (the serial port we type on)", out)
+            check("APIC timer" in out and "IRQ 4 COM1" in out, "irq (the tick, the serial port we type on)", out)
+
+            # ACPI and the APIC: QEMU's tables, the timer override, the IRQs drivers unmasked
+            out = serial.command("acpi\r")
+            check("FACP" in out and "interrupt controllers (MADT)" in out and "table(s)" in out, "acpi", out)
+            out = serial.command("acpi APIC\r")
+            check("local APIC at 0xfee00000" in out and "override  IRQ 0 -> GSI 2" in out, "acpi APIC: the MADT", out)
+            out = serial.command("apic\r")
+            com1 = [line for line in out.split("\n") if line.startswith("    4 ")]
+            check("local APIC id 0" in out and "timer: periodic" in out and com1 and "masked" not in com1[0],
+                  "apic: the timer, COM1 unmasked", out)
             out = serial.command("int 3\r")
             check("Breakpoint" in out and "==== continuing ====" in out, "int 3: a breakpoint, the shell goes on", out)
             out = serial.command("int 0x30\r")
@@ -198,18 +223,39 @@ def main():
             check("up " in out, "uptime", out)
             out = serial.command("mount\r")
             check("/disk0" in out and "fat16" in out, "mount", out)
-            # User programs: ring 3 on their own thread, the shell prompt comes back first
+            # User programs: ring 3 on their own thread, the shell waits until they exit
             out = serial.command("run /disk0/BIN/HELLO.ELF\r")
-            out += serial.read_until(b"exited with 0]")
-            check("started pid" in out and "Hello from user mode!" in out, "run a user program", out)
+            check("Hello from user mode!" in out and "exited with 0]" in out, "run a user program", out)
             out = serial.command("run /disk0/BIN/FAULT.ELF\r")
-            out += serial.read_until(b"exited with 142]")
-            check("Page fault (in user mode)" in out and "KERNEL PANIC" not in out, "a fault in ring 3 ends only the program", out)
+            check("Page fault (in user mode)" in out and "exited with 142]" in out and "KERNEL PANIC" not in out,
+                  "a fault in ring 3 ends only the program", out)
             out = serial.command("pwd\r")
             check("/disk0\n" in out, "the shell goes on after the fault", out)
             out = serial.command("run /disk0/BIN/COUNT.ELF\r")
-            out += serial.read_until(b"exited with 15]")
-            check("1 2 3 4 5\n" in out, "the example program of user/README.md", out)
+            check("1 2 3 4 5\n" in out and "exited with 15]" in out, "the example program of user/README.md", out)
+
+            # read(0): the keys go to the program while it runs; DEL is its Backspace
+            serial.sock.sendall(b"run /disk0/BIN/ASK.ELF\r")
+            serial.read_until(b"name? ")
+            out = serial.command("Adx\x7fa\r")
+            check("Hello, Ada! I am process" in out and "exited with 0]" in out, "a program reads the keyboard", out)
+            serial.sock.sendall(b"run /disk0/BIN/ASK.ELF\r")
+            serial.read_until(b"name? ")
+            out = serial.command("\x03")
+            check("exited with 130]" in out, "Ctrl+C ends a program that reads", out)
+
+            # argv: the words after the program, quotes keep spaces
+            out = serial.command("run /disk0/BIN/ARGS.ELF one \"two words\"\r")
+            check("argc = 3" in out and 'argv[2] = "two words"' in out and "exited with 3]" in out, "argc and argv", out)
+            out = serial.command("run /disk0/BIN/CAT.ELF /disk0/HELLO.TXT\r")
+            check("Hello from the atlOS disk!" in out and "exited with 0]" in out, "a program opens its argument", out)
+
+            out = serial.command("run /disk0/BIN/CLOCK.ELF\r")
+            check("woke up after" in out and "exited with 0]" in out, "uptime, sleep and yield", out)
+            out = serial.command("run /disk0/BIN/FILES.ELF\r")
+            check("files: all as expected" in out and "exited with 0]" in out, "open, read, write, close", out)
+            out = serial.command("cat /disk0/USER.TXT\r")
+            check("first line\nsecond line\n" in out, "the file a program wrote", out)
 
             # The fault report resolves to the program's source line (scripts/symbolize.sh)
             if user_dir:

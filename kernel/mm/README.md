@@ -104,7 +104,9 @@ address space only); the two it needs are there from boot.
   user program; `activate()` loads it into CR3.
 - Kernel pages: `allocatePages(n)` finds `n` free virtual pages above the
   kernel image and backs each with a PMM block; `mapPhysical` maps a given
-  physical page (MMIO) without the PMM.
+  physical page without the PMM; `mapDevice` maps the page around a device's
+  registers at a free address, uncached (cache disable and write through
+  bits), for MMIO such as the APICs.
 - User pages: `allocateAt(virt, n, flags)` maps zeroed blocks in the user
   range, `Writable` and `User` (ring 3) as asked; the tables above get the
   user bit, the PD entry decides. `isUserAccessible(virt, size, write)` is

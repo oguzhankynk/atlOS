@@ -1,7 +1,8 @@
 # Drivers (`kernel/drivers/`)
 
-Code that talks to hardware: the interrupt controller, the timer, the serial
-port, the VGA text screen, the keyboard and ATA disks.
+Code that talks to hardware: the interrupt controllers (8259 PIC, APIC), the
+timers (PIT, APIC timer), the serial port, the VGA text screen, the keyboard,
+ATA disks and the PCI bus.
 
 ## What is it for?
 
@@ -30,18 +31,26 @@ Small interfaces, concrete drivers as objects, created and wired in
 
 | Interface | Implementations | Used by |
 |---|---|---|
-| `InterruptController` (`interrupt_controller.hpp`) | `PIC` (8259 pair) | PIT, keyboard, the ISR dispatcher |
-| `TickSource` (`tick_source.hpp`) | `PIT` (8253/8254 channel 0) | `Threading::Scheduler` |
+| `InterruptController` (`interrupt_controller.hpp`) | `ApicInterruptController` (`apic/`), `PIC` (8259 pair) | PIT, keyboard, serial port, the ISR dispatcher |
+| `TickSource` (`tick_source.hpp`) | `ApicTimer` (`apic/`), `PIT` (8253/8254 channel 0) | `Threading::Scheduler` |
 | `CharacterSink` (`character_sink.hpp`) | `SerialPort`, `VGATextConsole`, `TeeSink` (both at once) | the console behind `printf` |
-| `CharacterSource` (`character_source.hpp`) | `CharacterQueue` (fed by `PS2Keyboard` and `SerialPort`) | the shell |
+| `CharacterSource` (`character_source.hpp`) | `CharacterQueue` (fed by `PS2Keyboard` and `SerialPort`) | the shell, user programs (`read(0, ...)`) |
 | `BlockDevice` (`disk/block_device.hpp`) | `ATAPioDevice`, `PartitionDevice`, `MemoryBlockDevice` | the file systems (`kernel/fs/`) |
+| `PciConfigSpace` (`pci/config_space.hpp`) | `PciPortConfigSpace` (ports `0xCF8`/`0xCFC`) | `scanPci`, the shell's `lspci` |
 
+- **APIC** (`apic/`): the controller and the tick when the ACPI MADT
+  describes an I/O APIC, which every machine of the last 20 years has; see
+  [`apic/README.md`](apic/README.md). `kernelMain` chooses between it and the
+  PIC in one place.
 - **PIC**: the constructor remaps the 16 IRQs to vectors `0x20..0x2F` (by
   default they collide with CPU exceptions) and masks every line. A driver
   `attach`es its handler and `unmask`s only its own line. Slave IRQs also need
-  the cascade line (IRQ 2) on the master.
+  the cascade line (IRQ 2) on the master. With the APIC in use the PIC is
+  still set up, so that every line stays masked.
 - **PIT**: channel 0 in square wave mode; divisor = 1193182 Hz × period. The
-  divisor is 16 bits, so periods above ~55 ms are refused.
+  divisor is 16 bits, so periods above ~55 ms are refused. `pitBusyWait`
+  waits up to 55 ms on channel 2 by polling its output (port `0x61` bit 5):
+  the APIC timer is measured against it.
 - **SerialPort**: 16550 UART at 38400 8N1. A loopback test in the constructor
   tells whether the port exists; a missing port drops writes instead of
   waiting forever for its transmitter. Writes turn `\n` into `\r\n`.
@@ -77,6 +86,11 @@ Small interfaces, concrete drivers as objects, created and wired in
   rejects a sector 0 whose entries do not fit the disk (e.g. a disk formatted
   without partitions, whose boot sector also ends in `0x55AA`).
 - **MemoryBlockDevice**: a disk in RAM, for testing file systems.
+
+### PCI (`pci/`)
+
+The configuration space of every PCI and PCIe function, the scan and the
+names; see [`pci/README.md`](pci/README.md).
 
 Polling is the simplest way to use a disk and fine with a cooperative
 scheduler that has nothing else to do; IRQ 14 + `Sync::Semaphore` would let
@@ -142,9 +156,12 @@ sequenceDiagram
 - Keyboard: no controller self test or reset, no LEDs, no key repeat
   settings, no Num Lock (the keypad always types digits), no key events for
   keys without a character (arrows) in the character stream, US layout only.
-- No APIC/IOAPIC, no PCI, no DMA.
+- No DMA, no MSI.
 
-## Flow: an IRQ from the PIT to the scheduler
+## Flow: the PIT's tick through the PIC (a machine without ACPI)
+
+With the APIC the tick comes from the local APIC timer instead, see
+[`apic/README.md`](apic/README.md).
 
 ```mermaid
 sequenceDiagram
@@ -172,7 +189,7 @@ handler does and checks arrow sequences, blocking reads and a full queue. *Conso
 
 ## References
 
-- OSDev Wiki: [8259 PIC](https://wiki.osdev.org/8259_PIC),
+- OSDev Wiki: [8259 PIC](https://wiki.osdev.org/8259_PIC), [APIC](https://wiki.osdev.org/APIC),
   [Programmable Interval Timer](https://wiki.osdev.org/Programmable_Interval_Timer),
   [Serial Ports](https://wiki.osdev.org/Serial_Ports),
   [Text Mode Cursor](https://wiki.osdev.org/Text_Mode_Cursor), [I/O Ports](https://wiki.osdev.org/I/O_Ports),

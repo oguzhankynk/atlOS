@@ -7,6 +7,63 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
+### Added
+
+- PCI and PCIe: `Drivers::PciConfigSpace` (ports `0xCF8`/`0xCFC`,
+  `PciPortConfigSpace`), `scanPci` over every bus, device and function, the
+  class, vendor and capability names; the shell's `lspci` lists the
+  functions, `lspci bus:dev.fn` decodes one (BARs, interrupt pin,
+  capabilities) and dumps its header
+- System calls: `read` (the keyboard as fd 0, raw; Ctrl+C ends the program
+  with 130), `open` (`O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC`,
+  `O_APPEND`; paths from the root), `close`, `yield`, `sleep`, `getpid`,
+  `uptime`; `write` to fd 2 and to files; eight open files per program
+- `Runtime::wait(pid)`; user programs `ASK.ELF`, `CLOCK.ELF`, `FILES.ELF`;
+  `print_number` and the new calls in `atlos.h`
+- `argc` and `argv`: `Runtime::spawn(path, argc, argv)` writes the System V
+  start stack (strings, `argv[]`, empty envp and auxv, `argc` at `rsp`),
+  crt0 calls `main(argc, argv)`; `run program.elf [args]`; `ARGS.ELF`,
+  `CAT.ELF`, `print_hex`
+- ACPI: `Firmware::findRsdp` (the multiboot2 tags), `Firmware::AcpiTables`
+  (the XSDT or RSDT and their tables, checksums checked), `parseMadt` and
+  `isaRoute` (processors, I/O APICs, interrupt source overrides, NMI pins);
+  the shell's `acpi` lists the tables, `acpi SIG` decodes and dumps one
+- The APIC: `Drivers::LocalApic`, `Drivers::IoApic`,
+  `Drivers::ApicInterruptController` (the ISA IRQs routed as the MADT says,
+  vectors `0x20 + irq`) and `Drivers::ApicTimer` (measured against the PIT,
+  1 ms periodic on vector `0x40`); the shell's `apic` shows the registers and
+  the routes
+- `AddressSpace::mapDevice` (uncached MMIO mappings), `Drivers::pitBusyWait`
+  (PIT channel 2, polled)
+- SMBIOS 2.x: `Firmware::findSmbios` (the BIOS area, `_SM_` and `_DMI_`
+  checked; a `_SM3_` is reported, not read), `SmbiosTables` (a walk bounded
+  by the table length), `SmbiosStructure` (fields beyond the length read as
+  0, strings by number), decoders for types 0, 1, 2, 4 and 17; the shell's
+  `smbios [type]`
+- Self tests for the scan, `lspci`, the system calls, the arguments, the ACPI
+  tables, the MADT, the APIC and SMBIOS (882 checks); the shell test types
+  into a program and reads the APIC and SMBIOS (52 steps)
+
+- An animated GIF of the boot and the shell at the top of the README
+  (`scripts/make-demo-gif.py`)
+
+### Changed
+
+- The banner puts the version and the description on two lines (a
+  development build's `git describe` made it wrap)
+- `run` waits until the program exits; the keys typed meanwhile go to the
+  program
+- With ACPI the IRQs arrive through the I/O APIC and the scheduler ticks on
+  the local APIC timer; the 8259 PIC stays masked. Without ACPI the PIC and
+  the PIT are used as before
+
+### Removed
+
+- The old SMBIOS code (`firmware/bios/`, the types 3, 16, 19, 32 and 127
+  classes), which was not called and read the structures in a fixed order
+
 ## [0.4.0] - 2026-10-22
 
 ### Added
@@ -235,7 +292,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oguzhankynk/atlOS/compare/v0.1.0...v0.2.0

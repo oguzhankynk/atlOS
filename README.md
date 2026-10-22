@@ -6,29 +6,35 @@
 [![Release](https://img.shields.io/github/v/release/oguzhankynk/atlOS)](https://github.com/oguzhankynk/atlOS/releases)
 
 atlOS is an experimental x86_64 operating system written in C++17 for learning
-and research. It boots with GRUB (multiboot2) into a higher half kernel and is
-small enough to read end to end.
+and research. 
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="atlOS booting in QEMU, then help, lspci, smbios, ls, a user program with arguments and tasks in the shell" width="720">
+</p>
 
 ## Status
 
 Working:
 
 - 64-bit higher half kernel (loaded at 4 MB, mapped at `0xFFFFFFFF80000000` + physical), booted by GRUB2
-- GDT with a TSS (double fault stack), IDT, decoded exception reports with a backtrace, 8259 PIC, PIT (1 ms tick)
+- GDT with a TSS (double fault stack), IDT, decoded exception reports with a backtrace
+- ACPI tables (RSDP, RSDT/XSDT, MADT); interrupts through the local APIC and the I/O APIC, a 1 ms tick from the APIC timer measured against the PIT; the 8259 PIC and the PIT on a machine without ACPI
 - Physical memory manager (2 MB blocks + 4 KB frames for page tables)
 - Virtual memory with 2 MB pages, a physmap of all physical memory, and separate address spaces sharing the kernel half
 - Kernel heap (`kmalloc`/`kfree`, based on liballoc 1.1)
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
-- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, ... (`help` lists them by group)
-- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`write`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
+- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, `lspci`, `acpi`, `apic`, `smbios`, ... (`help` lists them by group)
+- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`read`/`write` on the keyboard, the screen and files, `open`/`close`, `sleep`, `yield`, `getpid`, `uptime`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
+- SMBIOS 2.x: the BIOS, system, board, processor and memory module structures (`smbios`, like `dmidecode`)
+- PCI and PCIe: every bus scanned through the configuration ports, `lspci` with the BARs and capabilities
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
-The CPUID helpers are built and tested but not called at
-boot. The shell runs in the kernel; user programs have two system calls so far.
+The CPUID feature report (`cpuinfo`) is built and tested but not used at
+boot. The shell runs in the kernel; user programs reach it through nine system calls.
 atlOS runs on a single CPU, scheduling is cooperative.
 
 ## Quick start
@@ -54,7 +60,7 @@ cmake --build --preset default --target run
 ```
 
 `scripts/build.sh run` shows the boot messages, then the shell, on the
-terminal (see the [screenshot](#screenshot) below).
+terminal; the GIF at the top shows the same on the VGA screen.
 
 ## Source layout
 
@@ -68,9 +74,9 @@ kernel/
   shell/         the kernel shell: line editor, parser, commands
   proc/          user programs: ELF loading, ring 3, system calls
   sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
-  drivers/       pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR)
+  drivers/       apic/, pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR), pci/
   fs/            file system interface, fat16, vfs, mounting the disks
-  firmware/      bios, smbios
+  firmware/      acpi/ (the tables, the MADT), smbios/ (the 2.x structures)
   lib/           small header-only helpers
   tests/         in-kernel self tests
 libc/            freestanding C library (libk) used by the kernel
@@ -87,7 +93,9 @@ example `#include <mm/vmm.hpp>`.
 The subsystem directories have a README that explains the concept, the usual ways to design it, what atlOS chose and why,
 with diagrams and references:
 [mm](kernel/mm/README.md), [sched](kernel/sched/README.md),
-[drivers](kernel/drivers/README.md), [interrupts](kernel/arch/x86_64/idt/README.md).
+[drivers](kernel/drivers/README.md), [interrupts](kernel/arch/x86_64/idt/README.md),
+[ACPI](kernel/firmware/acpi/README.md), [APIC](kernel/drivers/apic/README.md),
+[SMBIOS](kernel/firmware/smbios/README.md).
 
 ## Documentation
 
@@ -102,11 +110,13 @@ with diagrams and references:
 API documentation can be generated with Doxygen: `scripts/build.sh docs`
 (output in `build/docs/html`).
 
+## References
+
+The [OSDev Wiki](https://wiki.osdev.org/) is the main reference for this
+project: boot, paging, interrupts, the PIC and PIT, ACPI and the APIC, ATA, FAT, PCI and
+user mode all start there. The subsystem READMEs link the pages they build on.
+
 ## License
 
 MIT, see [LICENSE](LICENSE). Third party code and its licenses:
 [THIRD_PARTY.md](THIRD_PARTY.md).
-
-## Screenshot
-
-<img src="docs/images/ss.png" alt="atlOS boot" width="480">

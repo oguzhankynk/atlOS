@@ -126,4 +126,41 @@ bool PIT::start(uint32_t periodNs, TickHandler handler, void* arg)
     return true;
 }
 
+// Port 0x61 (the keyboard controller's port B): bit 0 gates channel 2, bit 1
+// drives the speaker from it, bit 5 reads channel 2's output back
+static constexpr uint16_t portB = 0x61;
+static constexpr uint8_t portBGate2 = 1 << 0;
+static constexpr uint8_t portBSpeaker = 1 << 1;
+static constexpr uint8_t portBOutput2 = 1 << 5;
+
+bool pitBusyWait(uint32_t microseconds)
+{
+    uint64_t count = (pitBaseFrequency * microseconds) / 1000000ULL;
+    if (count == 0 || count > 0xFFFF)
+        return false;
+
+    // Gate on, speaker off
+    uint8_t saved = IOPort::inportb(portB);
+    IOPort::outportb(portB, (saved & ~portBSpeaker) | portBGate2);
+
+    // Mode 0: the output goes low when the count is written, high when it reaches 0
+    PITControlWord cmd {
+        PITChannel::Channel2,
+        PITAccessMode::LobyteHibyte,
+        PITOperatingMode::Mode0,
+        PITBCDMode::Binary
+    };
+    IOPort::outportb(pitCommandPort, cmd.toByte());
+    IOPort::outportb(pitChannel2, static_cast<uint8_t>(count & 0xFF));
+    IOPort::outportb(pitChannel2, static_cast<uint8_t>((count >> 8) & 0xFF));
+
+    // Each port read takes about a microsecond: this bounds the wait far above 55 ms
+    bool done = false;
+    for (uint32_t i = 0; i < 10000000 && !done; i++)
+        done = IOPort::inportb(portB) & portBOutput2;
+
+    IOPort::outportb(portB, saved);
+    return done;
+}
+
 } // namespace Drivers

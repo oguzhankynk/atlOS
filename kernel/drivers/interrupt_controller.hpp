@@ -1,6 +1,6 @@
 /**
  * @file interrupt_controller.hpp
- * @brief Interface of the hardware that delivers IRQs (8259 PIC today, APIC later).
+ * @brief Interface of the hardware that delivers IRQs: the APIC, or the 8259 PIC without ACPI.
  */
 
 #pragma once

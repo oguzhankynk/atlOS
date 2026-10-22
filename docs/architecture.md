@@ -24,12 +24,19 @@
       to the heap (see [memory.md](memory.md))
    6. constructs the `Fs::Vfs` and mounts the FAT16 partitions of the ATA
       disks (`Fs::mountAtaDisks`, see `kernel/fs/README.md`)
-   7. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
-      lines masked) and binds it to the ISR dispatcher
-   8. constructs the `Drivers::PIT` on top of the PIC and enables interrupts
-   9. constructs the `Threading::Scheduler` on the PIT (the boot flow becomes
-      task 0, 1 ms tick)
-   10. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
+   7. finds the ACPI tables (`Firmware::findRsdp`, `Firmware::AcpiTables`,
+      see `kernel/firmware/acpi/README.md`)
+   8. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
+      lines masked); if the MADT describes an I/O APIC, the
+      `Drivers::LocalApic`, the `Drivers::IoApic`s and the
+      `Drivers::ApicInterruptController` on top (see
+      `kernel/drivers/apic/README.md`). The APIC, or the PIC without it, is
+      bound to the ISR dispatcher
+   9. the tick: the `Drivers::ApicTimer`, measured against the PIT, or the
+      `Drivers::PIT` without the APIC; enables interrupts
+   10. constructs the `Threading::Scheduler` on that tick (the boot flow
+       becomes task 0, 1 ms tick)
+   11. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
        or the shell (after constructing the `Process::Runtime` for user
        programs, bound with `Process::setRuntime`): a `CharacterQueue` fed by
        the keyboard and COM1, and
@@ -67,11 +74,13 @@ CPU → IDT vector → INT_<n> stub (arch/x86_64/idt/isr.S)
         ← pop registers, drop vector/err_code, iretq
 ```
 
-Drivers do not talk to the PIC directly. They get a
+Drivers do not talk to the interrupt controller's chip directly. They get a
 `Drivers::InterruptController&` (`drivers/interrupt_controller.hpp`) and call
-`attach(irq, fn, arg)` and `unmask(irq)`; the PIC is one implementation, an
-APIC driver would be another. A periodic timer is a `Drivers::TickSource`
-(`drivers/tick_source.hpp`), implemented by the PIT. The only place that
+`attach(irq, fn, arg)` and `unmask(irq)`; the APIC
+(`Drivers::ApicInterruptController`) and the 8259 PIC are its two
+implementations, and ISA IRQ *n* is vector `0x20 + n` with either. A periodic
+timer is a `Drivers::TickSource` (`drivers/tick_source.hpp`), implemented by
+the local APIC timer (vector `0x40`) and the PIT. The only place that
 reaches the controller without being handed it is the ISR dispatcher, bound
 once with `Handlers::setInterruptController`.
 

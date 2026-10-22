@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 760 passed, 0 failed
+[SELFTEST] done: 882 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -53,7 +53,7 @@ backtrace in it into function names.
 | PMM frames (isolated) | alignment, uniqueness, reuse, double free, pools give blocks back, the pool limit |
 | PMM from a multiboot memory map | `populateFromMultiboot` on a fake multiboot2 info: rounding, kernel reservation |
 | PMM (kernel instance) | the real manager hands out blocks and frames above the kernel, no leak |
-| VMM | allocate/write/free, range reuse, `virtToPhys`, `mapPhysical`/`unmapPhysical` alias in a new page directory, no leak |
+| VMM | allocate/write/free, range reuse, `virtToPhys`, `mapPhysical`/`unmapPhysical` alias in a new page directory, `mapDevice` (uncached: PCD and PWT), no leak |
 | Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
 | Uninitialized | `Cxx::Uninitialized<T>` constructs once, on demand, with the given arguments |
@@ -68,15 +68,21 @@ backtrace in it into function names.
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
 | Backtrace in a thread | the walk stops at the top of a thread's stack (rbp = 0) |
 | Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, instances do not affect each other |
-| Scheduler sleep (kernel, PIT) | the kernel scheduler with real ticks: idling in `hlt`, a sleeping thread |
+| Scheduler sleep (kernel, real ticks) | the kernel scheduler with real ticks: idling in `hlt`, a sleeping thread |
 | Atomic, InterruptGuard, Spinlock | atomic operations and wrap around; guards nest and restore IF |
 | WaitQueue (isolated) | FIFO wake order, `wakeOne` does not switch, `wakeAll` |
 | Semaphore (isolated) | counting up to `max`, hand off to a waiter, `give` from interrupt context |
 | Semaphore producer/consumer (isolated) | a 4 slot bounded buffer with two semaphores: order and sum |
 | Mutex (isolated) | threads that yield while holding it run one after the other, ownership hand off |
 | ConditionVariable (isolated) | Mesa semantics: the waiter checks again; woken waiters get the mutex back first |
-| Scheduler idle keeps the interrupt state (kernel, PIT) | sleeping with interrupts off returns with them off |
+| Scheduler idle keeps the interrupt state (kernel, real ticks) | sleeping with interrupts off returns with them off |
 | Scancode decoder (set 1, US) | make/break, Shift, Caps Lock, Ctrl, 0xE0 keys, Print Screen's fake shift, Pause and controller answers |
+| PCI: the scan and the names | a made up bus (multi function devices, a bus behind a bridge, the capacity limit), the name tables; the machine's host bridge at `00:00.0` |
+| ACPI tables (made up) | an RSDP, XSDT and RSDT built in memory: both root tables, a wrong checksum listed but not found, a table outside the physmap skipped, broken RSDPs and root tables refused, the RSDP from the multiboot tags |
+| MADT (made up) | every entry kind, the 64 bit local APIC address, an unknown kind; the ISA routes from the overrides; entries past the end or of length 0 |
+| ACPI and the APIC on this machine | QEMU's FADT and MADT; the local APIC (CPUID's id, enabled), IRQ 0 on the GSI the MADT says, IRQ 2 not routed, the 8259s masked; the PIT through the I/O APIC; the APIC timer periodic on `0x40`, 50 ms of the PIT are 40 to 60 ticks. Skipped without ACPI |
+| SMBIOS (made up) | a 2.8 table built byte by byte: the walk, `find` by type and index, strings by number, fields beyond the length read as 0; the five decoders (a 2.0 length processor, memory sizes in KB and extended); bad entry points refused; a structure past the table and unended strings stop the walk; `findSmbios` on 16 byte boundaries, `_SM3_` seen but not read |
+| SMBIOS on this machine | SeaBIOS's table: BIOS, system by "QEMU", a populated processor socket, memory devices adding up to 512 MB, the end of table last. Skipped without a 2.x entry point |
 | Block devices and the MBR (RAM disk) | range checks, partition table parsing (bad signature, entries beyond the disk), a partition as its own device |
 | FAT16 8.3 names | path component to the on disk 11 bytes and back |
 | FAT16 (RAM disk) | a hand built volume: lookup (case, deleted entries, labels, LFN parts, ".."), reads across clusters out of order, broken chains (too short, a free cluster, out of range, a looping directory), the VFS on top, volumes that are not FAT16 |
@@ -88,12 +94,25 @@ backtrace in it into function names.
 | User programs (ring 3, test disk) | `HELLO.ELF` prints and exits with 0, `FAULT.ELF` ends with 142 (user page fault, no panic), `BADPTR.ELF` gets every bad pointer refused, missing and non ELF files, two programs at once, every page given back |
 | Exception table (faults that are expected) | `readQword` on a non canonical (#GP) and an unmapped (page fault) address returns false and the kernel goes on; `readMsr`/`writeMsr` on EFER |
 | Page table walk | the kernel image (PML4 511, a 2 MB page), an unmapped address, the identity map |
-| Interrupt counts | the timer vector counts one per millisecond |
-| Raising interrupts, breakpoints | `IDT::raise` on a vector without a handler and on the timer vector (one tick); `int 3` and `ATLOS_BREAKPOINT()` report and go on; the breakpoint gate has DPL 3 |
+| Interrupt counts | the tick's vector (the APIC timer's `0x40`, or IRQ 0's `0x20`) counts one per millisecond |
+| Raising interrupts, breakpoints | `IDT::raise` on a vector without a handler and on the tick's vector (one tick); `int 3` and `ATLOS_BREAKPOINT()` report and go on; the breakpoint gate has DPL 3 |
 | Address spaces (a second one, user pages) | a new address space shares the kernel half and the identity map; user pages only in the user range, 2 MB aligned, zeroed, with the asked flags; built while inactive, seen after `activate()`; the destructor gives back pages and tables; kernel pages appear in every address space |
 | Shell parser | words, quotes, limits; hex and decimal numbers, overflow |
 | Shell line editor | echo, Backspace and DEL, `\r\n` as one Enter, Ctrl+C, skipped escape sequences, history (order, duplicates, full), the length limit |
-| Shell commands (RAM disk) | every command on a FAT16 volume in RAM with the output captured: paths and `cd`, files, `echo >`/`>>`, `md`/`mw` on a test buffer, unmapped memory refused, `mem`, `vmmap`, `tasks` with a sleeping thread, errors |
+| Shell commands (RAM disk) | every command on a FAT16 volume in RAM with the output captured: paths and `cd`, files, `echo >`/`>>`, `md`/`mw` on a test buffer, unmapped memory refused, `mem`, `vmmap`, `tasks` with a sleeping thread, `lspci` on a made up bus, `acpi` and `smbios` on made up tables, errors |
+
+### Other machines
+
+The test scripts boot QEMU's default `pc` machine, which has ACPI and an
+APIC. The other paths are checked by hand with the same ISO and disk:
+
+```sh
+qemu-system-x86_64 -cdrom build/selftest/atlOS.iso -drive file=disk-copy.img,format=raw,if=ide \
+    -boot d -m 512M -display none -serial stdio -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    -machine acpi=off      # no ACPI tables: the PIC and the PIT, the APIC group skipped
+#   -machine q35           # PCIe, another chipset's MADT (the disk is on AHCI: the ATA tests skip)
+#   -smp 2                 # two processors in the MADT
+```
 
 ## Crash test
 
@@ -134,8 +153,12 @@ kernel with the test disk and COM1 on a TCP socket, waits for the prompt and
 types commands the way a terminal does (`\r` for Enter, DEL for Backspace,
 `ESC [ A` for Up, Ctrl+C), checking each answer: `ls`, `cat`, `cd`, writing
 with `echo >`/`>>`, `rm`/`rmdir`, `mw`/`md`, `help` by group, `disk` and
-`disk read 0` (the MBR's `55 aa`), `vmmap`, `tasks`, `run` of a user
-program and of one that faults (the shell must still answer), the example of
+`disk read 0` (the MBR's `55 aa`), `lspci` and `lspci 00:01.1`, `irq`, `acpi`,
+`acpi APIC` and `apic` (the timer periodic, COM1 unmasked), `smbios`, `smbios 1` and
+`smbios 17` (512 MB), `vmmap`, `tasks`, `run` of a user
+program and of one that faults (the shell must still answer), typing a name
+into `ASK.ELF` (and Ctrl+C into it once), `CLOCK.ELF`, `FILES.ELF` and the
+file it wrote, `ARGS.ELF` and `CAT.ELF` with arguments, the example of
 `user/README.md` (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
 report, and at the end
 `fault`, whose kernel page fault report must appear. The serial log is

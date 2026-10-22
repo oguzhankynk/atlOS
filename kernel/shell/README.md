@@ -74,9 +74,9 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
-| tasks | `tasks`, `ps`, `run program.elf` |
+| tasks | `tasks`, `ps`, `run program.elf [args]` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
-| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `int vector` |
+| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `acpi [SIGNATURE]`, `apic`, `smbios [type]`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
@@ -133,8 +133,8 @@ atlOS:/> pt 0xffffffff80400000
   2 MB page, physical 0x400000
 atlOS:/> irq
   vec  count       what
-   32  16545       IRQ 0 timer
    36  14          IRQ 4 COM1
+   64  16545       APIC timer
 ```
 
 - `cr` decodes CR0, CR4 and EFER bit by bit; CR2 holds the last page fault
@@ -144,10 +144,11 @@ atlOS:/> irq
   atlOS's `owned`).
 - `gdt` reads the GDT through `sgdt` and decodes code, data and the TSS
   descriptor (two slots in long mode); `idt` shows the gates of the
-  exceptions, the PIC IRQs and the system call (handler, interrupt or trap
-  gate, DPL, IST), `idt n` any one.
+  exceptions, the ISA IRQs, the APIC timer, the system call and the APIC's
+  spurious vector (handler, interrupt or trap gate, DPL, IST), `idt n` any one.
 - `in` and `out` reach any I/O port, a byte by default (`w` 16, `l` 32 bit):
-  `in 0x21` is the PIC's interrupt mask, `in 0x64` the keyboard controller's
+  `in 0x21` is the 8259 PIC's interrupt mask (`0xff`: every line masked, the
+  APIC delivers the IRQs), `in 0x64` the keyboard controller's
   status. Writing to a port changes the device: `out 0x80 0x42` is harmless
   (the POST code port), others are not.
 - `rdmsr` and `wrmsr` reach the model specific registers. An MSR the CPU
@@ -156,8 +157,8 @@ atlOS:/> irq
   kernel goes on. QEMU's emulator returns 0 for MSRs it does not know.
 - `irq` counts what arrived on every vector since boot: timer ticks,
   keyboard and serial interrupts, system calls, faults.
-- `int vector` raises any vector in software: `int 0x20` runs the timer's
-  handler (one tick), `int 0x30` reaches a vector without a handler, `int 3`
+- `int vector` raises any vector in software: `int 0x40` runs the APIC
+  timer's handler (one tick; `int 0x20` without ACPI, where the PIT ticks), `int 0x30` reaches a vector without a handler, `int 3`
   is a breakpoint (the registers and a backtrace, then the shell goes on),
   any other exception (`int 0`, `int 14`, ...) reports and halts like the
   real fault.
@@ -188,6 +189,88 @@ the signature `55 aa` at the end. The first entry (type `06`, FAT16)
 starts at sector `0x800` (`00 08 00 00`, little endian) and has `0xf800`
 sectors. `disk read 0 1 ata0p1` is the FAT boot
 sector of the first partition, `disk read 1 2 ata0p1` the first FAT.
+
+### Looking at PCI
+
+`lspci` scans every bus (`Drivers::scanPci`, see `kernel/drivers/pci/README.md`)
+and prints a line per function: its address, vendor and device id, class and
+subclass, and their names. `lspci bus:dev.fn` decodes one function's header:
+the command bits, the BARs, the interrupt pin, the capability list (a PCIe
+device has `PCI Express` in it), then the first 64 bytes as they are.
+
+```
+atlOS:/> lspci
+  00:00.0  8086:1237  0600  Intel            Host bridge
+  00:01.1  8086:7010  0101  Intel            IDE controller
+  ...
+atlOS:/> lspci 00:01.1
+00:01.1  IDE controller
+  ...
+  BAR4      I/O ports at 0xc040
+```
+
+### Looking at ACPI and the APIC
+
+`acpi` lists the tables the root table (XSDT or RSDT) points at, see
+`kernel/firmware/acpi/README.md`. `acpi SIG` shows one table's header,
+decodes it if atlOS reads it (the MADT: processors, I/O APICs, overrides,
+NMI pins) and dumps its first 512 bytes, labeled with physical addresses.
+`apic` reads the hardware itself (`kernel/drivers/apic/README.md`): the local
+APIC's registers and local vector table, the timer's frequency and count, and
+for every ISA IRQ its GSI, I/O APIC pin and redirection entry.
+
+```
+atlOS:/> acpi APIC
+APIC  interrupt controllers (MADT)
+  at 0x1ffe182d, 120 bytes, revision 1, checksum valid
+  ...
+  local APIC at 0xfee00000, 8259 PICs too
+  processor 0  APIC id 0
+  I/O APIC id 0 at 0xfec00000, from GSI 0
+  override  IRQ 0 -> GSI 2, bus polarity, bus trigger
+  override  IRQ 9 -> GSI 9, active high, level
+  ...
+atlOS:/> apic
+local APIC id 0, version 0x14, 6 LVT entries, at 0xfee00000
+  ...
+  timer: periodic, 63198300 Hz (bus clock / 16), count 33484 of 63198
+I/O APIC id 0, version 0x20, 24 pins (GSI 0 .. 23), at 0xfec00000
+  IRQ  GSI  pin  entry               vector  trigger  polarity  to APIC
+    0    2    2  0x0000000000010020  0x20    edge     high      0  masked
+    1    1    1  0x0000000000000021  0x21    edge     high      0
+  ...
+```
+
+IRQ 1 (the keyboard) and IRQ 4 (COM1) are unmasked: their drivers asked for
+them. IRQ 0 is masked because the scheduler ticks on the APIC timer.
+
+### Looking at SMBIOS
+
+`smbios` lists the structures of the firmware's SMBIOS 2.x table (see
+`kernel/firmware/smbios/README.md`): handle, type, length, the number of
+strings. `smbios type` shows every structure of one type: types 0 (BIOS),
+1 (system), 2 (baseboard), 4 (processor) and 17 (memory device) decoded
+field by field, any type with its strings and its formatted area dumped.
+
+```
+atlOS:/> smbios 17
+handle 0x1100, type 17 Memory device, 40 bytes
+  locator        DIMM 0
+  size           512 MB
+  type           0x07 RAM, form factor 0x09, width unknown
+  manufacturer   QEMU
+  strings: 1 "DIMM 0" 2 "QEMU"
+0000000000000000  11 28 00 11 00 10 fe ff  ff ff ff ff 00 02 09 00  |.(..............|
+...
+```
+
+### Running a program
+
+`run program.elf [args]` starts the program (`Runtime::spawn`) with
+`argv = { the program's path, args... }` and sleeps until it exits
+(`Runtime::wait`). Meanwhile the keys go to the program, which reads
+them with `read(0, ...)`; Ctrl+C ends a program that reads. See
+`kernel/proc/README.md`.
 
 ### Deliberately not done
 
@@ -226,7 +309,10 @@ sequenceDiagram
   full history, the length limit), *Shell commands* (every command against a
   FAT16 volume in RAM with the output captured: paths, files, `echo >`/`>>`,
   `md`/`mw` on a buffer of the test, refusing unmapped memory, `help` by
-  group, `disk read` of the RAM disk's boot sector, `tasks` with a
+  group, `disk read` of the RAM disk's boot sector, `lspci` on a made up
+  bus (BARs, capabilities, bad addresses), `acpi` on made up tables (the
+  list, the decoded MADT, a wrong checksum), `apic` without an APIC, `smbios`
+  on a made up table (the list, types 1, 4 and 17, errors), `tasks` with a
   sleeping thread), *VMM translate and mappings*.
 - End to end (`scripts/run-shelltest.py`, `scripts/build.sh shelltest`, CI):
   boots the normal kernel with COM1 on a TCP socket and types commands the

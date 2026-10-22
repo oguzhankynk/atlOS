@@ -15,6 +15,7 @@
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/cpuid.hpp>
 #include <arch/x86_64/cpu/msr.hpp>
 #include <arch/x86_64/cpu/probe.hpp>
 #include <arch/x86_64/gdt/gdt.hpp>
@@ -22,21 +23,35 @@
 #include <arch/x86_64/idt/idt.hpp>
 #include <arch/x86_64/idt/raise.hpp>
 #include <arch/x86_64/io/ioport.hpp>
+#include <arch/x86_64/mmu/mmu.inc>
 #include <core/console.hpp>
 #include <core/debug.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/apic/apic.hpp>
+#include <drivers/apic/apic_timer.hpp>
+#include <drivers/apic/io_apic.hpp>
+#include <drivers/apic/local_apic.hpp>
 #include <drivers/character_sink.hpp>
 #include <drivers/disk/ata.hpp>
 #include <drivers/disk/memory_block_device.hpp>
 #include <drivers/disk/partition.hpp>
 #include <drivers/interrupt_controller.hpp>
 #include <drivers/keyboard.hpp>
+#include <drivers/pci/pci.hpp>
 #include <drivers/pit.hpp>
 #include <drivers/scancode.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/tick_source.hpp>
 #include <drivers/vga.hpp>
 #include <drivers/vga_console.hpp>
+#include <firmware/acpi/acpi.hpp>
+#include <firmware/acpi/madt.hpp>
+#include <firmware/smbios/baseboard_information.hpp>
+#include <firmware/smbios/bios_information.hpp>
+#include <firmware/smbios/memory_device.hpp>
+#include <firmware/smbios/processor_information.hpp>
+#include <firmware/smbios/smbios.hpp>
+#include <firmware/smbios/system_information.hpp>
 #include <fs/fat16.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
@@ -385,6 +400,14 @@ static void testVmm(PhysicalMemoryManager& pmm, AddressSpace& space)
     space.unmapPhysical(alias);
     CHECK(space.virtToPhys(alias) == nullptr);
     CHECK(page[3] == 0x1122334455667788ULL);
+
+    // A device view: the 2 MB page around the address, uncached (PCD and PWT in the entry)
+    auto device = static_cast<volatile uint64_t*>(space.mapDevice(phys + 3 * sizeof(uint64_t)));
+    AddressSpace::WalkStep steps[4];
+    uint32_t levels = space.walk((uint64_t)device, steps);
+    CHECK((uintptr_t)space.virtToPhys((const void*)device) == phys + 3 * sizeof(uint64_t) && *device == page[3]);
+    CHECK(levels == 3 && (steps[2].entry & (MMU_WRITE_THROUGH | MMU_CACHE_DISABLE)) == (MMU_WRITE_THROUGH | MMU_CACHE_DISABLE));
+    space.unmapPhysical((const void*)device);
 
     space.freePages(page, 1);
 
@@ -1057,7 +1080,7 @@ static void testSleepFakeTicks(AddressSpace& space)
 
 static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
 {
-    group("Scheduler sleep (kernel, PIT)");
+    group("Scheduler sleep (kernel, real ticks)");
 
     // Nothing else can run: the caller idles in hlt until the timer wakes it
     uint64_t t0 = scheduler.ticks();
@@ -1541,7 +1564,7 @@ static void testConditionVariable(AddressSpace& space)
 
 static void testIdleKeepsInterruptState(Scheduler& scheduler)
 {
-    group("Scheduler idle keeps the interrupt state (kernel, PIT)");
+    group("Scheduler idle keeps the interrupt state (kernel, real ticks)");
 
     // A thread waiting under an InterruptGuard may make the scheduler idle in
     // "sti; hlt"; it must get the CPU back with interrupts off, as it left it
@@ -2476,17 +2499,17 @@ static void testPageTableWalk(AddressSpace& space)
     CHECK(space.walk(0, steps) == 3 && (steps[2].entry & 0x000FFFFFFFE00000ULL) == 0); // the identity map
 }
 
-static void testInterruptCounts(Scheduler& scheduler)
+static void testInterruptCounts(Scheduler& scheduler, unsigned tickVector)
 {
     group("Interrupt counts");
 
-    uint64_t timer = IDT::interruptCount(0x20);
+    uint64_t timer = IDT::interruptCount(tickVector);
     scheduler.sleep(5);
-    CHECK(IDT::interruptCount(0x20) >= timer + 5); // one per millisecond
+    CHECK(IDT::interruptCount(tickVector) >= timer + 5); // one per millisecond
     CHECK(IDT::interruptCount(0x99) == 0); // nothing arrives there
 }
 
-static void testRaiseAndBreakpoint(Scheduler& scheduler)
+static void testRaiseAndBreakpoint(Scheduler& scheduler, unsigned tickVector)
 {
     group("Raising interrupts, breakpoints");
 
@@ -2499,11 +2522,11 @@ static void testRaiseAndBreakpoint(Scheduler& scheduler)
     bool counted = IDT::interruptCount(0x30) == before + 1;
     bool noHandler = sink.contains("interrupt 48 (0x30): no handler");
 
-    // The timer vector runs the scheduler's tick handler, as the PIT would
+    // The tick vector runs the scheduler's tick handler, as the timer would
     sink.clear();
     uint64_t ticks = scheduler.ticks();
     IOPort::disableInterrupts(); // no real tick in between
-    IDT::raise(0x20);
+    IDT::raise(tickVector);
     bool ticked = scheduler.ticks() == ticks + 1;
     IOPort::enableInterrupts();
 
@@ -2524,6 +2547,603 @@ static void testRaiseAndBreakpoint(Scheduler& scheduler)
     CHECK(reported && wentOn);
     CHECK(((IDT::entry(3).attributes >> 5) & 3) == 3); // ring 3 may use int3
     CHECK(IDT::hasErrorCode(14) && IDT::hasErrorCode(8) && !IDT::hasErrorCode(3) && !IDT::hasErrorCode(0x20));
+}
+
+// ------------------------------------------------------------
+// PCI
+// ------------------------------------------------------------
+
+// A made up PCI bus: a few functions and their configuration space
+class FakePciConfigSpace final : public Drivers::PciConfigSpace {
+public:
+    struct Function {
+        Drivers::PciAddress address;
+        uint8_t config[256];
+    };
+
+    static constexpr int capacity = 8;
+
+    uint8_t* add(Drivers::PciAddress address, uint16_t vendor, uint16_t device, uint8_t classCode, uint8_t subclass)
+    {
+        if (m_count == capacity)
+            kernelPanic("FakePciConfigSpace: full");
+        Function& function = m_functions[m_count++];
+        function.address = address;
+        memset(function.config, 0, sizeof(function.config));
+        set16(function.config, Drivers::PciVendorId, vendor);
+        set16(function.config, Drivers::PciDeviceId, device);
+        function.config[Drivers::PciClass] = classCode;
+        function.config[Drivers::PciSubclass] = subclass;
+        return function.config;
+    }
+
+    static void set16(uint8_t* config, uint8_t offset, uint16_t value) { memcpy(config + offset, &value, 2); }
+    static void set32(uint8_t* config, uint8_t offset, uint32_t value) { memcpy(config + offset, &value, 4); }
+
+    uint32_t read32(Drivers::PciAddress address, uint8_t offset) override
+    {
+        for (int i = 0; i < m_count; i++) {
+            const Function& function = m_functions[i];
+            if (function.address.bus == address.bus && function.address.device == address.device
+                && function.address.function == address.function) {
+                uint32_t value;
+                memcpy(&value, function.config + (offset & 0xFC), 4);
+                return value;
+            }
+        }
+        return 0xFFFFFFFF; // nobody answers
+    }
+
+private:
+    Function m_functions[capacity] {};
+    int m_count {};
+};
+
+// 00:00.0 host bridge; 00:01.0 and .2 of a multi function device; 00:03.0 a
+// network card with BARs and capabilities; 00:05 without the multi function
+// bit (its function 1 is not looked at); 03:00.0 behind a bridge
+static void buildFakePci(FakePciConfigSpace& pci)
+{
+    using F = FakePciConfigSpace;
+    pci.add({ 0, 0, 0 }, 0x8086, 0x1237, 0x06, 0x00);
+    pci.add({ 0, 1, 0 }, 0x8086, 0x7000, 0x06, 0x01)[Drivers::PciHeaderType] = Drivers::pciMultiFunction;
+    pci.add({ 0, 1, 2 }, 0x8086, 0x7020, 0x0C, 0x03);
+
+    uint8_t* nic = pci.add({ 0, 3, 0 }, 0x8086, 0x100E, 0x02, 0x00);
+    F::set16(nic, Drivers::PciCommand, 0x0007);
+    F::set16(nic, Drivers::PciStatus, Drivers::pciStatusCapabilities);
+    F::set32(nic, Drivers::PciBar0, 0xFEBC0000); // memory, 32 bit
+    F::set32(nic, Drivers::PciBar0 + 4, 0xC001); // I/O ports
+    F::set32(nic, Drivers::PciBar0 + 8, 0xFE00000C); // memory, 64 bit, prefetchable: the low half ...
+    F::set32(nic, Drivers::PciBar0 + 12, 0x1); // ... and the high half
+    nic[Drivers::PciCapabilities] = 0x40;
+    nic[0x40] = 0x01; // Power Management, next at 0x50
+    nic[0x41] = 0x50;
+    nic[0x50] = Drivers::pciCapabilityExpress; // the end of the list
+    nic[Drivers::PciInterruptPin] = 1;
+    nic[Drivers::PciInterruptLine] = 11;
+
+    pci.add({ 0, 5, 0 }, 0x1234, 0x1111, 0x03, 0x00);
+    pci.add({ 0, 5, 1 }, 0x1234, 0x2222, 0x03, 0x00);
+    pci.add({ 3, 0, 0 }, 0x144D, 0xA808, 0x01, 0x08);
+}
+
+static void testPci()
+{
+    group("PCI: the scan and the names");
+
+    FakePciConfigSpace pci;
+    buildFakePci(pci);
+    Drivers::PciDevice devices[8];
+    uint32_t count = Drivers::scanPci(pci, devices, 8);
+    CHECK(count == 6);
+    CHECK(devices[0].vendorId == 0x8086 && devices[0].deviceId == 0x1237 && devices[0].classCode == 0x06);
+    CHECK(devices[2].address.device == 1 && devices[2].address.function == 2 && devices[2].subclass == 0x03);
+    CHECK(devices[4].address.device == 5 && devices[4].address.function == 0); // and not function 1
+    CHECK(devices[5].address.bus == 3 && devices[5].classCode == 0x01 && devices[5].subclass == 0x08);
+    CHECK(devices[1].headerType == 0); // the multi function bit is not part of the layout
+    CHECK(Drivers::scanPci(pci, devices, 2) == 2);
+
+    // 16 and 8 bit reads are parts of a 32 bit one
+    CHECK(pci.read16({ 0, 0, 0 }, Drivers::PciDeviceId) == 0x1237);
+    CHECK(pci.read8({ 0, 3, 0 }, Drivers::PciInterruptLine) == 11);
+    CHECK(pci.read16({ 0, 9, 0 }, Drivers::PciVendorId) == Drivers::pciNoVendor);
+
+    CHECK(!strcmp(Drivers::pciClassName(0x01, 0x01), "IDE controller"));
+    CHECK(!strcmp(Drivers::pciClassName(0x06, 0x80), "Bridge"));
+    CHECK(!strcmp(Drivers::pciClassName(0xFE, 0x00), "Unknown device"));
+    CHECK(!strcmp(Drivers::pciVendorName(0x8086), "Intel") && Drivers::pciVendorName(0xABCD) == nullptr);
+    CHECK(!strcmp(Drivers::pciCapabilityName(0x10), "PCI Express") && Drivers::pciCapabilityName(0x77) == nullptr);
+
+    // The machine's own bus through ports 0xCF8/0xCFC: every PC has a host
+    // bridge at 00:00.0
+    Drivers::PciPortConfigSpace ports;
+    count = Drivers::scanPci(ports, devices, 8);
+    CHECK(count > 0);
+    CHECK(count > 0 && devices[0].address.bus == 0 && devices[0].address.device == 0 && devices[0].classCode == 0x06);
+}
+
+// ------------------------------------------------------------
+// ACPI and the APIC
+// ------------------------------------------------------------
+
+// Made up ACPI tables in one buffer of the kernel image (reached through the
+// physmap like real ones): an XSDT and an RSDT that both list a MADT, a table
+// with a wrong checksum and an address outside the physmap
+struct FakeAcpi {
+    alignas(16) uint8_t bytes[1024];
+    uint64_t physical; ///< of bytes
+    Firmware::AcpiRsdp rsdp;
+};
+
+static constexpr uint32_t fakeXsdtOffset = 0x40;
+static constexpr uint32_t fakeRsdtOffset = 0x80;
+static constexpr uint32_t fakeMadtOffset = 0x100;
+static constexpr uint32_t fakeBadOffset = 0x200;
+static constexpr uint64_t fakeOutside = 1ULL << 40; // 1 TB: beyond the physmap
+
+static const uint8_t s_fakeMadtEntries[] = {
+    0, 8, 0, 0, 1, 0, 0, 0, // processor 0, APIC id 0, enabled
+    0, 8, 1, 3, 0, 0, 0, 0, // processor 1, APIC id 3, disabled
+    1, 12, 2, 0, 0x00, 0x00, 0xC0, 0xFE, 0, 0, 0, 0, // I/O APIC id 2 at 0xFEC00000, from GSI 0
+    2, 10, 0, 0, 2, 0, 0, 0, 0x00, 0x00, // IRQ 0 -> GSI 2, as the bus does
+    2, 10, 0, 9, 9, 0, 0, 0, 0x0D, 0x00, // IRQ 9 -> GSI 9, active high, level
+    2, 10, 0, 11, 20, 0, 0, 0, 0x0F, 0x00, // IRQ 11 -> GSI 20, active low, level
+    4, 6, 0xFF, 0x05, 0x00, 1, // NMI on LINT1 of every processor, active high, edge
+    5, 12, 0, 0, 0x00, 0x00, 0xE1, 0xFE, 0, 0, 0, 0, // the local APICs at 0xFEE10000 (64 bit)
+    0x7F, 4, 0, 0, // a kind atlOS does not read
+};
+
+static uint8_t byteSum(const uint8_t* data, size_t size)
+{
+    uint8_t sum = 0;
+    for (size_t i = 0; i < size; i++)
+        sum += data[i];
+    return sum;
+}
+
+static Firmware::AcpiTableHeader* fakeTable(FakeAcpi& acpi, uint32_t offset, const char* signature, uint32_t length)
+{
+    auto header = reinterpret_cast<Firmware::AcpiTableHeader*>(acpi.bytes + offset);
+    memcpy(header->signature, signature, 4);
+    header->length = length;
+    header->revision = 1;
+    memcpy(header->oemId, "ATLOS ", 6);
+    memcpy(header->oemTableId, "SELFTEST", 8);
+    return header;
+}
+
+/// Set the checksum so that the table's bytes add up to 0
+static void sealTable(Firmware::AcpiTableHeader* header)
+{
+    header->checksum = 0;
+    header->checksum = -byteSum(reinterpret_cast<const uint8_t*>(header), header->length);
+}
+
+static void sealRsdp(Firmware::AcpiRsdp& rsdp)
+{
+    rsdp.checksum = 0;
+    rsdp.checksum = -byteSum(reinterpret_cast<const uint8_t*>(&rsdp), 20);
+    rsdp.extendedChecksum = 0;
+    rsdp.extendedChecksum = -byteSum(reinterpret_cast<const uint8_t*>(&rsdp), sizeof(rsdp));
+}
+
+static void buildFakeAcpi(FakeAcpi& acpi, AddressSpace& space)
+{
+    memset(acpi.bytes, 0, sizeof(acpi.bytes));
+    space.translate(acpi.bytes, acpi.physical);
+
+    // The MADT: the local APIC address, the flags (8259 PICs too), the entries
+    Firmware::AcpiTableHeader* madt = fakeTable(acpi, fakeMadtOffset, "APIC",
+        sizeof(Firmware::AcpiTableHeader) + 8 + sizeof(s_fakeMadtEntries));
+    uint8_t* fields = acpi.bytes + fakeMadtOffset + sizeof(Firmware::AcpiTableHeader);
+    uint32_t localApic = 0xFEE00000, flags = 1;
+    memcpy(fields, &localApic, 4);
+    memcpy(fields + 4, &flags, 4);
+    memcpy(fields + 8, s_fakeMadtEntries, sizeof(s_fakeMadtEntries));
+    sealTable(madt);
+
+    Firmware::AcpiTableHeader* bad = fakeTable(acpi, fakeBadOffset, "TEST", sizeof(Firmware::AcpiTableHeader));
+    sealTable(bad);
+    bad->checksum++;
+
+    // The root tables: 64 bit entries in the XSDT (at an offset of 36, not aligned), 32 bit in the RSDT
+    uint64_t entries[3] = { acpi.physical + fakeMadtOffset, acpi.physical + fakeBadOffset, fakeOutside };
+    Firmware::AcpiTableHeader* xsdt = fakeTable(acpi, fakeXsdtOffset, "XSDT", sizeof(Firmware::AcpiTableHeader) + 24);
+    memcpy(acpi.bytes + fakeXsdtOffset + sizeof(Firmware::AcpiTableHeader), entries, 24);
+    sealTable(xsdt);
+    Firmware::AcpiTableHeader* rsdt = fakeTable(acpi, fakeRsdtOffset, "RSDT", sizeof(Firmware::AcpiTableHeader) + 8);
+    for (size_t i = 0; i < 2; i++) {
+        auto entry = static_cast<uint32_t>(entries[i]);
+        memcpy(acpi.bytes + fakeRsdtOffset + sizeof(Firmware::AcpiTableHeader) + 4 * i, &entry, 4);
+    }
+    sealTable(rsdt);
+
+    memset(&acpi.rsdp, 0, sizeof(acpi.rsdp));
+    memcpy(acpi.rsdp.signature, "RSD PTR ", 8);
+    memcpy(acpi.rsdp.oemId, "ATLOS ", 6);
+    acpi.rsdp.revision = 2;
+    acpi.rsdp.rsdtAddress = static_cast<uint32_t>(acpi.physical + fakeRsdtOffset);
+    acpi.rsdp.length = sizeof(acpi.rsdp);
+    acpi.rsdp.xsdtAddress = acpi.physical + fakeXsdtOffset;
+    sealRsdp(acpi.rsdp);
+}
+
+static void testAcpiTables(AddressSpace& space)
+{
+    group("ACPI tables (made up)");
+
+    static FakeAcpi s_fake;
+    buildFakeAcpi(s_fake, space);
+    const uint8_t zero[3] = { 0x10, 0xEF, 0x01 };
+    CHECK(Firmware::acpiChecksumIsValid(zero, 3) && !Firmware::acpiChecksumIsValid(zero, 2));
+
+    // Revision 2: the XSDT. The table outside the physmap is skipped, the
+    // wrong checksum is listed but not found
+    static Firmware::AcpiTables s_tables;
+    CHECK(s_tables.load(s_fake.rsdp));
+    CHECK(s_tables.isLoaded() && s_tables.revision() == 2 && !strcmp(s_tables.oemId(), "ATLOS "));
+    CHECK(s_tables.root() && !memcmp(s_tables.root()->signature, "XSDT", 4));
+    CHECK(s_tables.rootPhysical() == s_fake.physical + fakeXsdtOffset);
+    CHECK(s_tables.count() == 2);
+    CHECK(s_tables.at(0).physical == s_fake.physical + fakeMadtOffset && s_tables.at(0).checksumValid);
+    CHECK(!memcmp(s_tables.at(1).header->signature, "TEST", 4) && !s_tables.at(1).checksumValid);
+    CHECK(s_tables.find("APIC") == s_tables.at(0).header);
+    CHECK(s_tables.find("TEST") == nullptr && s_tables.find("HPET") == nullptr);
+
+    // Revision 0 (ACPI 1.0): the RSDT, even though an XSDT address is there
+    Firmware::AcpiRsdp rsdp = s_fake.rsdp;
+    rsdp.revision = 0;
+    sealRsdp(rsdp);
+    CHECK(s_tables.load(rsdp) && s_tables.root() && !memcmp(s_tables.root()->signature, "RSDT", 4) && s_tables.count() == 2);
+
+    // What is refused: a wrong RSDP checksum or signature, a broken root table
+    rsdp = s_fake.rsdp;
+    rsdp.checksum++;
+    CHECK(!s_tables.load(rsdp) && !s_tables.isLoaded() && s_tables.count() == 0);
+    rsdp = s_fake.rsdp;
+    rsdp.signature[0] = 'X';
+    sealRsdp(rsdp);
+    CHECK(!s_tables.load(rsdp));
+    s_fake.bytes[fakeXsdtOffset + sizeof(Firmware::AcpiTableHeader)]++;
+    CHECK(!s_tables.load(s_fake.rsdp));
+    rsdp = s_fake.rsdp;
+    rsdp.xsdtAddress = fakeOutside;
+    sealRsdp(rsdp);
+    CHECK(!s_tables.load(rsdp));
+
+    // The RSDP in the multiboot information: the ACPI 2.0 tag wins over the 1.0 one
+    alignas(8) static uint8_t s_info[128];
+    memset(s_info, 0, sizeof(s_info));
+    auto tag = [](uint32_t offset, uint32_t type, uint32_t size) {
+        memcpy(s_info + offset, &type, 4);
+        memcpy(s_info + offset + 4, &size, 4);
+    };
+    tag(8, MULTIBOOT_TAG_TYPE_ACPI_OLD, 8 + 20);
+    tag(40, MULTIBOOT_TAG_TYPE_ACPI_NEW, 8 + 36);
+    tag(88, MULTIBOOT_TAG_TYPE_END, 8);
+    auto info = reinterpret_cast<uint64_t>(s_info);
+    CHECK(reinterpret_cast<const uint8_t*>(Firmware::findRsdp(info)) == s_info + 48);
+    tag(40, MULTIBOOT_TAG_TYPE_END, 8);
+    CHECK(reinterpret_cast<const uint8_t*>(Firmware::findRsdp(info)) == s_info + 16);
+    tag(8, MULTIBOOT_TAG_TYPE_END, 8);
+    CHECK(Firmware::findRsdp(info) == nullptr);
+}
+
+static void testMadt(AddressSpace& space)
+{
+    group("MADT (made up)");
+
+    static FakeAcpi s_fake;
+    buildFakeAcpi(s_fake, space);
+    auto& table = *reinterpret_cast<Firmware::AcpiTableHeader*>(s_fake.bytes + fakeMadtOffset);
+
+    static Firmware::MadtInfo s_madt;
+    CHECK(Firmware::parseMadt(table, s_madt));
+    CHECK(s_madt.localApicAddress == 0xFEE10000 && s_madt.hasLegacyPics); // the 64 bit entry wins
+    CHECK(s_madt.cpuCount == 2 && s_madt.cpus[0].enabled && s_madt.cpus[1].apicId == 3 && !s_madt.cpus[1].enabled);
+    CHECK(s_madt.ioApicCount == 1 && s_madt.ioApics[0].id == 2 && s_madt.ioApics[0].address == 0xFEC00000
+        && s_madt.ioApics[0].gsiBase == 0);
+    CHECK(s_madt.overrideCount == 3 && s_madt.overrides[2].irq == 11 && s_madt.overrides[2].gsi == 20
+        && s_madt.overrides[2].flags == 0x0F);
+    CHECK(s_madt.nmiCount == 1 && s_madt.nmis[0].processorId == 0xFF && s_madt.nmis[0].lint == 1
+        && s_madt.nmis[0].flags == 0x05);
+    CHECK(s_madt.skippedCount == 1);
+
+    // The ISA routes: the overrides, or the same number active high and edge
+    Firmware::IsaRoute timer = Firmware::isaRoute(s_madt, 0);
+    Firmware::IsaRoute sci = Firmware::isaRoute(s_madt, 9);
+    Firmware::IsaRoute low = Firmware::isaRoute(s_madt, 11);
+    Firmware::IsaRoute keyboard = Firmware::isaRoute(s_madt, 1);
+    CHECK(timer.gsi == 2 && !timer.activeLow && !timer.levelTriggered);
+    CHECK(sci.gsi == 9 && !sci.activeLow && sci.levelTriggered);
+    CHECK(low.gsi == 20 && low.activeLow && low.levelTriggered);
+    CHECK(keyboard.gsi == 1 && !keyboard.activeLow && !keyboard.levelTriggered);
+
+    // Not a MADT; an entry running past the end; an entry of length 0
+    CHECK(!Firmware::parseMadt(*reinterpret_cast<Firmware::AcpiTableHeader*>(s_fake.bytes + fakeXsdtOffset), s_madt));
+    uint8_t* last = s_fake.bytes + fakeMadtOffset + table.length - 4;
+    last[1] = 40;
+    CHECK(!Firmware::parseMadt(table, s_madt));
+    last[1] = 0;
+    CHECK(!Firmware::parseMadt(table, s_madt));
+}
+
+static volatile uint32_t s_pitIrqs;
+
+static void countPitIrq(void*)
+{
+    s_pitIrqs++;
+}
+
+static void testApicOnMachine(Scheduler& scheduler, const Interrupts& interrupts)
+{
+    group("ACPI and the APIC on this machine");
+
+    const Firmware::AcpiTables& acpi = interrupts.acpi;
+    if (!acpi.isLoaded()) {
+        printf("[SELFTEST] skipped: no ACPI tables, the PIC is in use\n");
+        CHECK(interrupts.apic == nullptr);
+        return;
+    }
+    CHECK(acpi.find("FACP") != nullptr);
+    const Firmware::AcpiTableHeader* table = acpi.find("APIC");
+    static Firmware::MadtInfo s_madt;
+    CHECK(table && Firmware::parseMadt(*table, s_madt) && s_madt.cpuCount >= 1 && s_madt.ioApicCount >= 1);
+
+    Drivers::ApicInterruptController* apic = interrupts.apic;
+    CHECK(apic != nullptr);
+    if (!apic)
+        return;
+    CHECK(&interrupts.controller == apic);
+
+    // The local APIC is this processor's (CPUID.1 EBX bits 31..24: its initial APIC id) and enabled
+    Drivers::LocalApic& local = apic->localApic();
+    unsigned int eax, ebx, ecx, edx;
+    cpuid(1, &eax, &ebx, &ecx, &edx);
+    CHECK(local.id() == (ebx >> 24));
+    uint32_t spurious = local.read(Drivers::LocalApic::RegisterSpurious);
+    CHECK((spurious & 0x100) && (spurious & 0xFF) == Drivers::ApicInterruptController::spuriousVector);
+    CHECK(local.physAddress() == s_madt.localApicAddress);
+
+    // The I/O APIC: IRQ 0 where the MADT says (GSI 2 with the usual override), vector 0x20, masked
+    const Drivers::IoApic* io;
+    uint32_t pin;
+    CHECK(apic->ioApicCount() >= 1 && apic->ioApic(0).pinCount() >= 16);
+    Firmware::IsaRoute timerRoute = Firmware::isaRoute(s_madt, 0);
+    CHECK(apic->locate(Drivers::Irq::Timer, io, pin) && io->gsiBase() + pin == timerRoute.gsi);
+    CHECK((io->redirection(pin) & 0xFF) == Drivers::ApicInterruptController::irqVectorBase);
+    if (timerRoute.gsi == 2)
+        CHECK(!apic->locate(Drivers::Irq::Cascade, io, pin)); // its GSI belongs to IRQ 0
+    CHECK(IOPort::inportb(0x21) == 0xFF && IOPort::inportb(0xA1) == 0xFF); // the 8259s stay masked
+
+    // IRQ 0 through the I/O APIC: the PIT, on its own handler (the scheduler ticks on the APIC timer)
+    if (interrupts.apicTimer) {
+        s_pitIrqs = 0;
+        Drivers::PIT pit(*apic);
+        CHECK(pit.start(1000000, countPitIrq, nullptr));
+        scheduler.sleep(20);
+        apic->mask(Drivers::Irq::Timer);
+        CHECK(s_pitIrqs >= 10);
+    }
+
+    if (!interrupts.apicTimer) {
+        printf("[SELFTEST] skipped: the APIC timer is not in use\n");
+        return;
+    }
+
+    // The APIC timer: periodic on its vector, counting down, one tick per millisecond
+    Drivers::ApicTimer& timer = *interrupts.apicTimer;
+    uint32_t lvt = local.read(Drivers::LocalApic::RegisterLvtTimer);
+    CHECK((lvt & Drivers::LocalApic::LvtTimerPeriodic) && !(lvt & Drivers::LocalApic::LvtMasked)
+        && (lvt & 0xFF) == Drivers::ApicInterruptController::timerVector);
+    CHECK(timer.frequency() > 0 && timer.initialCount() == timer.frequency() / 1000);
+    CHECK(local.read(Drivers::LocalApic::RegisterTimerCurrentCount) <= timer.initialCount());
+
+    // Measured against the PIT: 50 ms of channel 2 are about 50 ticks
+    uint64_t before = scheduler.ticks();
+    CHECK(Drivers::pitBusyWait(50000));
+    uint64_t elapsed = scheduler.ticks() - before;
+    CHECK(elapsed >= 40 && elapsed <= 60);
+    if (elapsed < 40 || elapsed > 60)
+        printf("[SELFTEST] 50 ms of the PIT took %lu APIC timer ticks\n", elapsed);
+    CHECK(!Drivers::pitBusyWait(0) && !Drivers::pitBusyWait(60000)); // out of the 16 bit count
+}
+
+// ------------------------------------------------------------
+// SMBIOS
+// ------------------------------------------------------------
+
+// A made up SMBIOS 2.8 table: BIOS, system, a processor of the 2.0 length,
+// two memory devices (16 GB through the extended size, 512 KB), an OEM
+// structure without strings, the end of table
+static const uint8_t s_fakeSmbiosTable[] = {
+    // type 0, handle 0x0000
+    0, 0x18, 0x00, 0x00, 1, 2, 0x00, 0xE8, 3, 0, 0x08, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0xFF, 0xFF,
+    'a', 't', 'l', 'O', 'S', ' ', 'B', 'I', 'O', 'S', 0, '1', '.', '0', 0, '1', '0', '/', '2', '2', '/', '2', '0', '2', '6', 0, 0,
+    // type 1, handle 0x0100: UUID 00112233-4455-6677-8899-aabbccddeeff (little endian fields)
+    1, 0x1B, 0x00, 0x01, 1, 2, 0, 3, 0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD,
+    0xEE, 0xFF, 6, 0, 4,
+    'a', 't', 'l', 'O', 'S', 0, 'T', 'e', 's', 't', ' ', 'P', 'C', 0, 'S', 'N', '-', '1', 0, 'F', 'a', 'm', 'i', 'l', 'y', 0, 0,
+    // type 4, handle 0x0400, 2.0 length: no serial number, no core count
+    4, 0x1A, 0x00, 0x04, 1, 3, 0xC6, 2, 0x63, 0x06, 0x09, 0x00, 0xFF, 0xFB, 0x8B, 0x07, 3, 0x8C, 100, 0, 0xB8, 0x0B,
+    0xD0, 0x07, 0x41, 1,
+    'C', 'P', 'U', ' ', '0', 0, 'G', 'e', 'n', 'u', 'i', 'n', 'e', 0, 'T', 'e', 's', 't', ' ', 'C', 'P', 'U', 0, 0,
+    // type 17, handle 0x1100: size 0x7FFF, the extended size 16384 MB, DDR4 3200
+    17, 0x28, 0x00, 0x11, 0x00, 0x10, 0xFE, 0xFF, 72, 0, 64, 0, 0xFF, 0x7F, 0x09, 0, 1, 2, 0x1A, 0x80, 0x00, 0x80, 0x0C,
+    3, 4, 0, 5, 1, 0x00, 0x40, 0, 0, 0x75, 0x0B, 0, 0, 0, 0, 0, 0,
+    'D', 'I', 'M', 'M', ' ', '0', 0, 'B', 'A', 'N', 'K', ' ', '0', 0, 'R', 'A', 'M', 0, 'S', 'N', '-', '2', 0, 'P', 'A', 'R',
+    'T', '-', '1', 0, 0,
+    // type 17, handle 0x1101, 2.1 length: 512 KB (bit 15: in KB)
+    17, 0x15, 0x01, 0x11, 0x00, 0x10, 0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x82, 0x09, 0, 1, 0, 0x07, 0, 0,
+    'D', 'I', 'M', 'M', ' ', '1', 0, 0,
+    // type 200 (OEM), handle 0xC800, no strings
+    200, 5, 0x00, 0xC8, 0x42, 0, 0,
+    // type 127, the end
+    127, 4, 0xFF, 0xFF, 0, 0
+};
+
+struct FakeSmbios {
+    alignas(16) uint8_t table[sizeof(s_fakeSmbiosTable)];
+    Firmware::SmbiosEntryPoint entry;
+};
+
+static void sealSmbios(Firmware::SmbiosEntryPoint& entry)
+{
+    auto bytes = reinterpret_cast<uint8_t*>(&entry);
+    entry.intermediateChecksum = 0;
+    entry.intermediateChecksum = -byteSum(bytes + 0x10, 15);
+    entry.checksum = 0;
+    entry.checksum = -byteSum(bytes, entry.length);
+}
+
+static void buildFakeSmbios(FakeSmbios& fake, AddressSpace& space)
+{
+    memcpy(fake.table, s_fakeSmbiosTable, sizeof(fake.table));
+    uint64_t physical = 0;
+    space.translate(fake.table, physical);
+
+    memset(&fake.entry, 0, sizeof(fake.entry));
+    memcpy(fake.entry.anchor, "_SM_", 4);
+    fake.entry.length = sizeof(fake.entry);
+    fake.entry.majorVersion = 2;
+    fake.entry.minorVersion = 8;
+    fake.entry.maxStructureSize = 0x3F;
+    memcpy(fake.entry.intermediateAnchor, "_DMI_", 5);
+    fake.entry.tableLength = sizeof(fake.table);
+    fake.entry.tableAddress = static_cast<uint32_t>(physical);
+    fake.entry.structureCount = 7;
+    fake.entry.bcdRevision = 0x28;
+    sealSmbios(fake.entry);
+}
+
+static void testSmbios(AddressSpace& space)
+{
+    group("SMBIOS (made up)");
+
+    static FakeSmbios s_fake;
+    buildFakeSmbios(s_fake, space);
+    static Firmware::SmbiosTables s_tables;
+    CHECK(Firmware::smbiosEntryIsValid(s_fake.entry));
+    CHECK(s_tables.load(s_fake.entry) && s_tables.isLoaded() && !s_tables.truncated());
+    CHECK(s_tables.count() == 7 && s_tables.majorVersion() == 2 && s_tables.minorVersion() == 8);
+    CHECK(s_tables.at(6).type() == Firmware::SmbiosEndOfTable && s_tables.at(5).handle() == 0xC800);
+
+    // Finding by type; the strings by number
+    const Firmware::SmbiosStructure* second = s_tables.find(Firmware::SmbiosMemoryDevice, 1);
+    CHECK(second && second->handle() == 0x1101 && !s_tables.find(Firmware::SmbiosMemoryDevice, 2) && !s_tables.find(3));
+    const Firmware::SmbiosStructure& bios = s_tables.at(0);
+    CHECK(bios.stringCount() == 3 && !strcmp(bios.string(1), "atlOS BIOS") && !strcmp(bios.string(3), "10/22/2026"));
+    CHECK(!strcmp(bios.string(0), "") && !strcmp(bios.string(4), ""));
+    CHECK(s_tables.at(5).stringCount() == 0 && s_tables.at(5).stringsSize() == 2 && !strcmp(s_tables.at(5).string(1), ""));
+    CHECK(bios.word(0x06) == 0xE800 && bios.byte(0x18) == 0 && bios.qword(0x20) == 0); // beyond the formatted area
+
+    // The decoders
+    Firmware::BiosInformation biosInfo;
+    CHECK(Firmware::decodeBiosInformation(bios, biosInfo) && !strcmp(biosInfo.vendor, "atlOS BIOS")
+        && !strcmp(biosInfo.version, "1.0") && biosInfo.romSizeKb == 64 && biosInfo.startSegment == 0xE800);
+    CHECK(biosInfo.characteristics == 0x08 && biosInfo.hasRelease && biosInfo.releaseMajor == 1 && biosInfo.releaseMinor == 2);
+
+    Firmware::SystemInformation system;
+    CHECK(Firmware::decodeSystemInformation(s_tables.at(1), system) && !strcmp(system.manufacturer, "atlOS")
+        && !strcmp(system.product, "Test PC") && !strcmp(system.version, "") && !strcmp(system.serialNumber, "SN-1"));
+    CHECK(system.hasUuid && system.uuid[0] == 0x33 && system.uuid[15] == 0xFF && system.wakeUpType == 6
+        && !strcmp(system.sku, "") && !strcmp(system.family, "Family"));
+
+    Firmware::ProcessorInformation cpu;
+    CHECK(Firmware::decodeProcessorInformation(s_tables.at(2), cpu) && !strcmp(cpu.socket, "CPU 0")
+        && !strcmp(cpu.manufacturer, "Genuine") && !strcmp(cpu.version, "Test CPU"));
+    CHECK(cpu.family == 0xC6 && cpu.id == 0x078BFBFF00090663ULL && cpu.externalClockMhz == 100 && cpu.maxSpeedMhz == 3000
+        && cpu.currentSpeedMhz == 2000 && cpu.status == 0x41);
+    CHECK(cpu.coreCount == 0 && !strcmp(cpu.serialNumber, "")); // not in a 2.0 structure
+
+    Firmware::MemoryDevice dimm;
+    CHECK(Firmware::decodeMemoryDevice(s_tables.at(3), dimm) && dimm.sizeKnown && dimm.sizeKb == 16ULL * 1024 * 1024
+        && dimm.memoryType == 0x1A && !strcmp(Firmware::smbiosMemoryTypeName(dimm.memoryType), "DDR4"));
+    CHECK(dimm.speedMts == 3200 && dimm.configuredSpeedMts == 2933 && !strcmp(dimm.deviceLocator, "DIMM 0")
+        && !strcmp(dimm.partNumber, "PART-1") && !strcmp(dimm.assetTag, "") && dimm.totalWidth == 72);
+    CHECK(second && Firmware::decodeMemoryDevice(*second, dimm) && dimm.sizeKb == 512 && dimm.speedMts == 0
+        && !strcmp(dimm.manufacturer, "") && !strcmp(dimm.bankLocator, ""));
+
+    // A structure of another type, or too short for its own
+    CHECK(!Firmware::decodeBiosInformation(s_tables.at(1), biosInfo) && !Firmware::decodeMemoryDevice(bios, dimm));
+    Firmware::BaseboardInformation board;
+    CHECK(!Firmware::decodeBaseboardInformation(s_tables.at(1), board));
+    CHECK(!strcmp(Firmware::smbiosTypeName(4), "Processor") && !strcmp(Firmware::smbiosTypeName(200), "OEM specific")
+        && !strcmp(Firmware::smbiosTypeName(99), ""));
+
+    // Entry points that are refused: anchor, checksum, "_DMI_", a table beyond the physmap
+    Firmware::SmbiosEntryPoint entry = s_fake.entry;
+    entry.anchor[3] = 'X';
+    sealSmbios(entry);
+    CHECK(!s_tables.load(entry) && !s_tables.isLoaded() && s_tables.count() == 0);
+    entry = s_fake.entry;
+    entry.checksum++;
+    CHECK(!Firmware::smbiosEntryIsValid(entry));
+    entry = s_fake.entry;
+    entry.intermediateAnchor[0] = 'X';
+    sealSmbios(entry);
+    CHECK(!Firmware::smbiosEntryIsValid(entry));
+    entry = s_fake.entry;
+    entry.intermediateChecksum++;
+    entry.checksum--; // the outer sum still 0
+    CHECK(!Firmware::smbiosEntryIsValid(entry));
+
+    // A structure longer than the table, strings without their end: the list stops there
+    CHECK(s_tables.load(s_fake.entry));
+    auto tableStart = static_cast<const uint8_t*>(physToVirt(s_tables.tableAddress()));
+    auto processorOffset = static_cast<uint32_t>(s_tables.at(2).data() - tableStart);
+    s_fake.table[processorOffset + 1] = 0xFF;
+    CHECK(s_tables.load(s_fake.entry) && s_tables.truncated() && s_tables.count() == 2);
+    s_fake.table[processorOffset + 1] = 0x1A;
+    entry = s_fake.entry;
+    entry.tableLength = processorOffset + 0x1A + 4; // inside the processor's strings
+    sealSmbios(entry);
+    CHECK(s_tables.load(entry) && s_tables.truncated() && s_tables.count() == 2);
+
+    // Finding the entry point: 16 byte boundaries only; a 3.0 one is seen but not read
+    alignas(16) static uint8_t s_area[256];
+    memset(s_area, 0, sizeof(s_area));
+    memcpy(s_area + 0x20, "_SM3_", sizeof("_SM3_")); // the NUL too: the scan reads 5 bytes
+    memcpy(s_area + 0x40, &s_fake.entry, sizeof(s_fake.entry));
+    bool version3 = false;
+    CHECK(Firmware::findSmbios(s_area, sizeof(s_area), version3) == reinterpret_cast<void*>(s_area + 0x40) && version3);
+    memset(s_area + 0x40, 0, sizeof(s_fake.entry));
+    CHECK(Firmware::findSmbios(s_area, sizeof(s_area), version3) == nullptr && version3);
+    memcpy(s_area + 0x48, &s_fake.entry, sizeof(s_fake.entry));
+    memset(s_area + 0x20, 0, 5);
+    CHECK(Firmware::findSmbios(s_area, sizeof(s_area), version3) == nullptr && !version3);
+}
+
+static void testSmbiosOnMachine(const Firmware::SmbiosTables& tables)
+{
+    group("SMBIOS on this machine");
+
+    if (!tables.isLoaded()) {
+        printf("[SELFTEST] skipped: no SMBIOS 2.x entry point\n");
+        return;
+    }
+
+    // QEMU's SeaBIOS: a BIOS, a system by "QEMU", a processor, 512 MB of memory devices, the end
+    CHECK(tables.majorVersion() == 2 && tables.count() >= 5 && !tables.truncated());
+    CHECK(tables.at(tables.count() - 1).type() == Firmware::SmbiosEndOfTable);
+    Firmware::BiosInformation bios;
+    const Firmware::SmbiosStructure* s = tables.find(Firmware::SmbiosBios);
+    CHECK(s && Firmware::decodeBiosInformation(*s, bios) && bios.vendor[0]);
+    Firmware::SystemInformation system;
+    s = tables.find(Firmware::SmbiosSystem);
+    CHECK(s && Firmware::decodeSystemInformation(*s, system) && !strcmp(system.manufacturer, "QEMU"));
+    Firmware::ProcessorInformation cpu;
+    s = tables.find(Firmware::SmbiosProcessor);
+    CHECK(s && Firmware::decodeProcessorInformation(*s, cpu) && (cpu.status & 0x40));
+
+    uint64_t totalKb = 0;
+    Firmware::MemoryDevice dimm;
+    for (uint32_t i = 0; (s = tables.find(Firmware::SmbiosMemoryDevice, i)); i++) {
+        if (Firmware::decodeMemoryDevice(*s, dimm))
+            totalKb += dimm.sizeKb;
+    }
+    CHECK(totalKb == 512ULL * 1024); // the test scripts start QEMU with -m 512M
 }
 
 // ------------------------------------------------------------
@@ -2670,7 +3290,7 @@ static const char* runCommand(Shell::Interpreter& shell, FakeSink& sink, const c
     return sink.text();
 }
 
-static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler& scheduler)
+static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler& scheduler, const Interrupts& interrupts)
 {
     group("Shell commands (RAM disk)");
 
@@ -2688,10 +3308,20 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     FakeTickSource ticks;
     Scheduler isolated(ticks);
     Drivers::CharacterQueue input;
-    Process::Runtime runtime(pmm, space, vfs);
+    Process::Runtime runtime(pmm, space, vfs, input);
     Fs::BlockDeviceList disks;
     CHECK(disks.add(volume));
-    Shell::Context context { pmm, space, vfs, disks, runtime, nullptr, nullptr };
+    FakePciConfigSpace pci;
+    buildFakePci(pci);
+    static FakeAcpi s_fakeAcpi;
+    buildFakeAcpi(s_fakeAcpi, space);
+    static Firmware::AcpiTables s_acpi;
+    CHECK(s_acpi.load(s_fakeAcpi.rsdp));
+    static FakeSmbios s_fakeSmbios;
+    buildFakeSmbios(s_fakeSmbios, space);
+    static Firmware::SmbiosTables s_smbios;
+    CHECK(s_smbios.load(s_fakeSmbios.entry));
+    Shell::Context context { pmm, space, vfs, disks, pci, s_acpi, s_smbios, nullptr, nullptr, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2788,7 +3418,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     snprintf(ptCommand, sizeof(ptCommand), "pt 0x%lx", (uint64_t)&_text_start);
     bool pt = (runCommand(shell, sink, ptCommand), sink.contains("PML4[511]") && sink.contains("2 MB page"))
         && (runCommand(shell, sink, "pt 0xdead0000"), sink.contains("not mapped: PDPT[3] is not present"));
-    bool irq = (runCommand(shell, sink, "irq"), sink.contains("IRQ 0 timer"));
+    bool irq = (runCommand(shell, sink, "irq"), sink.contains(interrupts.apicTimer ? "APIC timer" : "IRQ 0 timer"));
     char port[48];
     snprintf(port, sizeof(port), "port 0x0021: 0x%02x", IOPort::inportb(0x21)); // the PIC's mask
     bool in = (runCommand(shell, sink, "in 0x21"), sink.contains(port));
@@ -2805,6 +3435,48 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     bool disk = (runCommand(shell, sink, "disk"), sink.contains("ram") && sink.contains("sectors"));
     bool diskRead = (runCommand(shell, sink, "disk read 0"), sink.contains("ram sector 0") && sink.contains("00000000000001f0") && sink.contains("55 aa"));
     bool diskSecond = (runCommand(shell, sink, "disk read 1 2 ram"), sink.contains("ram sector 2") && sink.contains("00000000000005f0"));
+    // lspci on the made up bus: the list, then one function in detail
+    bool lspci = (runCommand(shell, sink, "lspci"), sink.contains("  00:03.0  8086:100e  0200  Intel") && sink.contains("Ethernet controller") && sink.contains("03:00.0  144d:a808  0108  Samsung") && sink.contains("6 function(s)"));
+    runCommand(shell, sink, "lspci 00:03.0");
+    bool lspciBars = sink.contains("BAR0      memory at 0xfebc0000 (32 bit)") && sink.contains("BAR1      I/O ports at 0xc000")
+        && sink.contains("BAR2      memory at 0x1fe000000 (64 bit, prefetchable)") && !sink.contains("BAR3");
+    bool lspciDetails = sink.contains("command   0x0007  I/O memory bus-master") && sink.contains("interrupt pin INTA, line 11")
+        && sink.contains("capabilities: Power Management (0x40) PCI Express (0x50)")
+        && sink.contains("0000000000000000  86 80 0e 10 07 00 10 00");
+    bool lspciBad = (runCommand(shell, sink, "lspci 0:3"), sink.contains("an address like"))
+        && (runCommand(shell, sink, "lspci 00:04.0"), sink.contains("no function at 00:04.0"))
+        && (runCommand(shell, sink, "lspci 00:20.0"), sink.contains("an address like"));
+
+    // acpi and apic on the made up tables, without an APIC
+    bool acpiList = (runCommand(shell, sink, "acpi"), sink.contains("ACPI revision 2 (ATLOS ), XSDT at 0x"))
+        && sink.contains("APIC  0x") && sink.contains("interrupt controllers (MADT)") && sink.contains("(wrong checksum)")
+        && sink.contains("2 table(s)");
+    char madtDump[32];
+    snprintf(madtDump, sizeof(madtDump), "%016lx  41 50 49 43", s_fakeAcpi.physical + fakeMadtOffset);
+    bool acpiMadt = (runCommand(shell, sink, "acpi APIC"), sink.contains("local APIC at 0xfee10000, 8259 PICs too"))
+        && sink.contains("processor 1  APIC id 3  (disabled)") && sink.contains("I/O APIC id 2 at 0xfec00000, from GSI 0")
+        && sink.contains("override  IRQ 0 -> GSI 2, bus polarity, bus trigger")
+        && sink.contains("override  IRQ 11 -> GSI 20, active low, level")
+        && sink.contains("NMI on LINT1 of every processor, active high, edge") && sink.contains("1 other entry")
+        && sink.contains(madtDump);
+    bool acpiBad = (runCommand(shell, sink, "acpi TEST"), sink.contains("checksum WRONG"))
+        && (runCommand(shell, sink, "acpi HPET"), sink.contains("no HPET table"))
+        && (runCommand(shell, sink, "acpi AP"), sink.contains("a signature of 4 letters"));
+    bool apicPic = (runCommand(shell, sink, "apic"), sink.contains("the 8259 PIC delivers the IRQs"));
+
+    // smbios on the made up table: the list, one type decoded, errors
+    bool smbiosList = (runCommand(shell, sink, "smbios"), sink.contains("SMBIOS 2.8, 7 structures"))
+        && sink.contains("0x1100    17      40        5  Memory device") && sink.contains("OEM specific");
+    bool smbiosMemory = (runCommand(shell, sink, "smbios 17"), sink.contains("locator        DIMM 0"))
+        && sink.contains("size           16 GB") && sink.contains("0x1a DDR4") && sink.contains("size           512 KB")
+        && sink.contains("3200 MT/s (configured 2933 MT/s)") && sink.contains("strings: 1 \"DIMM 0\" 2 \"BANK 0\"");
+    bool smbiosSystem = (runCommand(shell, sink, "smbios 1"), sink.contains("UUID           00112233-4455-6677-8899-aabbccddeeff"))
+        && sink.contains("product        Test PC") && !sink.contains("version   ");
+    bool smbiosCpu = (runCommand(shell, sink, "smbios 4"), sink.contains("2000 MHz (max 3000 MHz, external clock 100 MHz)"))
+        && sink.contains("0x41 (populated, enabled)") && sink.contains("0000000000000000  04 1a 00 04");
+    bool smbiosBad = (runCommand(shell, sink, "smbios 3"), sink.contains("no structure of type 3"))
+        && (runCommand(shell, sink, "smbios 300"), sink.contains("a type 0 .. 255"));
+
     bool diskBad = (runCommand(shell, sink, "disk read 0 9"), sink.contains("a count of 1 .. 8"))
         && (runCommand(shell, sink, "disk read 0 1 nope"), sink.contains("no such device"))
         && (runCommand(shell, sink, "disk read 99999"), sink.contains("can not read sector"));
@@ -2830,6 +3502,9 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(ps);
     CHECK(help && helpGroup && helpCommand && helpUnknown);
     CHECK(disk && diskRead && diskSecond && diskBad);
+    CHECK(lspci && lspciBars && lspciDetails && lspciBad);
+    CHECK(acpiList && acpiMadt && acpiBad && apicPic);
+    CHECK(smbiosList && smbiosMemory && smbiosSystem && smbiosCpu && smbiosBad);
     CHECK(version);
     CHECK(unknown && usageShown && quote && nothing);
 
@@ -2932,24 +3607,21 @@ static void testElf()
 }
 
 // Start path, let it run until it exits, return its exit code (-1000 if it did not)
-static int64_t runProgram(Process::Runtime& runtime, Scheduler& scheduler, const char* path, int* pid = nullptr)
+static int64_t runProgram(Process::Runtime& runtime, const char* path, int* pid = nullptr, int argc = 0,
+    const char* const* argv = nullptr)
 {
-    int started = runtime.spawn(path);
+    int started = argc ? runtime.spawn(path, argc, argv) : runtime.spawn(path);
     if (pid)
         *pid = started;
     if (started < 0)
         return -1000;
 
-    const Process::Process* process = runtime.find(started);
-    for (int i = 0; i < 100000 && !process->exited; i++)
-        scheduler.yield();
-    int64_t code = process->exited ? process->exitCode : -1000;
-    scheduler.yield(); // the thread leaves the queue
-    runtime.reap();
-    return code;
+    // Sleeps until the program exits, as the shell's run does
+    return runtime.wait((uint32_t)started);
 }
 
-static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runtime, Scheduler& scheduler, Fs::Vfs& vfs)
+static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runtime, Scheduler& scheduler, Fs::Vfs& vfs,
+    Drivers::CharacterQueue& input)
 {
     group("User programs (ring 3, test disk)");
 
@@ -2965,28 +3637,79 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
 
     // Prints from ring 3 through int 0x80, exits with 0
     int pid = 0;
-    int64_t hello = runProgram(runtime, scheduler, "/disk0/BIN/HELLO.ELF", &pid);
+    int64_t hello = runProgram(runtime, "/disk0/BIN/HELLO.ELF", &pid);
     bool helloOutput = sink.contains("Hello from user mode!\n") && sink.contains("running at 0x0000008000")
         && sink.contains("exited with 0]");
     bool reaped = runtime.find(pid) == nullptr && runtime.count() == 0;
 
     // A fault in ring 3: reported, the program ends with 128 + 14, the kernel goes on
     sink.clear();
-    int64_t fault = runProgram(runtime, scheduler, "/disk0/BIN/FAULT.ELF");
+    int64_t fault = runProgram(runtime, "/disk0/BIN/FAULT.ELF");
     bool faultReport = sink.contains("about to write to address 0") && sink.contains("Page fault (in user mode)")
         && sink.contains("CR2=0x0000000000000000 (user write, protection violation)") && !sink.contains("not reached")
         && !sink.contains("KERNEL PANIC");
 
     // A breakpoint in ring 3: reported, the program goes on to exit 0
     sink.clear();
-    int64_t breakpoint = runProgram(runtime, scheduler, "/disk0/BIN/BREAK.ELF");
+    int64_t breakpoint = runProgram(runtime, "/disk0/BIN/BREAK.ELF");
     bool breakpointOutput = sink.contains("before the breakpoint") && sink.contains("Breakpoint (in user mode)")
         && sink.contains("after the breakpoint");
 
     // Pointers into the kernel, unmapped or not user: refused
     sink.clear();
-    int64_t badptr = runProgram(runtime, scheduler, "/disk0/BIN/BADPTR.ELF");
+    int64_t badptr = runProgram(runtime, "/disk0/BIN/BADPTR.ELF");
     bool badptrOutput = sink.contains("every bad pointer refused");
+
+    // read(0): keys typed before the program reads wait in the queue. DEL is
+    // the program's Backspace, '\r' arrives as '\n'
+    sink.clear();
+    input.push("Adx\x7f"
+               "a\r",
+        6);
+    int64_t ask = runProgram(runtime, "/disk0/BIN/ASK.ELF");
+    bool askOutput = sink.contains("What is your name? Ad") && sink.contains("Hello, Ada! I am process");
+    sink.clear();
+    input.push('\x03');
+    int64_t interrupted = runProgram(runtime, "/disk0/BIN/ASK.ELF");
+    bool queueEmpty = input.size() == 0;
+
+    // uptime, sleep, yield; open, read, write, close and their errors
+    sink.clear();
+    int64_t clock = runProgram(runtime, "/disk0/BIN/CLOCK.ELF");
+    bool clockOutput = sink.contains("woke up after");
+    sink.clear();
+    int64_t files = runProgram(runtime, "/disk0/BIN/FILES.ELF");
+    bool filesOutput = sink.contains("files: all as expected");
+    char written[32] {};
+    bool filesOnDisk = vfs.read("/disk0/USER.TXT", 0, written, sizeof(written) - 1) == 23
+        && !strcmp(written, "first line\nsecond line\n");
+    bool waitMissing = runtime.wait(9999) == -1;
+
+    // argc and argv: the System V stack at the top of the program's stack page
+    sink.clear();
+    const char* argsArgv[] = { "/disk0/BIN/ARGS.ELF", "hello", "two words" };
+    int64_t args = runProgram(runtime, argsArgv[0], nullptr, 3, argsArgv);
+    bool argsOutput = sink.contains("argc = 3") && sink.contains("argv[0] = \"/disk0/BIN/ARGS.ELF\" at 0x00007fffffff")
+        && sink.contains("argv[1] = \"hello\"") && sink.contains("argv[2] = \"two words\"")
+        && sink.contains("argv[argc] = NULL");
+    sink.clear();
+    const char* catArgv[] = { "CAT.ELF", "/disk0/HELLO.TXT", "/disk0/NOPE.TXT" };
+    int64_t cat = runProgram(runtime, "/disk0/BIN/CAT.ELF", nullptr, 3, catArgv);
+    bool catOutput = sink.contains("Hello from the atlOS disk!") && sink.contains("/disk0/NOPE.TXT: no such file");
+    int64_t catUsage = runProgram(runtime, "/disk0/BIN/CAT.ELF");
+
+    // Too many arguments, too long ones, none: refused before the program starts
+    sink.clear();
+    const char* many[Process::Runtime::maxArguments + 1];
+    for (const char*& argument : many)
+        argument = "x";
+    static char s_long[Process::Runtime::maxArgumentBytes + 1];
+    memset(s_long, 'y', sizeof(s_long) - 1);
+    const char* tooLong[] = { "ARGS.ELF", s_long };
+    bool argumentLimits = runtime.spawn("/disk0/BIN/ARGS.ELF", Process::Runtime::maxArguments + 1, many) == -1
+        && runtime.spawn("/disk0/BIN/ARGS.ELF", 2, tooLong) == -1 && runtime.spawn("/disk0/BIN/ARGS.ELF", 0, many) == -1
+        && sink.contains("1 to 16 arguments") && sink.contains("longer than 1024 bytes") && runtime.count() == 0;
+    int64_t sixteen = runProgram(runtime, "/disk0/BIN/ARGS.ELF", nullptr, Process::Runtime::maxArguments, many);
 
     // Files that are not programs
     sink.clear();
@@ -3013,6 +3736,14 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(faultReport);
     CHECK(badptr == 0 && badptrOutput);
     CHECK(breakpoint == 0 && breakpointOutput);
+    CHECK(ask == 0 && askOutput);
+    CHECK(interrupted == 128 + 2 && queueEmpty);
+    CHECK(clock == 0 && clockOutput);
+    CHECK(files == 0 && filesOutput && filesOnDisk);
+    CHECK(waitMissing);
+    CHECK(args == 3 && argsOutput);
+    CHECK(cat == 1 && catOutput && catUsage == 1);
+    CHECK(argumentLimits && sixteen == 16);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
     // Address spaces, pages, kernel stacks: all given back
@@ -3091,7 +3822,8 @@ static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
 }
 
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
-    Process::Runtime& runtime)
+    Process::Runtime& runtime, Drivers::CharacterQueue& input, const Interrupts& interrupts,
+    const Firmware::SmbiosTables& smbios)
 {
     printf("[SELFTEST] start\n");
 
@@ -3132,6 +3864,12 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testScancodeDecoder();
     testKeyboard(space);
     testBlockDevices();
+    testPci();
+    testAcpiTables(space);
+    testMadt(space);
+    testApicOnMachine(scheduler, interrupts);
+    testSmbios(space);
+    testSmbiosOnMachine(smbios);
     testFat16Names();
     testFat16();
     testFat16Write();
@@ -3139,14 +3877,14 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testTranslate(space);
     testExceptionTable();
     testPageTableWalk(space);
-    testInterruptCounts(scheduler);
-    testRaiseAndBreakpoint(scheduler);
+    testInterruptCounts(scheduler, interrupts.tickVector);
+    testRaiseAndBreakpoint(scheduler, interrupts.tickVector);
     testAddressSpaces(pmm, space);
     testElf();
-    testUserPrograms(pmm, runtime, scheduler, vfs);
+    testUserPrograms(pmm, runtime, scheduler, vfs, input);
     testShellParser();
     testLineEditor();
-    testShell(pmm, space, scheduler);
+    testShell(pmm, space, scheduler, interrupts);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;
