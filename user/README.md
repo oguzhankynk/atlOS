@@ -29,7 +29,37 @@ user/
     ask.c              reads a line from the keyboard (read, echo, Backspace)
     clock.c            uptime, sleep and yield
     files.c            open, read, write, close and their errors
+    args.c             prints argc and argv, and where they are
+    cat.c              prints the files named in its arguments
 ```
+
+## Arguments
+
+```c
+int main(int argc, char** argv)
+{
+    for (int i = 1; i < argc; i++) { // argv[0] is the program itself
+        print(argv[i]);
+        print("\n");
+    }
+    return 0;
+}
+```
+
+```
+atlOS:/> run /disk0/BIN/ARGS.ELF one "two words"
+argc = 3
+argv[0] = "/disk0/BIN/ARGS.ELF" at 0x00007fffffffffce
+argv[1] = "one" at 0x00007fffffffffe2
+argv[2] = "two words" at 0x00007fffffffffe6
+argv[argc] = NULL
+[pid 1 ARGS.ELF exited with 3]
+```
+
+The shell does not resolve paths in the arguments, and a program has no
+current directory: pass paths from the root (`run /disk0/BIN/CAT.ELF
+/disk0/HELLO.TXT`). How the kernel puts the arguments on the stack:
+`kernel/proc/README.md`.
 
 ## The environment
 
@@ -39,8 +69,9 @@ What a program can count on, and what it can not (yet):
 |---|---|
 | Language | C, freestanding (`-ffreestanding -nostdlib`), built with the kernel's cross compiler `x86_64-elf-gcc` |
 | Library | **no libc**: no `printf`, `malloc`, `string.h`. `atlos.h` has the system calls and `print`, `print_number`, `strlen` |
-| Start | `_start` (crt0) calls `int main(void)`; its return value becomes the exit code. No `argc`/`argv`, no environment |
-| Registers at start | all zero; `rsp` 16 byte aligned |
+| Start | `_start` (crt0) calls `int main(int argc, char** argv)` (or `int main(void)`); its return value becomes the exit code. No environment variables |
+| Arguments | `run /disk0/BIN/P.ELF a "b c"`: `argv[0]` the program's path, then the words; `argv[argc]` is `NULL`. Up to 16, 1024 bytes in all |
+| Registers at start | all zero; `rsp` 16 byte aligned, pointing at `argc` (the System V start stack) |
 | Floating point | **none**: the kernel does not save SSE state, programs are built with `-mno-sse`; using `float`/`double` fails to compile (`SSE register return with SSE disabled`) |
 | Input | `read(STDIN, ...)`: the keys, raw (see below) |
 | Files | `open`, `read`, `write`, `close`; paths from the root (`/disk0/NOTE.TXT`), 8.3 names, up to 8 open at once |
@@ -55,7 +86,7 @@ Every program gets the same layout (2 MB pages, see `user.ld`):
 |---|---|---|
 | `0x0000008000000000` | code (`.text`, `.rodata`), starting right after the ELF headers | read, execute |
 | next 2 MB page | data (`.data`, `.bss`) | read, write |
-| `0x00007FFFFFE00000` .. `0x00007FFFFFFFFFF0` | the stack: one 2 MB page, `rsp` starts at the top | read, write |
+| `0x00007FFFFFE00000` .. `0x00007FFFFFFFFFF0` | the stack: one 2 MB page; at its top the argument strings and `argv[]`, `rsp` starts just below | read, write |
 
 Every page is zeroed before the program starts, so `.bss` and unused stack
 are 0. There is no heap: use globals and the stack. The 2 MB stack is the only
@@ -176,7 +207,7 @@ The shell shows how a program ended: `[pid 2 FAULT.ELF exited with 142]`.
 
    ```cmake
    atlos_user_program(count)
-   set(ATLOS_USER_TARGETS hello fault badptr count break ask clock files PARENT_SCOPE)
+   set(ATLOS_USER_TARGETS hello fault badptr count break ask clock files args cat PARENT_SCOPE)
    ```
 
    The target name becomes the file name on the disk, in upper case:

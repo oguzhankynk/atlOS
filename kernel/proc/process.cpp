@@ -119,11 +119,62 @@ bool Runtime::load(const char* path, Process& process)
     }
 
     process.entry = image.entry;
-    process.stackTop = stackTop;
     return true;
 }
 
-int Runtime::spawn(const char* path)
+// The stack at the start, as the System V ABI has it (higher addresses on top):
+//
+//   stackTop  ->  the strings "prog\0" "arg\0" ...
+//                 (padding: rsp must be 16 byte aligned)
+//                 auxv: AT_NULL, 0 (an empty list)
+//                 envp: NULL (no environment)
+//                 argv[argc]: NULL
+//                 argv[0] .. argv[argc - 1]: pointers to the strings
+//   rsp       ->  argc
+bool Runtime::pushArguments(Process& process, int argc, const char* const* argv)
+{
+    if (argc < 1 || argc > maxArguments) {
+        printf("%s: 1 to %d arguments\n", process.name, maxArguments);
+        return false;
+    }
+    uint64_t stringBytes = 0;
+    for (int i = 0; i < argc; i++)
+        stringBytes += strlen(argv[i]) + 1;
+    if (stringBytes > maxArgumentBytes) {
+        printf("%s: the arguments are longer than %lu bytes\n", process.name, maxArgumentBytes);
+        return false;
+    }
+
+    // The stack page is not active: write it through the physmap
+    uint64_t stackPage = stackTop & ~(uint64_t)(Memory::pageSize2Mb - 1);
+    uint64_t physical;
+    process.space->translate((const void*)stackPage, physical);
+    auto* page = static_cast<uint8_t*>(Memory::physToVirt(physical));
+    auto at = [&](uint64_t address) { return page + (address - stackPage); };
+
+    uint64_t words = 1 + (uint64_t)argc + 1 + 1 + 2; // argc, argv[], NULL, envp NULL, AT_NULL pair
+    uint64_t strings = stackTop - stringBytes;
+    uint64_t rsp = (strings - words * 8) & ~(uint64_t)15;
+
+    auto* stack = reinterpret_cast<uint64_t*>(at(rsp));
+    stack[0] = (uint64_t)argc;
+    uint64_t next = strings;
+    for (int i = 0; i < argc; i++) {
+        uint64_t length = strlen(argv[i]) + 1;
+        memcpy(at(next), argv[i], length);
+        stack[1 + i] = next; // the address the program sees
+        next += length;
+    }
+    stack[1 + argc] = 0; // argv[argc]
+    stack[2 + argc] = 0; // envp[0]
+    stack[3 + argc] = 0; // auxv: AT_NULL ...
+    stack[4 + argc] = 0; // ... and its value
+
+    process.stackPointer = rsp;
+    return true;
+}
+
+int Runtime::spawn(const char* path, int argc, const char* const* argv)
 {
     reap();
     if (m_count == maxProcesses) {
@@ -142,7 +193,7 @@ int Runtime::spawn(const char* path)
     strncpy(process->name, name, sizeof(process->name) - 1);
     process->space = new AddressSpace(m_pmm, m_kernelSpace);
 
-    if (!load(path, *process)) {
+    if (!load(path, *process) || !pushArguments(*process, argc, argv)) {
         delete process->space;
         delete process;
         return -1;
@@ -165,7 +216,7 @@ int Runtime::spawn(const char* path)
 void Runtime::threadEntry()
 {
     auto* process = static_cast<Process*>(Threading::currentTask().owner);
-    enterUserMode(process->entry, process->stackTop);
+    enterUserMode(process->entry, process->stackPointer);
 }
 
 void Runtime::reap()

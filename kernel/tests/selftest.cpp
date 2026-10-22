@@ -3062,9 +3062,10 @@ static void testElf()
 }
 
 // Start path, let it run until it exits, return its exit code (-1000 if it did not)
-static int64_t runProgram(Process::Runtime& runtime, const char* path, int* pid = nullptr)
+static int64_t runProgram(Process::Runtime& runtime, const char* path, int* pid = nullptr, int argc = 0,
+    const char* const* argv = nullptr)
 {
-    int started = runtime.spawn(path);
+    int started = argc ? runtime.spawn(path, argc, argv) : runtime.spawn(path);
     if (pid)
         *pid = started;
     if (started < 0)
@@ -3139,6 +3140,32 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
         && !strcmp(written, "first line\nsecond line\n");
     bool waitMissing = runtime.wait(9999) == -1;
 
+    // argc and argv: the System V stack at the top of the program's stack page
+    sink.clear();
+    const char* argsArgv[] = { "/disk0/BIN/ARGS.ELF", "hello", "two words" };
+    int64_t args = runProgram(runtime, argsArgv[0], nullptr, 3, argsArgv);
+    bool argsOutput = sink.contains("argc = 3") && sink.contains("argv[0] = \"/disk0/BIN/ARGS.ELF\" at 0x00007fffffff")
+        && sink.contains("argv[1] = \"hello\"") && sink.contains("argv[2] = \"two words\"")
+        && sink.contains("argv[argc] = NULL");
+    sink.clear();
+    const char* catArgv[] = { "CAT.ELF", "/disk0/HELLO.TXT", "/disk0/NOPE.TXT" };
+    int64_t cat = runProgram(runtime, "/disk0/BIN/CAT.ELF", nullptr, 3, catArgv);
+    bool catOutput = sink.contains("Hello from the atlOS disk!") && sink.contains("/disk0/NOPE.TXT: no such file");
+    int64_t catUsage = runProgram(runtime, "/disk0/BIN/CAT.ELF");
+
+    // Too many arguments, too long ones, none: refused before the program starts
+    sink.clear();
+    const char* many[Process::Runtime::maxArguments + 1];
+    for (const char*& argument : many)
+        argument = "x";
+    static char s_long[Process::Runtime::maxArgumentBytes + 1];
+    memset(s_long, 'y', sizeof(s_long) - 1);
+    const char* tooLong[] = { "ARGS.ELF", s_long };
+    bool argumentLimits = runtime.spawn("/disk0/BIN/ARGS.ELF", Process::Runtime::maxArguments + 1, many) == -1
+        && runtime.spawn("/disk0/BIN/ARGS.ELF", 2, tooLong) == -1 && runtime.spawn("/disk0/BIN/ARGS.ELF", 0, many) == -1
+        && sink.contains("1 to 16 arguments") && sink.contains("longer than 1024 bytes") && runtime.count() == 0;
+    int64_t sixteen = runProgram(runtime, "/disk0/BIN/ARGS.ELF", nullptr, Process::Runtime::maxArguments, many);
+
     // Files that are not programs
     sink.clear();
     int missing = runtime.spawn("/disk0/BIN/NOPE.ELF");
@@ -3169,6 +3196,9 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(clock == 0 && clockOutput);
     CHECK(files == 0 && filesOutput && filesOnDisk);
     CHECK(waitMissing);
+    CHECK(args == 3 && argsOutput);
+    CHECK(cat == 1 && catOutput && catUsage == 1);
+    CHECK(argumentLimits && sixteen == 16);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
     // Address spaces, pages, kernel stacks: all given back

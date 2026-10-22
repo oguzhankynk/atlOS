@@ -103,6 +103,12 @@ with diagrams and references:
 API documentation can be generated with Doxygen: `scripts/build.sh docs`
 (output in `build/docs/html`).
 
+## References
+
+The [OSDev Wiki](https://wiki.osdev.org/) is the main reference for this
+project: boot, paging, interrupts, the PIC and PIT, ATA, FAT, PCI and
+user mode all start there. The subsystem READMEs link the pages they build on.
+
 ## License
 
 MIT, see [LICENSE](LICENSE). Third party code and its licenses:

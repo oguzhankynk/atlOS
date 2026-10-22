@@ -226,6 +226,12 @@ def main():
             out = serial.command("\x03")
             check("exited with 130]" in out, "Ctrl+C ends a program that reads", out)
 
+            # argv: the words after the program, quotes keep spaces
+            out = serial.command("run /disk0/BIN/ARGS.ELF one \"two words\"\r")
+            check("argc = 3" in out and 'argv[2] = "two words"' in out and "exited with 3]" in out, "argc and argv", out)
+            out = serial.command("run /disk0/BIN/CAT.ELF /disk0/HELLO.TXT\r")
+            check("Hello from the atlOS disk!" in out and "exited with 0]" in out, "a program opens its argument", out)
+
             out = serial.command("run /disk0/BIN/CLOCK.ELF\r")
             check("woke up after" in out and "exited with 0]" in out, "uptime, sleep and yield", out)
             out = serial.command("run /disk0/BIN/FILES.ELF\r")

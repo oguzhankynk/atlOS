@@ -74,7 +74,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
-| tasks | `tasks`, `ps`, `run program.elf` |
+| tasks | `tasks`, `ps`, `run program.elf [args]` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
 | devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |
@@ -210,8 +210,9 @@ atlOS:/> lspci 00:01.1
 
 ### Running a program
 
-`run program.elf` starts the program (`Runtime::spawn`) and sleeps until it
-exits (`Runtime::wait`). Meanwhile the keys go to the program, which reads
+`run program.elf [args]` starts the program (`Runtime::spawn`) with
+`argv = { the program's path, args... }` and sleeps until it exits
+(`Runtime::wait`). Meanwhile the keys go to the program, which reads
 them with `read(0, ...)`; Ctrl+C ends a program that reads. See
 `kernel/proc/README.md`.
 

@@ -20,8 +20,12 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   `uptime`; `write` to fd 2 and to files; eight open files per program
 - `Runtime::wait(pid)`; user programs `ASK.ELF`, `CLOCK.ELF`, `FILES.ELF`;
   `print_number` and the new calls in `atlos.h`
-- Self tests for the scan, `lspci` and the system calls (783 checks); the
-  shell test types into a program (44 steps)
+- `argc` and `argv`: `Runtime::spawn(path, argc, argv)` writes the System V
+  start stack (strings, `argv[]`, empty envp and auxv, `argc` at `rsp`),
+  crt0 calls `main(argc, argv)`; `run program.elf [args]`; `ARGS.ELF`,
+  `CAT.ELF`, `print_hex`
+- Self tests for the scan, `lspci`, the system calls and the arguments (786
+  checks); the shell test types into a program (46 steps)
 
 ### Changed
 

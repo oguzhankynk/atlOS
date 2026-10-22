@@ -72,7 +72,7 @@ inside the file, every `PT_LOAD` segment inside the file and inside the user
 range, no two segments in one 2 MB page, the entry point inside an
 executable segment. The file is input from outside; nothing is trusted.
 
-`Runtime::spawn(path)` then:
+`Runtime::spawn(path, argc, argv)` then:
 
 1. creates an `AddressSpace(pmm, kernel)`: the kernel half and the identity
    map shared, the user range empty;
@@ -80,25 +80,61 @@ executable segment. The file is input from outside; nothing is trusted.
    see what a page held before; the zeros are also its `.bss`), user and,
    for data, writable; copies the file bytes in **through the physmap**,
    because the new address space is not active;
-3. maps one writable page for the stack, its top at `0x00007FFFFFFFFFF0`;
+3. maps one writable page for the stack, its top at `0x00007FFFFFFFFFF0`,
+   and writes `argc`, `argv` and the strings onto it (`pushArguments`, see
+   below);
 4. creates a kernel `Thread` whose saved `cr3` is the new address space and
    whose `owner` is the process, and queues it.
 
 ### Entering ring 3 (`arch/x86_64/cpu/usermode.S`)
 
 The thread's first code is `Runtime::threadEntry`, which calls
-`enterUserMode(entry, stackTop)`: it pushes the frame `iretq` expects, as if
+`enterUserMode(entry, stackPointer)`: it pushes the frame `iretq` expects, as if
 an interrupt had come from ring 3, clears every register and returns into
 it:
 
 ```
 push 0x23          ss      user data segment (GDT 4) | RPL 3
-push stackTop      rsp
+push stackPointer  rsp     it points at argc
 push 0x202         rflags  IF set: interrupts stay on
 push 0x1b          cs      user code segment (GDT 3) | RPL 3
 push entry         rip
 iretq
 ```
+
+### argc and argv: the start stack
+
+A program's `main(argc, argv)` gets its arguments the way every Unix hands
+them over, the **System V ABI** start stack. `pushArguments` writes it at the
+top of the stack page (through the physmap, the address space is not active
+yet), and `rsp` starts at `argc`:
+
+```
+0x00007FFFFFFFFFF0  stackTop
+                    "two words\0"                   the strings, argv[0] lowest
+                    "one\0"
+0x00007FFFFFFFFFCE  "/disk0/BIN/ARGS.ELF\0"
+                    (0 .. 15 bytes: rsp must be 16 byte aligned)
+                    0, 0         auxv: AT_NULL (no auxiliary vector entries)
+                    0            envp[0]: NULL (no environment)
+                    0            argv[3]: NULL
+                    0x...FFFE6   argv[2]
+                    0x...FFFE2   argv[1]
+                    0x...FFFCE   argv[0]
+rsp  ->             3            argc
+```
+
+`crt0.S` turns this into a C call: `rdi = [rsp]` (argc), `rsi = rsp + 8`
+(argv), `call main`. The pointers in `argv[]` are addresses in the program's
+address space, the strings are copies: the program may change them.
+
+- The shell's `run P.ELF a "b c"` passes `argv = { "/disk0/.../P.ELF", "a",
+  "b c" }`: the resolved path, then the words (quotes keep spaces).
+- At most 16 arguments and 1024 bytes of strings (`maxArguments`,
+  `maxArgumentBytes`); more is refused before the program starts.
+- The environment and the auxiliary vector are there but empty; a real
+  kernel passes e.g. `AT_PAGESZ` and `AT_ENTRY` in auxv, and the variables
+  (`PATH=...`) in envp.
 
 ### Back into the kernel
 
@@ -232,8 +268,8 @@ runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
   for good (the timer only counts ticks). Only `yield`, `sleep` and a `read`
   that waits let other threads run.
 - No `lseek`, `stat`, directory listing, `unlink` or `rename` calls.
-- No process object with several threads, no `fork`/`exec`, no arguments or
-  environment.
+- No process object with several threads, no `fork`/`exec`, no environment
+  variables.
 - No NX bit: data pages are executable too.
 - No guard page under the stack (it is the only page there; running off it
   faults anyway).
@@ -255,9 +291,14 @@ runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
   file it wrote read back through the VFS, files that are not programs, two
   programs at once at the same addresses, and that every page and table
   comes back. `scripts/check-test-disk.sh` reads `USER.TXT` with mtools too.
+  `ARGS.ELF` with three arguments (one with a space; the strings at the top
+  of the stack page, `argv[argc]` NULL, exit code 3), `CAT.ELF` on two
+  paths (one missing) and without any, 16 arguments, and 17, a too long
+  one and none refused.
 - The shell test (`scripts/run-shelltest.py`) runs `HELLO.ELF`, `FAULT.ELF`
   (the shell still answers afterwards), types a name into `ASK.ELF`, ends it
-  once with Ctrl+C, runs `CLOCK.ELF` and `FILES.ELF` and `cat`s the file.
+  once with Ctrl+C, runs `CLOCK.ELF` and `FILES.ELF` and `cat`s the file,
+  `ARGS.ELF one "two words"` and `CAT.ELF /disk0/HELLO.TXT`.
 
 ## References
 

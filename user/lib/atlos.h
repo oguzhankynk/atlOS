@@ -133,6 +133,15 @@ static inline long print(const char* s)
     return write(STDOUT, s, strlen(s));
 }
 
+/* A number in hex, 16 digits: an address */
+static inline void print_hex(unsigned long value)
+{
+    char text[18] = "0x";
+    for (int i = 0; i < 16; i++)
+        text[2 + i] = "0123456789abcdef"[(value >> (60 - 4 * i)) & 0xf];
+    write(STDOUT, text, sizeof(text));
+}
+
 /* A number in decimal (there is no printf) */
 static inline void print_number(unsigned long value)
 {

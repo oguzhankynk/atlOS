@@ -92,7 +92,7 @@ struct Process {
     Memory::AddressSpace* space;
     Threading::Thread* thread;
     uint64_t entry;
-    uint64_t stackTop;
+    uint64_t stackPointer; ///< rsp at the start: it points at argc
     bool exited;
     int64_t exitCode;
     Sync::Semaphore done { 0, 1 }; ///< given on exit: Runtime::wait takes it
@@ -102,6 +102,10 @@ struct Process {
 class Runtime {
 public:
     static constexpr uint32_t maxProcesses = 8;
+
+    /// Limits of what spawn copies onto a program's stack: argv[] and its strings
+    static constexpr int maxArguments = 16;
+    static constexpr uint64_t maxArgumentBytes = 1024;
 
     /// Top of every program's stack: one 2 MB page just below userEnd
     static constexpr uint64_t stackTop = 0x00007FFFFFFFFFF0ULL;
@@ -116,10 +120,14 @@ public:
 
     /**
      * @brief Load the ELF file at path into a new address space and start it
-     * on a new thread (it runs at the caller's next yield).
+     * on a new thread (it runs at the caller's next yield). argv[0] .. argv[argc - 1]
+     * become the program's main(argc, argv); argv[0] is the program by convention.
      * @return The pid, or -1 (the reason is printed).
      */
-    int spawn(const char* path);
+    int spawn(const char* path, int argc, const char* const* argv);
+
+    /// spawn with argv = { path }.
+    int spawn(const char* path) { return spawn(path, 1, &path); }
 
     /// Free what exited programs used (address space, thread). Not from a program's thread.
     void reap();
@@ -146,6 +154,7 @@ public:
 private:
     static void threadEntry();
     bool load(const char* path, Process& process);
+    bool pushArguments(Process& process, int argc, const char* const* argv);
     int64_t write(Process& process, uint64_t fd, uint64_t buffer, uint64_t size);
     int64_t read(Process& process, uint64_t fd, uint64_t buffer, uint64_t size);
     int64_t readConsole(char* buffer, uint64_t size);

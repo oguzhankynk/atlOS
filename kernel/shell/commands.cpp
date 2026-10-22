@@ -747,13 +747,19 @@ static void cmdTasks(Interpreter& shell, int, char**)
 static void cmdRun(Interpreter& shell, int argc, char** argv)
 {
     char path[Interpreter::maxPath];
-    if (!usage("run", argc, 2, 2) || !resolve(shell, argv[1], path))
+    if (!usage("run", argc, 2, Interpreter::maxWords) || !resolve(shell, argv[1], path))
         return;
+
+    // The program's argv: its path, then the words after it ("run P.ELF a b")
+    const char* arguments[Interpreter::maxWords];
+    arguments[0] = path;
+    for (int i = 2; i < argc; i++)
+        arguments[i - 1] = argv[i];
 
     // The program runs on its own thread; the shell sleeps until it exits, so
     // the keys typed meanwhile go to the program (Ctrl+C ends it)
     Process::Runtime& runtime = shell.context().runtime;
-    int pid = runtime.spawn(path);
+    int pid = runtime.spawn(path, argc - 1, arguments);
     if (pid > 0)
         runtime.wait((uint32_t)pid);
 }
@@ -1129,7 +1135,7 @@ static const Command s_commands[] = {
     { "memory", "vmmap", "vmmap", "the page table mappings", cmdVmmap },
     { "tasks", "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
     { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
-    { "tasks", "run", "run program.elf", "run a user program (ring 3) until it exits", cmdRun },
+    { "tasks", "run", "run program.elf [args]", "run a user program (ring 3) until it exits", cmdRun },
     { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
     { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
     { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
