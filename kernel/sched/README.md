@@ -172,7 +172,7 @@ stateDiagram-v2
 
 `kernel/tests/selftest.cpp`: *Scheduler round robin / sleep (fake ticks) /
 block / remove (isolated)* run on their own schedulers with a `FakeTickSource`,
-so sleeping is checked tick by tick; *Scheduler sleep (kernel, PIT)* uses real
+so sleeping is checked tick by tick; *Scheduler sleep (kernel, real ticks)* uses real
 time; *Thread stack* checks the ABI alignment and that the stack page is
 freed.
 

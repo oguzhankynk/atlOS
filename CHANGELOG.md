@@ -24,13 +24,28 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   start stack (strings, `argv[]`, empty envp and auxv, `argc` at `rsp`),
   crt0 calls `main(argc, argv)`; `run program.elf [args]`; `ARGS.ELF`,
   `CAT.ELF`, `print_hex`
-- Self tests for the scan, `lspci`, the system calls and the arguments (786
-  checks); the shell test types into a program (46 steps)
+- ACPI: `Firmware::findRsdp` (the multiboot2 tags), `Firmware::AcpiTables`
+  (the XSDT or RSDT and their tables, checksums checked), `parseMadt` and
+  `isaRoute` (processors, I/O APICs, interrupt source overrides, NMI pins);
+  the shell's `acpi` lists the tables, `acpi SIG` decodes and dumps one
+- The APIC: `Drivers::LocalApic`, `Drivers::IoApic`,
+  `Drivers::ApicInterruptController` (the ISA IRQs routed as the MADT says,
+  vectors `0x20 + irq`) and `Drivers::ApicTimer` (measured against the PIT,
+  1 ms periodic on vector `0x40`); the shell's `apic` shows the registers and
+  the routes
+- `AddressSpace::mapDevice` (uncached MMIO mappings), `Drivers::pitBusyWait`
+  (PIT channel 2, polled)
+- Self tests for the scan, `lspci`, the system calls, the arguments, the ACPI
+  tables, the MADT and the APIC (842 checks); the shell test types into a
+  program and reads the APIC (49 steps)
 
 ### Changed
 
 - `run` waits until the program exits; the keys typed meanwhile go to the
   program
+- With ACPI the IRQs arrive through the I/O APIC and the scheduler ticks on
+  the local APIC timer; the 8259 PIC stays masked. Without ACPI the PIC and
+  the PIT are used as before
 
 ## [0.4.0] - 2026-10-22
 

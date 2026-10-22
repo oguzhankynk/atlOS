@@ -76,7 +76,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
 | tasks | `tasks`, `ps`, `run program.elf [args]` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
-| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `int vector` |
+| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `acpi [SIGNATURE]`, `apic`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
@@ -133,8 +133,8 @@ atlOS:/> pt 0xffffffff80400000
   2 MB page, physical 0x400000
 atlOS:/> irq
   vec  count       what
-   32  16545       IRQ 0 timer
    36  14          IRQ 4 COM1
+   64  16545       APIC timer
 ```
 
 - `cr` decodes CR0, CR4 and EFER bit by bit; CR2 holds the last page fault
@@ -144,10 +144,11 @@ atlOS:/> irq
   atlOS's `owned`).
 - `gdt` reads the GDT through `sgdt` and decodes code, data and the TSS
   descriptor (two slots in long mode); `idt` shows the gates of the
-  exceptions, the PIC IRQs and the system call (handler, interrupt or trap
-  gate, DPL, IST), `idt n` any one.
+  exceptions, the ISA IRQs, the APIC timer, the system call and the APIC's
+  spurious vector (handler, interrupt or trap gate, DPL, IST), `idt n` any one.
 - `in` and `out` reach any I/O port, a byte by default (`w` 16, `l` 32 bit):
-  `in 0x21` is the PIC's interrupt mask, `in 0x64` the keyboard controller's
+  `in 0x21` is the 8259 PIC's interrupt mask (`0xff`: every line masked, the
+  APIC delivers the IRQs), `in 0x64` the keyboard controller's
   status. Writing to a port changes the device: `out 0x80 0x42` is harmless
   (the POST code port), others are not.
 - `rdmsr` and `wrmsr` reach the model specific registers. An MSR the CPU
@@ -156,8 +157,8 @@ atlOS:/> irq
   kernel goes on. QEMU's emulator returns 0 for MSRs it does not know.
 - `irq` counts what arrived on every vector since boot: timer ticks,
   keyboard and serial interrupts, system calls, faults.
-- `int vector` raises any vector in software: `int 0x20` runs the timer's
-  handler (one tick), `int 0x30` reaches a vector without a handler, `int 3`
+- `int vector` raises any vector in software: `int 0x40` runs the APIC
+  timer's handler (one tick; `int 0x20` without ACPI, where the PIT ticks), `int 0x30` reaches a vector without a handler, `int 3`
   is a breakpoint (the registers and a backtrace, then the shell goes on),
   any other exception (`int 0`, `int 14`, ...) reports and halts like the
   real fault.
@@ -208,6 +209,41 @@ atlOS:/> lspci 00:01.1
   BAR4      I/O ports at 0xc040
 ```
 
+### Looking at ACPI and the APIC
+
+`acpi` lists the tables the root table (XSDT or RSDT) points at, see
+`kernel/firmware/acpi/README.md`. `acpi SIG` shows one table's header,
+decodes it if atlOS reads it (the MADT: processors, I/O APICs, overrides,
+NMI pins) and dumps its first 512 bytes, labeled with physical addresses.
+`apic` reads the hardware itself (`kernel/drivers/apic/README.md`): the local
+APIC's registers and local vector table, the timer's frequency and count, and
+for every ISA IRQ its GSI, I/O APIC pin and redirection entry.
+
+```
+atlOS:/> acpi APIC
+APIC  interrupt controllers (MADT)
+  at 0x1ffe182d, 120 bytes, revision 1, checksum valid
+  ...
+  local APIC at 0xfee00000, 8259 PICs too
+  processor 0  APIC id 0
+  I/O APIC id 0 at 0xfec00000, from GSI 0
+  override  IRQ 0 -> GSI 2, bus polarity, bus trigger
+  override  IRQ 9 -> GSI 9, active high, level
+  ...
+atlOS:/> apic
+local APIC id 0, version 0x14, 6 LVT entries, at 0xfee00000
+  ...
+  timer: periodic, 63198300 Hz (bus clock / 16), count 33484 of 63198
+I/O APIC id 0, version 0x20, 24 pins (GSI 0 .. 23), at 0xfec00000
+  IRQ  GSI  pin  entry               vector  trigger  polarity  to APIC
+    0    2    2  0x0000000000010020  0x20    edge     high      0  masked
+    1    1    1  0x0000000000000021  0x21    edge     high      0
+  ...
+```
+
+IRQ 1 (the keyboard) and IRQ 4 (COM1) are unmasked: their drivers asked for
+them. IRQ 0 is masked because the scheduler ticks on the APIC timer.
+
 ### Running a program
 
 `run program.elf [args]` starts the program (`Runtime::spawn`) with
@@ -254,7 +290,8 @@ sequenceDiagram
   FAT16 volume in RAM with the output captured: paths, files, `echo >`/`>>`,
   `md`/`mw` on a buffer of the test, refusing unmapped memory, `help` by
   group, `disk read` of the RAM disk's boot sector, `lspci` on a made up
-  bus (BARs, capabilities, bad addresses), `tasks` with a
+  bus (BARs, capabilities, bad addresses), `acpi` on made up tables (the
+  list, the decoded MADT, a wrong checksum), `apic` without an APIC, `tasks` with a
   sleeping thread), *VMM translate and mappings*.
 - End to end (`scripts/run-shelltest.py`, `scripts/build.sh shelltest`, CI):
   boots the normal kernel with COM1 on a TCP socket and types commands the

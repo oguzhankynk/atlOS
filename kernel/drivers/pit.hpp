@@ -42,4 +42,12 @@ private:
     InterruptController& m_controller;
 };
 
+/**
+ * @brief Wait the given microseconds (at most 54925) on PIT channel 2, by
+ * polling: no IRQ, no scheduler, channel 0 keeps running. For measuring
+ * another timer against the PIT's known frequency.
+ * @return false if the channel never finished (a machine without a PIT).
+ */
+bool pitBusyWait(uint32_t microseconds);
+
 } // namespace Drivers

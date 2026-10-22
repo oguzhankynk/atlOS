@@ -13,10 +13,16 @@
 #include <shell/line_editor.hpp>
 
 namespace Drivers {
+class ApicInterruptController;
+class ApicTimer;
 class CharacterSource;
 class PciConfigSpace;
 class SerialPort;
 class VGATextConsole;
+}
+
+namespace Firmware {
+class AcpiTables;
 }
 
 namespace Fs {
@@ -46,6 +52,9 @@ struct Context {
     Fs::Vfs& vfs;
     Fs::BlockDeviceList& disks; ///< the disk command reads them
     Drivers::PciConfigSpace& pci; ///< lspci reads it
+    const Firmware::AcpiTables& acpi; ///< the acpi command lists them
+    Drivers::ApicInterruptController* apic; ///< the apic command; nullptr: the PIC is in use
+    const Drivers::ApicTimer* apicTimer; ///< nullptr: the PIT ticks
     Process::Runtime& runtime;
     Drivers::VGATextConsole* screen; ///< for clear, may be null
     Drivers::SerialPort* serial; ///< for clear, may be null

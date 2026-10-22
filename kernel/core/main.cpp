@@ -53,12 +53,18 @@
 #include <arch/x86_64/idt/handlers.hpp>
 #include <arch/x86_64/io/ioport.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/apic/apic.hpp>
+#include <drivers/apic/apic_timer.hpp>
+#include <drivers/apic/io_apic.hpp>
+#include <drivers/apic/local_apic.hpp>
 #include <drivers/character_queue.hpp>
 #include <drivers/keyboard.hpp>
 #include <drivers/pci/config_space.hpp>
 #include <drivers/pic.hpp>
 #include <drivers/pit.hpp>
 #include <drivers/tee_sink.hpp>
+#include <firmware/acpi/acpi.hpp>
+#include <firmware/acpi/madt.hpp>
 #include <shell/interpreter.hpp>
 
 #include <core/halt.hpp>
@@ -72,8 +78,14 @@ static Cxx::Uninitialized<Drivers::VGATextConsole> s_vga;
 static Cxx::Uninitialized<Drivers::SerialPort> s_serial;
 static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
 static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
+static Cxx::Uninitialized<Firmware::AcpiTables> s_acpi;
+static Firmware::MadtInfo s_madt;
 static Cxx::Uninitialized<Drivers::PIC> s_pic;
 static Cxx::Uninitialized<Drivers::PIT> s_pit;
+static Cxx::Uninitialized<Drivers::LocalApic> s_localApic;
+static Cxx::Uninitialized<Drivers::IoApic> s_ioApics[Firmware::MadtInfo::maxIoApics];
+static Cxx::Uninitialized<Drivers::ApicInterruptController> s_apic;
+static Cxx::Uninitialized<Drivers::ApicTimer> s_apicTimer;
 static Cxx::Uninitialized<Threading::Scheduler> s_scheduler;
 static Cxx::Uninitialized<Drivers::TeeSink> s_console;
 static Cxx::Uninitialized<Drivers::CharacterQueue> s_input;
@@ -87,6 +99,35 @@ static Cxx::Uninitialized<Process::Runtime> s_runtime;
 // One bit per 2 MB block, enough for 256 GB of physical memory
 // As much memory as the physmap covers: page tables are written through it
 static uint8_t s_pmmBitmap[Memory::PhysicalMemoryManager::bitmapBytesFor(Memory::physmapSize)];
+
+/**
+ * @brief The APIC, when the firmware describes it (a MADT with an I/O APIC)
+ * and the processor has a local APIC. nullptr otherwise: the PIC stays.
+ */
+static Drivers::ApicInterruptController* setUpApic(const Firmware::AcpiTables& acpi, Memory::AddressSpace& space)
+{
+    const Firmware::AcpiTableHeader* table = acpi.find("APIC");
+    if (!table || !Drivers::LocalApic::isPresent()) {
+        printf("APIC: %s, using the 8259 PIC\n", table ? "the processor has no local APIC" : "no MADT");
+        return nullptr;
+    }
+    if (!Firmware::parseMadt(*table, s_madt) || s_madt.ioApicCount == 0) {
+        printf("APIC: the MADT lists no I/O APIC, using the 8259 PIC\n");
+        return nullptr;
+    }
+
+    // Their registers are memory: mapped uncached
+    Drivers::LocalApic& local = s_localApic.construct(space.mapDevice(s_madt.localApicAddress), s_madt.localApicAddress);
+    Drivers::IoApic* ioApics[Firmware::MadtInfo::maxIoApics];
+    for (uint32_t i = 0; i < s_madt.ioApicCount; i++) {
+        const Firmware::MadtInfo::IoApic& io = s_madt.ioApics[i];
+        ioApics[i] = &s_ioApics[i].construct(space.mapDevice(io.address), io.address, io.gsiBase);
+    }
+    Drivers::ApicInterruptController& apic = s_apic.construct(local, ioApics, s_madt.ioApicCount, s_madt);
+    printf("APIC: local APIC id %u at 0x%lx, %u I/O APIC(s), %u processor(s)\n", local.id(), local.physAddress(),
+        s_madt.ioApicCount, s_madt.cpuCount);
+    return &apic;
+}
 
 /**
  * @brief entry point of atlOS
@@ -136,18 +177,37 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Fs::Vfs& vfs = s_vfs.construct();
     Fs::mountAtaDisks(vfs, s_disks);
 
-    // Interrupt controller: the 8259 PIC (there is no APIC driver yet). The ISR
-    // dispatcher is the one place that needs it without being handed it.
-    Drivers::PIC& pic = s_pic.construct();
-    Handlers::setInterruptController(&pic);
+    // ACPI: the tables the firmware describes the machine with (GRUB copies the RSDP)
+    Firmware::AcpiTables& acpi = s_acpi.construct();
+    if (const Firmware::AcpiRsdp* rsdp = Firmware::findRsdp(mbInfo); rsdp && acpi.load(*rsdp))
+        printf("ACPI: revision %u (%s), %u tables\n", acpi.revision(), acpi.oemId(), acpi.count());
+    else
+        printf("ACPI: no tables\n");
 
-    // Scheduler tick: the PIT, delivered through the PIC
-    Drivers::PIT& pit = s_pit.construct(pic);
+    // Interrupt controller: the APIC if the MADT describes one, else the 8259
+    // PIC. The PIC is set up in both cases: with the APIC it stays masked.
+    // The ISR dispatcher is the one place that needs the controller without
+    // being handed it.
+    Drivers::PIC& pic = s_pic.construct();
+    Drivers::ApicInterruptController* apic = setUpApic(acpi, kernelSpace);
+    Drivers::InterruptController& interrupts = apic ? static_cast<Drivers::InterruptController&>(*apic) : pic;
+    Handlers::setInterruptController(&interrupts);
+
+    // Scheduler tick: the APIC timer, measured against the PIT; the PIT itself
+    // (through the PIC, or the I/O APIC if the measuring failed) otherwise
+    Drivers::ApicTimer* apicTimer = nullptr;
+    if (apic) {
+        apicTimer = &s_apicTimer.construct(apic->localApic());
+        if (!apicTimer->calibrate())
+            apicTimer = nullptr;
+    }
+    Drivers::PIT& pit = s_pit.construct(interrupts);
+    Drivers::TickSource& ticks = apicTimer ? static_cast<Drivers::TickSource&>(*apicTimer) : pit;
 
     IOPort::enableInterrupts();
 
     // The boot flow becomes the scheduler's first task
-    Threading::Scheduler& scheduler = s_scheduler.construct(pit);
+    Threading::Scheduler& scheduler = s_scheduler.construct(ticks);
 
     // The keyboard and COM1 arrive through one queue: the shell reads it,
     // and a program the shell runs (file descriptor 0)
@@ -159,7 +219,9 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Process::setRuntime(&runtime);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime, input);
+    SelfTest::Interrupts tested { acpi, interrupts, apic, apicTimer,
+        apicTimer ? Drivers::ApicInterruptController::timerVector : Drivers::PIC::vectorBase };
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime, input, tested);
     Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
 #endif
 
@@ -168,11 +230,11 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
 #endif
 
     // Only now the devices feed the queue: the self tests push into it themselves
-    s_keyboard.construct(pic, input);
-    serial.startReceiving(pic, input);
+    s_keyboard.construct(interrupts, input);
+    serial.startReceiving(interrupts, input);
 
     // Runs in the boot flow (task 0) for good; reading sleeps in hlt
-    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, s_pci, runtime, &vga,
+    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, s_pci, acpi, apic, apicTimer, runtime, &vga,
         serial.isPresent() ? &serial : nullptr };
     s_shell.construct(input, s_context).run();
 }

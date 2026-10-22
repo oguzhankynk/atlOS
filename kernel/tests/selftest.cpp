@@ -15,6 +15,7 @@
 #include <arch/x86_64/boot/multiboot2.inc>
 #include <arch/x86_64/cpu/backtrace.hpp>
 #include <arch/x86_64/cpu/cpu.hpp>
+#include <arch/x86_64/cpu/cpuid.hpp>
 #include <arch/x86_64/cpu/msr.hpp>
 #include <arch/x86_64/cpu/probe.hpp>
 #include <arch/x86_64/gdt/gdt.hpp>
@@ -22,9 +23,14 @@
 #include <arch/x86_64/idt/idt.hpp>
 #include <arch/x86_64/idt/raise.hpp>
 #include <arch/x86_64/io/ioport.hpp>
+#include <arch/x86_64/mmu/mmu.inc>
 #include <core/console.hpp>
 #include <core/debug.hpp>
 #include <cxx/uninitialized.hpp>
+#include <drivers/apic/apic.hpp>
+#include <drivers/apic/apic_timer.hpp>
+#include <drivers/apic/io_apic.hpp>
+#include <drivers/apic/local_apic.hpp>
 #include <drivers/character_sink.hpp>
 #include <drivers/disk/ata.hpp>
 #include <drivers/disk/memory_block_device.hpp>
@@ -38,6 +44,8 @@
 #include <drivers/tick_source.hpp>
 #include <drivers/vga.hpp>
 #include <drivers/vga_console.hpp>
+#include <firmware/acpi/acpi.hpp>
+#include <firmware/acpi/madt.hpp>
 #include <fs/fat16.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
@@ -386,6 +394,14 @@ static void testVmm(PhysicalMemoryManager& pmm, AddressSpace& space)
     space.unmapPhysical(alias);
     CHECK(space.virtToPhys(alias) == nullptr);
     CHECK(page[3] == 0x1122334455667788ULL);
+
+    // A device view: the 2 MB page around the address, uncached (PCD and PWT in the entry)
+    auto device = static_cast<volatile uint64_t*>(space.mapDevice(phys + 3 * sizeof(uint64_t)));
+    AddressSpace::WalkStep steps[4];
+    uint32_t levels = space.walk((uint64_t)device, steps);
+    CHECK((uintptr_t)space.virtToPhys((const void*)device) == phys + 3 * sizeof(uint64_t) && *device == page[3]);
+    CHECK(levels == 3 && (steps[2].entry & (MMU_WRITE_THROUGH | MMU_CACHE_DISABLE)) == (MMU_WRITE_THROUGH | MMU_CACHE_DISABLE));
+    space.unmapPhysical((const void*)device);
 
     space.freePages(page, 1);
 
@@ -1058,7 +1074,7 @@ static void testSleepFakeTicks(AddressSpace& space)
 
 static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
 {
-    group("Scheduler sleep (kernel, PIT)");
+    group("Scheduler sleep (kernel, real ticks)");
 
     // Nothing else can run: the caller idles in hlt until the timer wakes it
     uint64_t t0 = scheduler.ticks();
@@ -1542,7 +1558,7 @@ static void testConditionVariable(AddressSpace& space)
 
 static void testIdleKeepsInterruptState(Scheduler& scheduler)
 {
-    group("Scheduler idle keeps the interrupt state (kernel, PIT)");
+    group("Scheduler idle keeps the interrupt state (kernel, real ticks)");
 
     // A thread waiting under an InterruptGuard may make the scheduler idle in
     // "sti; hlt"; it must get the CPU back with interrupts off, as it left it
@@ -2477,17 +2493,17 @@ static void testPageTableWalk(AddressSpace& space)
     CHECK(space.walk(0, steps) == 3 && (steps[2].entry & 0x000FFFFFFFE00000ULL) == 0); // the identity map
 }
 
-static void testInterruptCounts(Scheduler& scheduler)
+static void testInterruptCounts(Scheduler& scheduler, unsigned tickVector)
 {
     group("Interrupt counts");
 
-    uint64_t timer = IDT::interruptCount(0x20);
+    uint64_t timer = IDT::interruptCount(tickVector);
     scheduler.sleep(5);
-    CHECK(IDT::interruptCount(0x20) >= timer + 5); // one per millisecond
+    CHECK(IDT::interruptCount(tickVector) >= timer + 5); // one per millisecond
     CHECK(IDT::interruptCount(0x99) == 0); // nothing arrives there
 }
 
-static void testRaiseAndBreakpoint(Scheduler& scheduler)
+static void testRaiseAndBreakpoint(Scheduler& scheduler, unsigned tickVector)
 {
     group("Raising interrupts, breakpoints");
 
@@ -2500,11 +2516,11 @@ static void testRaiseAndBreakpoint(Scheduler& scheduler)
     bool counted = IDT::interruptCount(0x30) == before + 1;
     bool noHandler = sink.contains("interrupt 48 (0x30): no handler");
 
-    // The timer vector runs the scheduler's tick handler, as the PIT would
+    // The tick vector runs the scheduler's tick handler, as the timer would
     sink.clear();
     uint64_t ticks = scheduler.ticks();
     IOPort::disableInterrupts(); // no real tick in between
-    IDT::raise(0x20);
+    IDT::raise(tickVector);
     bool ticked = scheduler.ticks() == ticks + 1;
     IOPort::enableInterrupts();
 
@@ -2639,6 +2655,293 @@ static void testPci()
     count = Drivers::scanPci(ports, devices, 8);
     CHECK(count > 0);
     CHECK(count > 0 && devices[0].address.bus == 0 && devices[0].address.device == 0 && devices[0].classCode == 0x06);
+}
+
+// ------------------------------------------------------------
+// ACPI and the APIC
+// ------------------------------------------------------------
+
+// Made up ACPI tables in one buffer of the kernel image (reached through the
+// physmap like real ones): an XSDT and an RSDT that both list a MADT, a table
+// with a wrong checksum and an address outside the physmap
+struct FakeAcpi {
+    alignas(16) uint8_t bytes[1024];
+    uint64_t physical; ///< of bytes
+    Firmware::AcpiRsdp rsdp;
+};
+
+static constexpr uint32_t fakeXsdtOffset = 0x40;
+static constexpr uint32_t fakeRsdtOffset = 0x80;
+static constexpr uint32_t fakeMadtOffset = 0x100;
+static constexpr uint32_t fakeBadOffset = 0x200;
+static constexpr uint64_t fakeOutside = 1ULL << 40; // 1 TB: beyond the physmap
+
+static const uint8_t s_fakeMadtEntries[] = {
+    0, 8, 0, 0, 1, 0, 0, 0, // processor 0, APIC id 0, enabled
+    0, 8, 1, 3, 0, 0, 0, 0, // processor 1, APIC id 3, disabled
+    1, 12, 2, 0, 0x00, 0x00, 0xC0, 0xFE, 0, 0, 0, 0, // I/O APIC id 2 at 0xFEC00000, from GSI 0
+    2, 10, 0, 0, 2, 0, 0, 0, 0x00, 0x00, // IRQ 0 -> GSI 2, as the bus does
+    2, 10, 0, 9, 9, 0, 0, 0, 0x0D, 0x00, // IRQ 9 -> GSI 9, active high, level
+    2, 10, 0, 11, 20, 0, 0, 0, 0x0F, 0x00, // IRQ 11 -> GSI 20, active low, level
+    4, 6, 0xFF, 0x05, 0x00, 1, // NMI on LINT1 of every processor, active high, edge
+    5, 12, 0, 0, 0x00, 0x00, 0xE1, 0xFE, 0, 0, 0, 0, // the local APICs at 0xFEE10000 (64 bit)
+    0x7F, 4, 0, 0, // a kind atlOS does not read
+};
+
+static uint8_t byteSum(const uint8_t* data, size_t size)
+{
+    uint8_t sum = 0;
+    for (size_t i = 0; i < size; i++)
+        sum += data[i];
+    return sum;
+}
+
+static Firmware::AcpiTableHeader* fakeTable(FakeAcpi& acpi, uint32_t offset, const char* signature, uint32_t length)
+{
+    auto header = reinterpret_cast<Firmware::AcpiTableHeader*>(acpi.bytes + offset);
+    memcpy(header->signature, signature, 4);
+    header->length = length;
+    header->revision = 1;
+    memcpy(header->oemId, "ATLOS ", 6);
+    memcpy(header->oemTableId, "SELFTEST", 8);
+    return header;
+}
+
+/// Set the checksum so that the table's bytes add up to 0
+static void sealTable(Firmware::AcpiTableHeader* header)
+{
+    header->checksum = 0;
+    header->checksum = -byteSum(reinterpret_cast<const uint8_t*>(header), header->length);
+}
+
+static void sealRsdp(Firmware::AcpiRsdp& rsdp)
+{
+    rsdp.checksum = 0;
+    rsdp.checksum = -byteSum(reinterpret_cast<const uint8_t*>(&rsdp), 20);
+    rsdp.extendedChecksum = 0;
+    rsdp.extendedChecksum = -byteSum(reinterpret_cast<const uint8_t*>(&rsdp), sizeof(rsdp));
+}
+
+static void buildFakeAcpi(FakeAcpi& acpi, AddressSpace& space)
+{
+    memset(acpi.bytes, 0, sizeof(acpi.bytes));
+    space.translate(acpi.bytes, acpi.physical);
+
+    // The MADT: the local APIC address, the flags (8259 PICs too), the entries
+    Firmware::AcpiTableHeader* madt = fakeTable(acpi, fakeMadtOffset, "APIC",
+        sizeof(Firmware::AcpiTableHeader) + 8 + sizeof(s_fakeMadtEntries));
+    uint8_t* fields = acpi.bytes + fakeMadtOffset + sizeof(Firmware::AcpiTableHeader);
+    uint32_t localApic = 0xFEE00000, flags = 1;
+    memcpy(fields, &localApic, 4);
+    memcpy(fields + 4, &flags, 4);
+    memcpy(fields + 8, s_fakeMadtEntries, sizeof(s_fakeMadtEntries));
+    sealTable(madt);
+
+    Firmware::AcpiTableHeader* bad = fakeTable(acpi, fakeBadOffset, "TEST", sizeof(Firmware::AcpiTableHeader));
+    sealTable(bad);
+    bad->checksum++;
+
+    // The root tables: 64 bit entries in the XSDT (at an offset of 36, not aligned), 32 bit in the RSDT
+    uint64_t entries[3] = { acpi.physical + fakeMadtOffset, acpi.physical + fakeBadOffset, fakeOutside };
+    Firmware::AcpiTableHeader* xsdt = fakeTable(acpi, fakeXsdtOffset, "XSDT", sizeof(Firmware::AcpiTableHeader) + 24);
+    memcpy(acpi.bytes + fakeXsdtOffset + sizeof(Firmware::AcpiTableHeader), entries, 24);
+    sealTable(xsdt);
+    Firmware::AcpiTableHeader* rsdt = fakeTable(acpi, fakeRsdtOffset, "RSDT", sizeof(Firmware::AcpiTableHeader) + 8);
+    for (size_t i = 0; i < 2; i++) {
+        auto entry = static_cast<uint32_t>(entries[i]);
+        memcpy(acpi.bytes + fakeRsdtOffset + sizeof(Firmware::AcpiTableHeader) + 4 * i, &entry, 4);
+    }
+    sealTable(rsdt);
+
+    memset(&acpi.rsdp, 0, sizeof(acpi.rsdp));
+    memcpy(acpi.rsdp.signature, "RSD PTR ", 8);
+    memcpy(acpi.rsdp.oemId, "ATLOS ", 6);
+    acpi.rsdp.revision = 2;
+    acpi.rsdp.rsdtAddress = static_cast<uint32_t>(acpi.physical + fakeRsdtOffset);
+    acpi.rsdp.length = sizeof(acpi.rsdp);
+    acpi.rsdp.xsdtAddress = acpi.physical + fakeXsdtOffset;
+    sealRsdp(acpi.rsdp);
+}
+
+static void testAcpiTables(AddressSpace& space)
+{
+    group("ACPI tables (made up)");
+
+    static FakeAcpi s_fake;
+    buildFakeAcpi(s_fake, space);
+    const uint8_t zero[3] = { 0x10, 0xEF, 0x01 };
+    CHECK(Firmware::acpiChecksumIsValid(zero, 3) && !Firmware::acpiChecksumIsValid(zero, 2));
+
+    // Revision 2: the XSDT. The table outside the physmap is skipped, the
+    // wrong checksum is listed but not found
+    static Firmware::AcpiTables s_tables;
+    CHECK(s_tables.load(s_fake.rsdp));
+    CHECK(s_tables.isLoaded() && s_tables.revision() == 2 && !strcmp(s_tables.oemId(), "ATLOS "));
+    CHECK(s_tables.root() && !memcmp(s_tables.root()->signature, "XSDT", 4));
+    CHECK(s_tables.rootPhysical() == s_fake.physical + fakeXsdtOffset);
+    CHECK(s_tables.count() == 2);
+    CHECK(s_tables.at(0).physical == s_fake.physical + fakeMadtOffset && s_tables.at(0).checksumValid);
+    CHECK(!memcmp(s_tables.at(1).header->signature, "TEST", 4) && !s_tables.at(1).checksumValid);
+    CHECK(s_tables.find("APIC") == s_tables.at(0).header);
+    CHECK(s_tables.find("TEST") == nullptr && s_tables.find("HPET") == nullptr);
+
+    // Revision 0 (ACPI 1.0): the RSDT, even though an XSDT address is there
+    Firmware::AcpiRsdp rsdp = s_fake.rsdp;
+    rsdp.revision = 0;
+    sealRsdp(rsdp);
+    CHECK(s_tables.load(rsdp) && s_tables.root() && !memcmp(s_tables.root()->signature, "RSDT", 4) && s_tables.count() == 2);
+
+    // What is refused: a wrong RSDP checksum or signature, a broken root table
+    rsdp = s_fake.rsdp;
+    rsdp.checksum++;
+    CHECK(!s_tables.load(rsdp) && !s_tables.isLoaded() && s_tables.count() == 0);
+    rsdp = s_fake.rsdp;
+    rsdp.signature[0] = 'X';
+    sealRsdp(rsdp);
+    CHECK(!s_tables.load(rsdp));
+    s_fake.bytes[fakeXsdtOffset + sizeof(Firmware::AcpiTableHeader)]++;
+    CHECK(!s_tables.load(s_fake.rsdp));
+    rsdp = s_fake.rsdp;
+    rsdp.xsdtAddress = fakeOutside;
+    sealRsdp(rsdp);
+    CHECK(!s_tables.load(rsdp));
+
+    // The RSDP in the multiboot information: the ACPI 2.0 tag wins over the 1.0 one
+    alignas(8) static uint8_t s_info[128];
+    memset(s_info, 0, sizeof(s_info));
+    auto tag = [](uint32_t offset, uint32_t type, uint32_t size) {
+        memcpy(s_info + offset, &type, 4);
+        memcpy(s_info + offset + 4, &size, 4);
+    };
+    tag(8, MULTIBOOT_TAG_TYPE_ACPI_OLD, 8 + 20);
+    tag(40, MULTIBOOT_TAG_TYPE_ACPI_NEW, 8 + 36);
+    tag(88, MULTIBOOT_TAG_TYPE_END, 8);
+    auto info = reinterpret_cast<uint64_t>(s_info);
+    CHECK(reinterpret_cast<const uint8_t*>(Firmware::findRsdp(info)) == s_info + 48);
+    tag(40, MULTIBOOT_TAG_TYPE_END, 8);
+    CHECK(reinterpret_cast<const uint8_t*>(Firmware::findRsdp(info)) == s_info + 16);
+    tag(8, MULTIBOOT_TAG_TYPE_END, 8);
+    CHECK(Firmware::findRsdp(info) == nullptr);
+}
+
+static void testMadt(AddressSpace& space)
+{
+    group("MADT (made up)");
+
+    static FakeAcpi s_fake;
+    buildFakeAcpi(s_fake, space);
+    auto& table = *reinterpret_cast<Firmware::AcpiTableHeader*>(s_fake.bytes + fakeMadtOffset);
+
+    static Firmware::MadtInfo s_madt;
+    CHECK(Firmware::parseMadt(table, s_madt));
+    CHECK(s_madt.localApicAddress == 0xFEE10000 && s_madt.hasLegacyPics); // the 64 bit entry wins
+    CHECK(s_madt.cpuCount == 2 && s_madt.cpus[0].enabled && s_madt.cpus[1].apicId == 3 && !s_madt.cpus[1].enabled);
+    CHECK(s_madt.ioApicCount == 1 && s_madt.ioApics[0].id == 2 && s_madt.ioApics[0].address == 0xFEC00000
+        && s_madt.ioApics[0].gsiBase == 0);
+    CHECK(s_madt.overrideCount == 3 && s_madt.overrides[2].irq == 11 && s_madt.overrides[2].gsi == 20
+        && s_madt.overrides[2].flags == 0x0F);
+    CHECK(s_madt.nmiCount == 1 && s_madt.nmis[0].processorId == 0xFF && s_madt.nmis[0].lint == 1
+        && s_madt.nmis[0].flags == 0x05);
+    CHECK(s_madt.skippedCount == 1);
+
+    // The ISA routes: the overrides, or the same number active high and edge
+    Firmware::IsaRoute timer = Firmware::isaRoute(s_madt, 0);
+    Firmware::IsaRoute sci = Firmware::isaRoute(s_madt, 9);
+    Firmware::IsaRoute low = Firmware::isaRoute(s_madt, 11);
+    Firmware::IsaRoute keyboard = Firmware::isaRoute(s_madt, 1);
+    CHECK(timer.gsi == 2 && !timer.activeLow && !timer.levelTriggered);
+    CHECK(sci.gsi == 9 && !sci.activeLow && sci.levelTriggered);
+    CHECK(low.gsi == 20 && low.activeLow && low.levelTriggered);
+    CHECK(keyboard.gsi == 1 && !keyboard.activeLow && !keyboard.levelTriggered);
+
+    // Not a MADT; an entry running past the end; an entry of length 0
+    CHECK(!Firmware::parseMadt(*reinterpret_cast<Firmware::AcpiTableHeader*>(s_fake.bytes + fakeXsdtOffset), s_madt));
+    uint8_t* last = s_fake.bytes + fakeMadtOffset + table.length - 4;
+    last[1] = 40;
+    CHECK(!Firmware::parseMadt(table, s_madt));
+    last[1] = 0;
+    CHECK(!Firmware::parseMadt(table, s_madt));
+}
+
+static volatile uint32_t s_pitIrqs;
+
+static void countPitIrq(void*)
+{
+    s_pitIrqs++;
+}
+
+static void testApicOnMachine(Scheduler& scheduler, const Interrupts& interrupts)
+{
+    group("ACPI and the APIC on this machine");
+
+    const Firmware::AcpiTables& acpi = interrupts.acpi;
+    if (!acpi.isLoaded()) {
+        printf("[SELFTEST] skipped: no ACPI tables, the PIC is in use\n");
+        CHECK(interrupts.apic == nullptr);
+        return;
+    }
+    CHECK(acpi.find("FACP") != nullptr);
+    const Firmware::AcpiTableHeader* table = acpi.find("APIC");
+    static Firmware::MadtInfo s_madt;
+    CHECK(table && Firmware::parseMadt(*table, s_madt) && s_madt.cpuCount >= 1 && s_madt.ioApicCount >= 1);
+
+    Drivers::ApicInterruptController* apic = interrupts.apic;
+    CHECK(apic != nullptr);
+    if (!apic)
+        return;
+    CHECK(&interrupts.controller == apic);
+
+    // The local APIC is this processor's (CPUID.1 EBX bits 31..24: its initial APIC id) and enabled
+    Drivers::LocalApic& local = apic->localApic();
+    unsigned int eax, ebx, ecx, edx;
+    cpuid(1, &eax, &ebx, &ecx, &edx);
+    CHECK(local.id() == (ebx >> 24));
+    uint32_t spurious = local.read(Drivers::LocalApic::RegisterSpurious);
+    CHECK((spurious & 0x100) && (spurious & 0xFF) == Drivers::ApicInterruptController::spuriousVector);
+    CHECK(local.physAddress() == s_madt.localApicAddress);
+
+    // The I/O APIC: IRQ 0 where the MADT says (GSI 2 with the usual override), vector 0x20, masked
+    const Drivers::IoApic* io;
+    uint32_t pin;
+    CHECK(apic->ioApicCount() >= 1 && apic->ioApic(0).pinCount() >= 16);
+    Firmware::IsaRoute timerRoute = Firmware::isaRoute(s_madt, 0);
+    CHECK(apic->locate(Drivers::Irq::Timer, io, pin) && io->gsiBase() + pin == timerRoute.gsi);
+    CHECK((io->redirection(pin) & 0xFF) == Drivers::ApicInterruptController::irqVectorBase);
+    if (timerRoute.gsi == 2)
+        CHECK(!apic->locate(Drivers::Irq::Cascade, io, pin)); // its GSI belongs to IRQ 0
+    CHECK(IOPort::inportb(0x21) == 0xFF && IOPort::inportb(0xA1) == 0xFF); // the 8259s stay masked
+
+    // IRQ 0 through the I/O APIC: the PIT, on its own handler (the scheduler ticks on the APIC timer)
+    if (interrupts.apicTimer) {
+        s_pitIrqs = 0;
+        Drivers::PIT pit(*apic);
+        CHECK(pit.start(1000000, countPitIrq, nullptr));
+        scheduler.sleep(20);
+        apic->mask(Drivers::Irq::Timer);
+        CHECK(s_pitIrqs >= 10);
+    }
+
+    if (!interrupts.apicTimer) {
+        printf("[SELFTEST] skipped: the APIC timer is not in use\n");
+        return;
+    }
+
+    // The APIC timer: periodic on its vector, counting down, one tick per millisecond
+    Drivers::ApicTimer& timer = *interrupts.apicTimer;
+    uint32_t lvt = local.read(Drivers::LocalApic::RegisterLvtTimer);
+    CHECK((lvt & Drivers::LocalApic::LvtTimerPeriodic) && !(lvt & Drivers::LocalApic::LvtMasked)
+        && (lvt & 0xFF) == Drivers::ApicInterruptController::timerVector);
+    CHECK(timer.frequency() > 0 && timer.initialCount() == timer.frequency() / 1000);
+    CHECK(local.read(Drivers::LocalApic::RegisterTimerCurrentCount) <= timer.initialCount());
+
+    // Measured against the PIT: 50 ms of channel 2 are about 50 ticks
+    uint64_t before = scheduler.ticks();
+    CHECK(Drivers::pitBusyWait(50000));
+    uint64_t elapsed = scheduler.ticks() - before;
+    CHECK(elapsed >= 40 && elapsed <= 60);
+    if (elapsed < 40 || elapsed > 60)
+        printf("[SELFTEST] 50 ms of the PIT took %lu APIC timer ticks\n", elapsed);
+    CHECK(!Drivers::pitBusyWait(0) && !Drivers::pitBusyWait(60000)); // out of the 16 bit count
 }
 
 // ------------------------------------------------------------
@@ -2785,7 +3088,7 @@ static const char* runCommand(Shell::Interpreter& shell, FakeSink& sink, const c
     return sink.text();
 }
 
-static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler& scheduler)
+static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler& scheduler, const Interrupts& interrupts)
 {
     group("Shell commands (RAM disk)");
 
@@ -2808,7 +3111,11 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(disks.add(volume));
     FakePciConfigSpace pci;
     buildFakePci(pci);
-    Shell::Context context { pmm, space, vfs, disks, pci, runtime, nullptr, nullptr };
+    static FakeAcpi s_fakeAcpi;
+    buildFakeAcpi(s_fakeAcpi, space);
+    static Firmware::AcpiTables s_acpi;
+    CHECK(s_acpi.load(s_fakeAcpi.rsdp));
+    Shell::Context context { pmm, space, vfs, disks, pci, s_acpi, nullptr, nullptr, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2905,7 +3212,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     snprintf(ptCommand, sizeof(ptCommand), "pt 0x%lx", (uint64_t)&_text_start);
     bool pt = (runCommand(shell, sink, ptCommand), sink.contains("PML4[511]") && sink.contains("2 MB page"))
         && (runCommand(shell, sink, "pt 0xdead0000"), sink.contains("not mapped: PDPT[3] is not present"));
-    bool irq = (runCommand(shell, sink, "irq"), sink.contains("IRQ 0 timer"));
+    bool irq = (runCommand(shell, sink, "irq"), sink.contains(interrupts.apicTimer ? "APIC timer" : "IRQ 0 timer"));
     char port[48];
     snprintf(port, sizeof(port), "port 0x0021: 0x%02x", IOPort::inportb(0x21)); // the PIC's mask
     bool in = (runCommand(shell, sink, "in 0x21"), sink.contains(port));
@@ -2934,6 +3241,23 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
         && (runCommand(shell, sink, "lspci 00:04.0"), sink.contains("no function at 00:04.0"))
         && (runCommand(shell, sink, "lspci 00:20.0"), sink.contains("an address like"));
 
+    // acpi and apic on the made up tables, without an APIC
+    bool acpiList = (runCommand(shell, sink, "acpi"), sink.contains("ACPI revision 2 (ATLOS ), XSDT at 0x"))
+        && sink.contains("APIC  0x") && sink.contains("interrupt controllers (MADT)") && sink.contains("(wrong checksum)")
+        && sink.contains("2 table(s)");
+    char madtDump[32];
+    snprintf(madtDump, sizeof(madtDump), "%016lx  41 50 49 43", s_fakeAcpi.physical + fakeMadtOffset);
+    bool acpiMadt = (runCommand(shell, sink, "acpi APIC"), sink.contains("local APIC at 0xfee10000, 8259 PICs too"))
+        && sink.contains("processor 1  APIC id 3  (disabled)") && sink.contains("I/O APIC id 2 at 0xfec00000, from GSI 0")
+        && sink.contains("override  IRQ 0 -> GSI 2, bus polarity, bus trigger")
+        && sink.contains("override  IRQ 11 -> GSI 20, active low, level")
+        && sink.contains("NMI on LINT1 of every processor, active high, edge") && sink.contains("1 other entry")
+        && sink.contains(madtDump);
+    bool acpiBad = (runCommand(shell, sink, "acpi TEST"), sink.contains("checksum WRONG"))
+        && (runCommand(shell, sink, "acpi HPET"), sink.contains("no HPET table"))
+        && (runCommand(shell, sink, "acpi AP"), sink.contains("a signature of 4 letters"));
+    bool apicPic = (runCommand(shell, sink, "apic"), sink.contains("the 8259 PIC delivers the IRQs"));
+
     bool diskBad = (runCommand(shell, sink, "disk read 0 9"), sink.contains("a count of 1 .. 8"))
         && (runCommand(shell, sink, "disk read 0 1 nope"), sink.contains("no such device"))
         && (runCommand(shell, sink, "disk read 99999"), sink.contains("can not read sector"));
@@ -2960,6 +3284,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(help && helpGroup && helpCommand && helpUnknown);
     CHECK(disk && diskRead && diskSecond && diskBad);
     CHECK(lspci && lspciBars && lspciDetails && lspciBad);
+    CHECK(acpiList && acpiMadt && acpiBad && apicPic);
     CHECK(version);
     CHECK(unknown && usageShown && quote && nothing);
 
@@ -3277,7 +3602,7 @@ static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
 }
 
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
-    Process::Runtime& runtime, Drivers::CharacterQueue& input)
+    Process::Runtime& runtime, Drivers::CharacterQueue& input, const Interrupts& interrupts)
 {
     printf("[SELFTEST] start\n");
 
@@ -3319,6 +3644,9 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testKeyboard(space);
     testBlockDevices();
     testPci();
+    testAcpiTables(space);
+    testMadt(space);
+    testApicOnMachine(scheduler, interrupts);
     testFat16Names();
     testFat16();
     testFat16Write();
@@ -3326,14 +3654,14 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testTranslate(space);
     testExceptionTable();
     testPageTableWalk(space);
-    testInterruptCounts(scheduler);
-    testRaiseAndBreakpoint(scheduler);
+    testInterruptCounts(scheduler, interrupts.tickVector);
+    testRaiseAndBreakpoint(scheduler, interrupts.tickVector);
     testAddressSpaces(pmm, space);
     testElf();
     testUserPrograms(pmm, runtime, scheduler, vfs, input);
     testShellParser();
     testLineEditor();
-    testShell(pmm, space, scheduler);
+    testShell(pmm, space, scheduler, interrupts);
 
     printf("[SELFTEST] done: %d passed, %d failed\n", s_passed, s_failed);
     return s_failed;

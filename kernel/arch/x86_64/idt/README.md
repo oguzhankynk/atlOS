@@ -10,7 +10,7 @@ Three things interrupt the normal flow of instructions:
 | Kind | Source | Examples (vector) |
 |---|---|---|
 | **Exception** | the CPU itself, caused by the current instruction | divide error (0), invalid opcode (6), general protection (13), page fault (14) |
-| **Hardware interrupt (IRQ)** | a device, through the interrupt controller | PIT timer (0x20), keyboard (0x21) |
+| **Hardware interrupt (IRQ)** | a device, through the interrupt controller | keyboard (0x21), COM1 (0x24), the local APIC timer (0x40) |
 | Software interrupt | an `int n` instruction | system calls in some OSes (`int 0x80`) |
 
 For each of the 256 vectors the **IDT** (Interrupt Descriptor Table) holds a
@@ -55,7 +55,8 @@ handlers.cpp   table of (function, argument) per vector; sends the EOI
 - **Trap gates for exceptions**, interrupt gates for IRQs: an IRQ handler runs
   with interrupts off, so it can not be interrupted by itself.
 - **Dispatch table**: drivers register `(function, argument)` pairs through
-  their `InterruptController` (`PIC::attach` writes vector `0x20 + irq`).
+  their `InterruptController` (ISA IRQ *n* is vector `0x20 + irq` with the
+  APIC and with the PIC; the APIC timer is `0x40`, its spurious vector `0xFF`).
   The argument is how a handler gets its object (e.g. the scheduler) without a
   global.
 - The only global here is the bound controller pointer

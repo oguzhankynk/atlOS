@@ -49,7 +49,11 @@ shares the kernel's `PML4[0]` and `PML4[256..511]`.
   page directories from 4 KB frames. `freePages` gives the blocks and empty
   page directories back (not the ones in the kernel image).
 - `mapPhysical(virt, phys)` / `unmapPhysical(virt)` map a caller provided
-  physical 2 MB page (e.g. for MMIO) without touching the PMM.
+  physical 2 MB page without touching the PMM.
+- `mapDevice(phys)` maps the 2 MB page around a device's registers at a free
+  kernel address, **uncached** (the PCD and PWT bits): the physmap is cached,
+  and a device must see every read and write. The local APIC and the I/O
+  APICs are reached this way.
 - `allocateAt(virt, n, flags)` / `freeAt` map zeroed pages in the user range
   (`userBase` = `0x0000008000000000` .. `userEnd`), with `Writable` and `User`.
 - Bit 9 of an entry (ignored by the CPU) marks pages whose block the address

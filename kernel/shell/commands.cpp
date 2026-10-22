@@ -19,10 +19,16 @@
 #include <arch/x86_64/io/ioport.hpp>
 #include <core/panic.hpp>
 #include <core/version.hpp>
+#include <drivers/apic/apic.hpp>
+#include <drivers/apic/apic_timer.hpp>
+#include <drivers/apic/io_apic.hpp>
+#include <drivers/apic/local_apic.hpp>
 #include <drivers/disk/block_device.hpp>
 #include <drivers/pci/pci.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/vga_console.hpp>
+#include <firmware/acpi/acpi.hpp>
+#include <firmware/acpi/madt.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
 #include <mm/constants.hpp>
@@ -688,6 +694,202 @@ static void cmdLspci(Interpreter& shell, int argc, char** argv)
 }
 
 // ------------------------------------------------------------
+// ACPI and the APIC
+// ------------------------------------------------------------
+
+static const char* acpiTableName(const char* signature)
+{
+    static const struct {
+        const char* signature;
+        const char* name;
+    } s_names[] = {
+        { "APIC", "interrupt controllers (MADT)" },
+        { "FACP", "fixed hardware (FADT)" },
+        { "HPET", "high precision event timer" },
+        { "MCFG", "PCIe configuration space (ECAM)" },
+        { "SSDT", "secondary AML code" },
+        { "WAET", "emulated devices" },
+        { "SRAT", "memory and processor affinity" },
+        { "BGRT", "boot logo" },
+        { "DMAR", "DMA remapping (Intel VT-d)" },
+    };
+    for (const auto& entry : s_names) {
+        if (!memcmp(entry.signature, signature, 4))
+            return entry.name;
+    }
+    return "";
+}
+
+/// "as the bus does" for 0, otherwise the polarity and the trigger mode
+static void printIntiFlags(uint16_t flags)
+{
+    uint16_t polarity = flags & Firmware::MadtPolarityMask;
+    uint16_t trigger = flags & Firmware::MadtTriggerMask;
+    printf("%s, %s", polarity == Firmware::MadtPolarityLow ? "active low" : polarity ? "active high"
+                                                                                     : "bus polarity",
+        trigger == Firmware::MadtTriggerLevel ? "level" : trigger ? "edge"
+                                                                  : "bus trigger");
+}
+
+static void printMadt(const Firmware::AcpiTableHeader& table)
+{
+    static Firmware::MadtInfo s_madt;
+    if (!Firmware::parseMadt(table, s_madt)) {
+        printf("  the entries run past the end of the table\n");
+        return;
+    }
+    printf("  local APIC at 0x%lx%s\n", s_madt.localApicAddress, s_madt.hasLegacyPics ? ", 8259 PICs too" : "");
+    for (uint32_t i = 0; i < s_madt.cpuCount; i++) {
+        const auto& cpu = s_madt.cpus[i];
+        printf("  processor %u  APIC id %u%s\n", cpu.processorId, cpu.apicId, cpu.enabled ? "" : "  (disabled)");
+    }
+    for (uint32_t i = 0; i < s_madt.ioApicCount; i++) {
+        const auto& io = s_madt.ioApics[i];
+        printf("  I/O APIC id %u at 0x%x, from GSI %u\n", io.id, io.address, io.gsiBase);
+    }
+    for (uint32_t i = 0; i < s_madt.overrideCount; i++) {
+        const auto& o = s_madt.overrides[i];
+        printf("  override  IRQ %u -> GSI %u, ", o.irq, o.gsi);
+        printIntiFlags(o.flags);
+        printf("\n");
+    }
+    for (uint32_t i = 0; i < s_madt.nmiCount; i++) {
+        const auto& nmi = s_madt.nmis[i];
+        if (nmi.processorId == 0xFF)
+            printf("  NMI on LINT%u of every processor, ", nmi.lint);
+        else
+            printf("  NMI on LINT%u of processor %u, ", nmi.lint, nmi.processorId);
+        printIntiFlags(nmi.flags);
+        printf("\n");
+    }
+    if (s_madt.skippedCount)
+        printf("  %u other entr%s\n", s_madt.skippedCount, s_madt.skippedCount == 1 ? "y" : "ies");
+}
+
+static void cmdAcpi(Interpreter& shell, int argc, char** argv)
+{
+    if (!usage("acpi", argc, 1, 2))
+        return;
+
+    const Firmware::AcpiTables& acpi = shell.context().acpi;
+    if (!acpi.isLoaded()) {
+        printf("acpi: the firmware gave no ACPI tables\n");
+        return;
+    }
+
+    // acpi SIG: one table, decoded if atlOS reads it, and dumped
+    if (argc == 2) {
+        if (strlen(argv[1]) != 4) {
+            printf("acpi: a signature of 4 letters, like APIC\n");
+            return;
+        }
+        for (uint32_t i = 0; i < acpi.count(); i++) {
+            const Firmware::AcpiTables::Table& table = acpi.at(i);
+            const Firmware::AcpiTableHeader& h = *table.header;
+            if (memcmp(h.signature, argv[1], 4) != 0)
+                continue;
+            printf("%.4s  %s\n", h.signature, acpiTableName(h.signature));
+            printf("  at 0x%lx, %u bytes, revision %u, checksum %s\n", table.physical, h.length, h.revision,
+                table.checksumValid ? "valid" : "WRONG");
+            printf("  OEM %.6s %.8s (revision 0x%x), creator %.4s (revision 0x%x)\n", h.oemId, h.oemTableId,
+                h.oemRevision, reinterpret_cast<const char*>(&h.creatorId), h.creatorRevision);
+            if (!memcmp(h.signature, "APIC", 4))
+                printMadt(h);
+            auto bytes = reinterpret_cast<const uint8_t*>(&h);
+            uint32_t length = h.length < 512 ? h.length : 512;
+            for (uint32_t line = 0; line < length; line += 16)
+                printDumpLine(table.physical + line, bytes + line, length - line < 16 ? length - line : 16);
+            if (length < h.length)
+                printf("  (the first 512 bytes; md 0x%lx shows the rest)\n", (uint64_t)Memory::physToVirt(table.physical + 512));
+            return;
+        }
+        printf("acpi: no %s table\n", argv[1]);
+        return;
+    }
+
+    // acpi: the root table and what it lists
+    printf("ACPI revision %u (%s), %.4s at 0x%lx\n", acpi.revision(), acpi.oemId(), acpi.root()->signature,
+        acpi.rootPhysical());
+    printf("  sig   physical    length  rev  OEM\n");
+    for (uint32_t i = 0; i < acpi.count(); i++) {
+        const Firmware::AcpiTables::Table& table = acpi.at(i);
+        const Firmware::AcpiTableHeader& h = *table.header;
+        printf("  %.4s  0x%08lx  %6u  %3u  %-6.6s %-8.8s  %s%s\n", h.signature, table.physical, h.length, h.revision,
+            h.oemId, h.oemTableId, acpiTableName(h.signature), table.checksumValid ? "" : "  (wrong checksum)");
+    }
+    printf("  %u table(s)\n", acpi.count());
+}
+
+static void printLvt(const char* name, uint32_t value)
+{
+    // Bits 10..8, the delivery mode: fixed (a vector), NMI, or ExtINT (the 8259 behind the pin)
+    uint32_t mode = (value >> 8) & 7;
+    printf("  %-6s 0x%08x  ", name, value);
+    if (mode == 0)
+        printf("vector 0x%02x", value & 0xFF);
+    else
+        printf("%s", mode == 4 ? "NMI" : mode == 7 ? "ExtINT"
+                : mode == 2                        ? "SMI"
+                                                   : "mode ?");
+    printf("%s\n", value & Drivers::LocalApic::LvtMasked ? "  masked" : "");
+}
+
+static void cmdApic(Interpreter& shell, int argc, char**)
+{
+    if (!usage("apic", argc, 1, 1))
+        return;
+
+    Drivers::ApicInterruptController* apic = shell.context().apic;
+    if (!apic) {
+        printf("apic: the 8259 PIC delivers the IRQs (%s)\n",
+            Drivers::LocalApic::isPresent() ? "no MADT with an I/O APIC" : "the processor has no local APIC");
+        return;
+    }
+
+    // The local APIC: its registers, the timer's state
+    using Drivers::LocalApic;
+    LocalApic& local = apic->localApic();
+    uint32_t spurious = local.read(LocalApic::RegisterSpurious);
+    printf("local APIC id %u, version 0x%02x, %u LVT entries, at 0x%lx\n", local.id(), local.version(),
+        local.lvtCount(), local.physAddress());
+    printf("  spurious 0x%03x (%s, vector 0x%02x), task priority %u, error status 0x%x\n", spurious,
+        spurious & 0x100 ? "enabled" : "disabled", spurious & 0xFF, local.read(LocalApic::RegisterTaskPriority),
+        local.read(LocalApic::RegisterErrorStatus));
+    uint32_t timer = local.read(LocalApic::RegisterLvtTimer);
+    printLvt("timer", timer);
+    printLvt("LINT0", local.read(LocalApic::RegisterLvtLint0));
+    printLvt("LINT1", local.read(LocalApic::RegisterLvtLint1));
+    printLvt("error", local.read(LocalApic::RegisterLvtError));
+    if (const Drivers::ApicTimer* apicTimer = shell.context().apicTimer)
+        printf("  timer: %s, %lu Hz (bus clock / %u), count %u of %u\n",
+            timer & LocalApic::LvtTimerPeriodic ? "periodic" : "one shot", apicTimer->frequency(),
+            Drivers::ApicTimer::divider, local.read(LocalApic::RegisterTimerCurrentCount), apicTimer->initialCount());
+    else
+        printf("  timer: not used, the PIT ticks\n");
+
+    // The I/O APICs, then where each ISA IRQ goes
+    for (uint32_t i = 0; i < apic->ioApicCount(); i++) {
+        const Drivers::IoApic& io = apic->ioApic(i);
+        printf("I/O APIC id %u, version 0x%02x, %u pins (GSI %u .. %u), at 0x%lx\n", io.id(), io.version(),
+            io.pinCount(), io.gsiBase(), io.gsiBase() + io.pinCount() - 1, io.physAddress());
+    }
+    printf("  IRQ  GSI  pin  entry               vector  trigger  polarity  to APIC\n");
+    for (uint8_t irq = 0; irq < Drivers::ApicInterruptController::irqCount; irq++) {
+        const Drivers::IoApic* io;
+        uint32_t pin;
+        if (!apic->locate(static_cast<Drivers::Irq>(irq), io, pin)) {
+            printf("  %3u  (not routed)\n", irq);
+            continue;
+        }
+        uint64_t entry = io->redirection(pin);
+        printf("  %3u  %3u  %3u  0x%016lx  0x%02x    %-7s  %-8s  %lu%s\n", irq, io->gsiBase() + pin, pin, entry,
+            (unsigned)(entry & 0xFF), entry & Drivers::IoApic::RedirectionLevel ? "level" : "edge",
+            entry & Drivers::IoApic::RedirectionActiveLow ? "low" : "high", entry >> Drivers::IoApic::destinationShift,
+            entry & Drivers::IoApic::RedirectionMasked ? "  masked" : "");
+    }
+}
+
+// ------------------------------------------------------------
 // System
 // ------------------------------------------------------------
 
@@ -945,7 +1147,8 @@ static void cmdGdt(Interpreter&, int, char**)
     }
 }
 
-// What a vector is: an exception, a PIC IRQ (0x20 + line), or the system call gate
+// What a vector is: an exception, an ISA IRQ (0x20 + line, PIC or I/O APIC), the
+// system call gate, or the local APIC's own
 static void vectorName(uint32_t vector, char* name, size_t size)
 {
     static const char* const s_irqs[16] = { "timer", "keyboard", "cascade", "COM2", "COM1", "LPT2", "floppy", "LPT1",
@@ -956,6 +1159,10 @@ static void vectorName(uint32_t vector, char* name, size_t size)
         snprintf(name, size, "IRQ %u %s", vector - 0x20, s_irqs[vector - 0x20]);
     else if (vector == IDT::systemCallVector)
         snprintf(name, size, "system call");
+    else if (vector == Drivers::ApicInterruptController::timerVector)
+        snprintf(name, size, "APIC timer");
+    else if (vector == Drivers::ApicInterruptController::spuriousVector)
+        snprintf(name, size, "APIC spurious");
     else
         name[0] = '\0';
 }
@@ -989,12 +1196,14 @@ static void cmdIdt(Interpreter&, int argc, char** argv)
         return;
     }
 
-    // The exceptions, the PIC IRQs and the system call gate; the rest go to the default stubs
+    // The exceptions, the ISA IRQs and the system call gate; the rest go to the default stubs
     printf("  vec  handler             type dpl    ist\n");
     for (uint32_t v = 0; v < 0x30; v++)
         printIdtEntry(v);
+    printIdtEntry(Drivers::ApicInterruptController::timerVector);
     printIdtEntry(IDT::systemCallVector);
-    printf("  (48 .. 255: interrupt gates, no handler attached; \"idt n\" shows one)\n");
+    printIdtEntry(Drivers::ApicInterruptController::spuriousVector);
+    printf("  (the others: interrupt gates, no handler attached; \"idt n\" shows one)\n");
 }
 
 static void cmdPt(Interpreter& shell, int argc, char** argv)
@@ -1148,6 +1357,8 @@ static const Command s_commands[] = {
     { "devices", "irq", "irq", "how often each vector has arrived", cmdIrq },
     { "devices", "disk", "disk [read lba [count] [device]]", "the disks; dump sectors (count 1 .. 8)", cmdDisk },
     { "devices", "lspci", "lspci [bus:dev.fn]", "the PCI functions; one in detail", cmdLspci },
+    { "devices", "acpi", "acpi [SIGNATURE]", "the ACPI tables; one decoded and dumped", cmdAcpi },
+    { "devices", "apic", "apic", "the local and I/O APICs, where each IRQ goes", cmdApic },
     { "devices", "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
     { "system", "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "system", "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },

@@ -191,7 +191,17 @@ def main():
             out = serial.command("pt 0xffffffff80400000\r")
             check("PML4[511]" in out and "2 MB page, physical 0x400000" in out, "pt", out)
             out = serial.command("irq\r")
-            check("IRQ 0 timer" in out and "IRQ 4 COM1" in out, "irq (the serial port we type on)", out)
+            check("APIC timer" in out and "IRQ 4 COM1" in out, "irq (the tick, the serial port we type on)", out)
+
+            # ACPI and the APIC: QEMU's tables, the timer override, the IRQs drivers unmasked
+            out = serial.command("acpi\r")
+            check("FACP" in out and "interrupt controllers (MADT)" in out and "table(s)" in out, "acpi", out)
+            out = serial.command("acpi APIC\r")
+            check("local APIC at 0xfee00000" in out and "override  IRQ 0 -> GSI 2" in out, "acpi APIC: the MADT", out)
+            out = serial.command("apic\r")
+            com1 = [line for line in out.split("\n") if line.startswith("    4 ")]
+            check("local APIC id 0" in out and "timer: periodic" in out and com1 and "masked" not in com1[0],
+                  "apic: the timer, COM1 unmasked", out)
             out = serial.command("int 3\r")
             check("Breakpoint" in out and "==== continuing ====" in out, "int 3: a breakpoint, the shell goes on", out)
             out = serial.command("int 0x30\r")

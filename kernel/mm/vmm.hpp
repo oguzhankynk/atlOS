@@ -76,8 +76,16 @@ public:
      */
     void mapPhysical(const void* virtAddr, const void* physAddr);
 
-    /// Remove a mapping made by mapPhysical. The physical memory is not freed.
+    /// Remove a mapping made by mapPhysical or mapDevice. The physical memory is not freed.
     void unmapPhysical(const void* virtAddr);
+
+    /**
+     * @brief Map the 2 MB page that holds physAddr, uncached, at a free range
+     * above the kernel image (kernel address space): for device registers,
+     * which must see every read and write (the physmap is cached).
+     * @return The virtual address of physAddr.
+     */
+    void* mapDevice(uint64_t physAddr);
 
     /**
      * @brief Map count new, zeroed 2 MB pages at virtAddr in the user range

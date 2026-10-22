@@ -327,6 +327,15 @@ void AddressSpace::mapPhysical(const void* virtAddr, const void* physAddr)
         kernelPanic("VMM: mapPhysical: page already mapped!");
 }
 
+void* AddressSpace::mapDevice(uint64_t physAddr)
+{
+    // Cache disable and write through: with the boot PAT that is "uncached"
+    uint64_t base = findFreeKernelRange(1);
+    if (!mapPage(base, (physAddr & page2MbAddrMask) | MMU_WRITABLE | MMU_WRITE_THROUGH | MMU_CACHE_DISABLE))
+        kernelPanic("VMM: mapDevice: out of physical memory for page directory");
+    return reinterpret_cast<void*>(base + (physAddr & (pageSize2Mb - 1)));
+}
+
 void AddressSpace::unmapPhysical(const void* virtAddr)
 {
     unmapPage((uintptr_t)virtAddr & ~(uintptr_t)(pageSize2Mb - 1), "unmapPhysical");

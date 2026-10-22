@@ -21,5 +21,7 @@
 #define MMU_PRESENT (1 << 0)
 #define MMU_WRITABLE (1 << 1)
 #define MMU_USER_MEMORY (1 << 2)
+#define MMU_WRITE_THROUGH (1 << 3)
+#define MMU_CACHE_DISABLE (1 << 4)
 #define MMU_PDE_TWO_MB (1 << 7)
 

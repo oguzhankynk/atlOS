@@ -1,6 +1,6 @@
 /**
  * @file tick_source.hpp
- * @brief Interface of a periodic timer (PIT today, APIC timer or HPET later).
+ * @brief Interface of a periodic timer: the local APIC timer, or the PIT.
  */
 
 #pragma once
