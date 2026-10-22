@@ -19,6 +19,10 @@ namespace Threading {
 class Scheduler;
 }
 
+namespace Drivers {
+class CharacterQueue;
+}
+
 namespace Fs {
 class Vfs;
 }
@@ -37,10 +41,11 @@ namespace SelfTest {
  * @param scheduler The kernel's scheduler, which the calling flow is task 0 of.
  * @param vfs The kernel's VFS; the disk tests use /disk0 if the test disk is attached.
  * @param runtime Runs the user programs from the test disk (/disk0/BIN).
+ * @param input The runtime's keyboard queue: the tests type into it.
  *
  * @return Number of failed checks.
  */
 int run(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
-    Process::Runtime& runtime);
+    Process::Runtime& runtime, Drivers::CharacterQueue& input);
 
 } // namespace SelfTest

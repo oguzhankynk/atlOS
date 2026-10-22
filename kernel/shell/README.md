@@ -76,7 +76,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
 | tasks | `tasks`, `ps`, `run program.elf` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
-| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `int vector` |
+| devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |
 
 ### Looking at memory safely
@@ -189,6 +189,32 @@ starts at sector `0x800` (`00 08 00 00`, little endian) and has `0xf800`
 sectors. `disk read 0 1 ata0p1` is the FAT boot
 sector of the first partition, `disk read 1 2 ata0p1` the first FAT.
 
+### Looking at PCI
+
+`lspci` scans every bus (`Drivers::scanPci`, see `kernel/drivers/pci/README.md`)
+and prints a line per function: its address, vendor and device id, class and
+subclass, and their names. `lspci bus:dev.fn` decodes one function's header:
+the command bits, the BARs, the interrupt pin, the capability list (a PCIe
+device has `PCI Express` in it), then the first 64 bytes as they are.
+
+```
+atlOS:/> lspci
+  00:00.0  8086:1237  0600  Intel            Host bridge
+  00:01.1  8086:7010  0101  Intel            IDE controller
+  ...
+atlOS:/> lspci 00:01.1
+00:01.1  IDE controller
+  ...
+  BAR4      I/O ports at 0xc040
+```
+
+### Running a program
+
+`run program.elf` starts the program (`Runtime::spawn`) and sleeps until it
+exits (`Runtime::wait`). Meanwhile the keys go to the program, which reads
+them with `read(0, ...)`; Ctrl+C ends a program that reads. See
+`kernel/proc/README.md`.
+
 ### Deliberately not done
 
 - No pipes, no general redirection: only `echo` writes to files (`>`, `>>`),
@@ -226,7 +252,8 @@ sequenceDiagram
   full history, the length limit), *Shell commands* (every command against a
   FAT16 volume in RAM with the output captured: paths, files, `echo >`/`>>`,
   `md`/`mw` on a buffer of the test, refusing unmapped memory, `help` by
-  group, `disk read` of the RAM disk's boot sector, `tasks` with a
+  group, `disk read` of the RAM disk's boot sector, `lspci` on a made up
+  bus (BARs, capabilities, bad addresses), `tasks` with a
   sleeping thread), *VMM translate and mappings*.
 - End to end (`scripts/run-shelltest.py`, `scripts/build.sh shelltest`, CI):
   boots the normal kernel with COM1 on a TCP socket and types commands the

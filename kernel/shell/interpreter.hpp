@@ -14,6 +14,7 @@
 
 namespace Drivers {
 class CharacterSource;
+class PciConfigSpace;
 class SerialPort;
 class VGATextConsole;
 }
@@ -44,6 +45,7 @@ struct Context {
     Memory::AddressSpace& space;
     Fs::Vfs& vfs;
     Fs::BlockDeviceList& disks; ///< the disk command reads them
+    Drivers::PciConfigSpace& pci; ///< lspci reads it
     Process::Runtime& runtime;
     Drivers::VGATextConsole* screen; ///< for clear, may be null
     Drivers::SerialPort* serial; ///< for clear, may be null

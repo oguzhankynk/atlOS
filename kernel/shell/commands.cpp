@@ -20,6 +20,7 @@
 #include <core/panic.hpp>
 #include <core/version.hpp>
 #include <drivers/disk/block_device.hpp>
+#include <drivers/pci/pci.hpp>
 #include <drivers/serial.hpp>
 #include <drivers/vga_console.hpp>
 #include <fs/storage.hpp>
@@ -530,6 +531,163 @@ static void cmdDisk(Interpreter& shell, int argc, char** argv)
 }
 
 // ------------------------------------------------------------
+// PCI
+// ------------------------------------------------------------
+
+using Drivers::PciAddress;
+using Drivers::PciConfigSpace;
+using Drivers::PciDevice;
+
+// "bb:dd.f" in hex, e.g. "00:1f.2"
+static bool parsePciAddress(const char* text, PciAddress& address)
+{
+    uint32_t parts[3] {};
+    const char separators[3] = { ':', '.', '\0' };
+    const uint32_t limits[3] = { 0xFF, 0x1F, 0x7 };
+    for (int part = 0; part < 3; part++) {
+        int digits = 0;
+        for (; *text && *text != separators[part]; text++, digits++) {
+            char c = *text;
+            uint32_t digit;
+            if (c >= '0' && c <= '9')
+                digit = c - '0';
+            else if (c >= 'a' && c <= 'f')
+                digit = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F')
+                digit = c - 'A' + 10;
+            else
+                return false;
+            parts[part] = parts[part] * 16 + digit;
+        }
+        if (!digits || digits > 2 || parts[part] > limits[part] || *text != separators[part])
+            return false;
+        if (*text)
+            text++;
+    }
+    address = { (uint8_t)parts[0], (uint8_t)parts[1], (uint8_t)parts[2] };
+    return true;
+}
+
+static void printBars(PciConfigSpace& config, PciAddress address, int count)
+{
+    for (int i = 0; i < count; i++) {
+        uint32_t bar = config.read32(address, (uint8_t)(Drivers::PciBar0 + i * 4));
+        if (!bar)
+            continue;
+        // Bit 0: I/O ports or memory. Memory bits 2..1: 64 bit takes this BAR and the next
+        if (bar & 1) {
+            printf("  BAR%d      I/O ports at 0x%x\n", i, bar & ~3U);
+        } else if (((bar >> 1) & 3) == 2 && i + 1 < count) {
+            uint64_t high = config.read32(address, (uint8_t)(Drivers::PciBar0 + (i + 1) * 4));
+            printf("  BAR%d      memory at 0x%lx (64 bit%s)\n", i, (high << 32) | (bar & ~0xFU),
+                bar & 8 ? ", prefetchable" : "");
+            i++;
+        } else {
+            printf("  BAR%d      memory at 0x%x (32 bit%s)\n", i, bar & ~0xFU, bar & 8 ? ", prefetchable" : "");
+        }
+    }
+}
+
+static void printCapabilities(PciConfigSpace& config, PciAddress address)
+{
+    if (!(config.read16(address, Drivers::PciStatus) & Drivers::pciStatusCapabilities))
+        return;
+
+    // A linked list in the configuration space: each entry is id, next
+    printf("  capabilities:");
+    uint8_t offset = config.read8(address, Drivers::PciCapabilities) & 0xFC;
+    for (int i = 0; offset && i < 48; i++) {
+        uint8_t id = config.read8(address, offset);
+        const char* name = Drivers::pciCapabilityName(id);
+        if (name)
+            printf(" %s (0x%02x)", name, offset);
+        else
+            printf(" 0x%02x (0x%02x)", id, offset);
+        offset = config.read8(address, (uint8_t)(offset + 1)) & 0xFC;
+    }
+    printf("\n");
+}
+
+static void printPciDetails(PciConfigSpace& config, const PciDevice& device)
+{
+    PciAddress address = device.address;
+    const char* vendor = Drivers::pciVendorName(device.vendorId);
+    printf("%02x:%02x.%x  %s\n", address.bus, address.device, address.function,
+        Drivers::pciClassName(device.classCode, device.subclass));
+    printf("  vendor    0x%04x %s\n", device.vendorId, vendor ? vendor : "");
+    printf("  device    0x%04x  revision 0x%02x\n", device.deviceId, device.revision);
+    printf("  class     0x%02x  subclass 0x%02x  prog if 0x%02x\n", device.classCode, device.subclass, device.progIf);
+
+    uint16_t command = config.read16(address, Drivers::PciCommand);
+    printf("  command   0x%04x %s%s%s%s\n", command, command & Drivers::PciCommandIo ? " I/O" : "",
+        command & Drivers::PciCommandMemory ? " memory" : "",
+        command & Drivers::PciCommandBusMaster ? " bus-master" : "",
+        command & Drivers::PciCommandNoInterrupts ? " no-INTx" : "");
+
+    // Header type 0: a device with 6 BARs; 1: a bridge to another bus, 2 BARs
+    if (device.headerType == 1) {
+        printf("  header    1 (PCI to PCI bridge), bus %u behind it\n", config.read8(address, Drivers::PciSecondaryBus));
+        printBars(config, address, 2);
+    } else {
+        printf("  header    %u%s\n", device.headerType, device.headerType == 0 ? " (device)" : "");
+        if (device.headerType == 0)
+            printBars(config, address, 6);
+    }
+
+    uint8_t pin = config.read8(address, Drivers::PciInterruptPin);
+    if (pin >= 1 && pin <= 4)
+        printf("  interrupt pin INT%c, line %u\n", 'A' + pin - 1, config.read8(address, Drivers::PciInterruptLine));
+    printCapabilities(config, address);
+
+    // The standard header, as the registers above read it
+    uint8_t header[64];
+    for (uint32_t offset = 0; offset < sizeof(header); offset += 4) {
+        uint32_t value = config.read32(address, (uint8_t)offset);
+        memcpy(header + offset, &value, 4);
+    }
+    for (uint32_t line = 0; line < sizeof(header); line += 16)
+        printDumpLine(line, header + line, 16);
+}
+
+static void cmdLspci(Interpreter& shell, int argc, char** argv)
+{
+    if (!usage("lspci", argc, 1, 2))
+        return;
+
+    static PciDevice s_devices[128];
+    PciConfigSpace& config = shell.context().pci;
+    uint32_t count = Drivers::scanPci(config, s_devices, sizeof(s_devices) / sizeof(s_devices[0]));
+
+    // lspci bb:dd.f: one function in detail
+    if (argc == 2) {
+        PciAddress address;
+        if (!parsePciAddress(argv[1], address)) {
+            printf("lspci: an address like 00:1f.2 (bus:device.function, hex)\n");
+            return;
+        }
+        for (uint32_t i = 0; i < count; i++) {
+            const PciAddress& found = s_devices[i].address;
+            if (found.bus == address.bus && found.device == address.device && found.function == address.function) {
+                printPciDetails(config, s_devices[i]);
+                return;
+            }
+        }
+        printf("lspci: no function at %s\n", argv[1]);
+        return;
+    }
+
+    // lspci: one line per function
+    for (uint32_t i = 0; i < count; i++) {
+        const PciDevice& device = s_devices[i];
+        const char* vendor = Drivers::pciVendorName(device.vendorId);
+        printf("  %02x:%02x.%x  %04x:%04x  %02x%02x  %-16s %s\n", device.address.bus, device.address.device,
+            device.address.function, device.vendorId, device.deviceId, device.classCode, device.subclass,
+            vendor ? vendor : "", Drivers::pciClassName(device.classCode, device.subclass));
+    }
+    printf("  %u function(s)\n", count);
+}
+
+// ------------------------------------------------------------
 // System
 // ------------------------------------------------------------
 
@@ -592,10 +750,12 @@ static void cmdRun(Interpreter& shell, int argc, char** argv)
     if (!usage("run", argc, 2, 2) || !resolve(shell, argv[1], path))
         return;
 
-    // The program starts on its own thread and runs while the shell waits for keys
-    int pid = shell.context().runtime.spawn(path);
+    // The program runs on its own thread; the shell sleeps until it exits, so
+    // the keys typed meanwhile go to the program (Ctrl+C ends it)
+    Process::Runtime& runtime = shell.context().runtime;
+    int pid = runtime.spawn(path);
     if (pid > 0)
-        printf("started pid %d\n", pid);
+        runtime.wait((uint32_t)pid);
 }
 
 // ------------------------------------------------------------
@@ -969,7 +1129,7 @@ static const Command s_commands[] = {
     { "memory", "vmmap", "vmmap", "the page table mappings", cmdVmmap },
     { "tasks", "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
     { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
-    { "tasks", "run", "run program.elf", "start a user program (ring 3) on its own thread", cmdRun },
+    { "tasks", "run", "run program.elf", "run a user program (ring 3) until it exits", cmdRun },
     { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
     { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
     { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },
@@ -981,6 +1141,7 @@ static const Command s_commands[] = {
     { "memory", "pt", "pt addr", "the page table walk for an address", cmdPt },
     { "devices", "irq", "irq", "how often each vector has arrived", cmdIrq },
     { "devices", "disk", "disk [read lba [count] [device]]", "the disks; dump sectors (count 1 .. 8)", cmdDisk },
+    { "devices", "lspci", "lspci [bus:dev.fn]", "the PCI functions; one in detail", cmdLspci },
     { "devices", "int", "int vector", "raise an interrupt (3 reports, other exceptions halt)", cmdInt },
     { "system", "panic", "panic [message]", "kernel panic (halts)", cmdPanic },
     { "system", "fault", "fault", "read an unmapped address: page fault (halts)", cmdFault },

@@ -1,7 +1,7 @@
 # Drivers (`kernel/drivers/`)
 
 Code that talks to hardware: the interrupt controller, the timer, the serial
-port, the VGA text screen, the keyboard and ATA disks.
+port, the VGA text screen, the keyboard, ATA disks and the PCI bus.
 
 ## What is it for?
 
@@ -33,8 +33,9 @@ Small interfaces, concrete drivers as objects, created and wired in
 | `InterruptController` (`interrupt_controller.hpp`) | `PIC` (8259 pair) | PIT, keyboard, the ISR dispatcher |
 | `TickSource` (`tick_source.hpp`) | `PIT` (8253/8254 channel 0) | `Threading::Scheduler` |
 | `CharacterSink` (`character_sink.hpp`) | `SerialPort`, `VGATextConsole`, `TeeSink` (both at once) | the console behind `printf` |
-| `CharacterSource` (`character_source.hpp`) | `CharacterQueue` (fed by `PS2Keyboard` and `SerialPort`) | the shell |
+| `CharacterSource` (`character_source.hpp`) | `CharacterQueue` (fed by `PS2Keyboard` and `SerialPort`) | the shell, user programs (`read(0, ...)`) |
 | `BlockDevice` (`disk/block_device.hpp`) | `ATAPioDevice`, `PartitionDevice`, `MemoryBlockDevice` | the file systems (`kernel/fs/`) |
+| `PciConfigSpace` (`pci/config_space.hpp`) | `PciPortConfigSpace` (ports `0xCF8`/`0xCFC`) | `scanPci`, the shell's `lspci` |
 
 - **PIC**: the constructor remaps the 16 IRQs to vectors `0x20..0x2F` (by
   default they collide with CPU exceptions) and masks every line. A driver
@@ -77,6 +78,11 @@ Small interfaces, concrete drivers as objects, created and wired in
   rejects a sector 0 whose entries do not fit the disk (e.g. a disk formatted
   without partitions, whose boot sector also ends in `0x55AA`).
 - **MemoryBlockDevice**: a disk in RAM, for testing file systems.
+
+### PCI (`pci/`)
+
+The configuration space of every PCI and PCIe function, the scan and the
+names; see [`pci/README.md`](pci/README.md).
 
 Polling is the simplest way to use a disk and fine with a cooperative
 scheduler that has nothing else to do; IRQ 14 + `Sync::Semaphore` would let

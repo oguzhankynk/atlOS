@@ -55,6 +55,7 @@
 #include <cxx/uninitialized.hpp>
 #include <drivers/character_queue.hpp>
 #include <drivers/keyboard.hpp>
+#include <drivers/pci/config_space.hpp>
 #include <drivers/pic.hpp>
 #include <drivers/pit.hpp>
 #include <drivers/tee_sink.hpp>
@@ -80,6 +81,7 @@ static Cxx::Uninitialized<Drivers::PS2Keyboard> s_keyboard;
 static Cxx::Uninitialized<Shell::Interpreter> s_shell;
 static Cxx::Uninitialized<Fs::Vfs> s_vfs;
 static Fs::BlockDeviceList s_disks; // the disks and partitions storage found
+static Drivers::PciPortConfigSpace s_pci;
 static Cxx::Uninitialized<Process::Runtime> s_runtime;
 
 // One bit per 2 MB block, enough for 256 GB of physical memory
@@ -147,13 +149,17 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     // The boot flow becomes the scheduler's first task
     Threading::Scheduler& scheduler = s_scheduler.construct(pit);
 
+    // The keyboard and COM1 arrive through one queue: the shell reads it,
+    // and a program the shell runs (file descriptor 0)
+    Drivers::CharacterQueue& input = s_input.construct();
+
     // User programs: loaded from the VFS, run on threads of this scheduler.
     // The int 0x80 and ring 3 fault handlers reach it through setRuntime
-    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, vfs);
+    Process::Runtime& runtime = s_runtime.construct(pmm, kernelSpace, vfs, input);
     Process::setRuntime(&runtime);
 
 #ifdef ATLOS_SELFTEST
-    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime);
+    int failed = SelfTest::run(pmm, kernelSpace, scheduler, vfs, runtime, input);
     Core::haltWithStatus(failed ? Core::ExitStatus::Failure : Core::ExitStatus::Success);
 #endif
 
@@ -161,13 +167,12 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     CrashTest::run();
 #endif
 
-    // The shell reads the keyboard and COM1 through one queue
-    Drivers::CharacterQueue& input = s_input.construct();
+    // Only now the devices feed the queue: the self tests push into it themselves
     s_keyboard.construct(pic, input);
     serial.startReceiving(pic, input);
 
     // Runs in the boot flow (task 0) for good; reading sleeps in hlt
-    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, runtime, &vga,
+    static Shell::Context s_context { pmm, kernelSpace, vfs, s_disks, s_pci, runtime, &vga,
         serial.isPresent() ? &serial : nullptr };
     s_shell.construct(input, s_context).run();
 }

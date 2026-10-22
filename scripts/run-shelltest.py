@@ -126,6 +126,13 @@ def main():
             out = serial.command("disk read 0\r")
             check("ata0 sector 0" in out and "55 aa" in out, "disk read dumps the MBR", out)
 
+            # QEMU's pc machine: the i440FX host bridge, the PIIX3 with its IDE function
+            out = serial.command("lspci\r")
+            check("00:00.0  8086:1237  0600  Intel" in out and "IDE controller" in out, "lspci", out)
+            out = serial.command("lspci 00:01.1\r")
+            check("IDE controller" in out and "I/O ports at" in out and "0000000000000000  86 80 10 70" in out,
+                  "lspci of one function", out)
+
             out = serial.command("ls /disk0\r")
             check("HELLO.TXT" in out and "DOCS/" in out and "22000" in out, "ls /disk0", out)
 
@@ -198,18 +205,33 @@ def main():
             check("up " in out, "uptime", out)
             out = serial.command("mount\r")
             check("/disk0" in out and "fat16" in out, "mount", out)
-            # User programs: ring 3 on their own thread, the shell prompt comes back first
+            # User programs: ring 3 on their own thread, the shell waits until they exit
             out = serial.command("run /disk0/BIN/HELLO.ELF\r")
-            out += serial.read_until(b"exited with 0]")
-            check("started pid" in out and "Hello from user mode!" in out, "run a user program", out)
+            check("Hello from user mode!" in out and "exited with 0]" in out, "run a user program", out)
             out = serial.command("run /disk0/BIN/FAULT.ELF\r")
-            out += serial.read_until(b"exited with 142]")
-            check("Page fault (in user mode)" in out and "KERNEL PANIC" not in out, "a fault in ring 3 ends only the program", out)
+            check("Page fault (in user mode)" in out and "exited with 142]" in out and "KERNEL PANIC" not in out,
+                  "a fault in ring 3 ends only the program", out)
             out = serial.command("pwd\r")
             check("/disk0\n" in out, "the shell goes on after the fault", out)
             out = serial.command("run /disk0/BIN/COUNT.ELF\r")
-            out += serial.read_until(b"exited with 15]")
-            check("1 2 3 4 5\n" in out, "the example program of user/README.md", out)
+            check("1 2 3 4 5\n" in out and "exited with 15]" in out, "the example program of user/README.md", out)
+
+            # read(0): the keys go to the program while it runs; DEL is its Backspace
+            serial.sock.sendall(b"run /disk0/BIN/ASK.ELF\r")
+            serial.read_until(b"name? ")
+            out = serial.command("Adx\x7fa\r")
+            check("Hello, Ada! I am process" in out and "exited with 0]" in out, "a program reads the keyboard", out)
+            serial.sock.sendall(b"run /disk0/BIN/ASK.ELF\r")
+            serial.read_until(b"name? ")
+            out = serial.command("\x03")
+            check("exited with 130]" in out, "Ctrl+C ends a program that reads", out)
+
+            out = serial.command("run /disk0/BIN/CLOCK.ELF\r")
+            check("woke up after" in out and "exited with 0]" in out, "uptime, sleep and yield", out)
+            out = serial.command("run /disk0/BIN/FILES.ELF\r")
+            check("files: all as expected" in out and "exited with 0]" in out, "open, read, write, close", out)
+            out = serial.command("cat /disk0/USER.TXT\r")
+            check("first line\nsecond line\n" in out, "the file a program wrote", out)
 
             # The fault report resolves to the program's source line (scripts/symbolize.sh)
             if user_dir:

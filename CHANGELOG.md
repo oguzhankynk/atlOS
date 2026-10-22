@@ -7,6 +7,27 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- PCI and PCIe: `Drivers::PciConfigSpace` (ports `0xCF8`/`0xCFC`,
+  `PciPortConfigSpace`), `scanPci` over every bus, device and function, the
+  class, vendor and capability names; the shell's `lspci` lists the
+  functions, `lspci bus:dev.fn` decodes one (BARs, interrupt pin,
+  capabilities) and dumps its header
+- System calls: `read` (the keyboard as fd 0, raw; Ctrl+C ends the program
+  with 130), `open` (`O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC`,
+  `O_APPEND`; paths from the root), `close`, `yield`, `sleep`, `getpid`,
+  `uptime`; `write` to fd 2 and to files; eight open files per program
+- `Runtime::wait(pid)`; user programs `ASK.ELF`, `CLOCK.ELF`, `FILES.ELF`;
+  `print_number` and the new calls in `atlos.h`
+- Self tests for the scan, `lspci` and the system calls (783 checks); the
+  shell test types into a program (44 steps)
+
+### Changed
+
+- `run` waits until the program exits; the keys typed meanwhile go to the
+  program
+
 ## [0.4.0] - 2026-10-22
 
 ### Added

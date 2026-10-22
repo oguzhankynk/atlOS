@@ -7,9 +7,9 @@ write one; how the kernel side works is in `kernel/proc/README.md`.
 
 ```
 atlOS:/> run /disk0/BIN/COUNT.ELF
-started pid 1
-atlOS:/> 1 2 3 4 5
+1 2 3 4 5
 [pid 1 COUNT.ELF exited with 15]
+atlOS:/>
 ```
 
 ## What is here
@@ -25,6 +25,10 @@ user/
     count.c            the example below
     fault.c            writes to address 0: ends with a page fault
     badptr.c           hands the kernel pointers it must refuse
+    break.c            stops at a breakpoint, then goes on
+    ask.c              reads a line from the keyboard (read, echo, Backspace)
+    clock.c            uptime, sleep and yield
+    files.c            open, read, write, close and their errors
 ```
 
 ## The environment
@@ -34,12 +38,13 @@ What a program can count on, and what it can not (yet):
 | | |
 |---|---|
 | Language | C, freestanding (`-ffreestanding -nostdlib`), built with the kernel's cross compiler `x86_64-elf-gcc` |
-| Library | **no libc**: no `printf`, `malloc`, `string.h`. `atlos.h` has `write`, `exit`, `print`, `strlen` |
+| Library | **no libc**: no `printf`, `malloc`, `string.h`. `atlos.h` has the system calls and `print`, `print_number`, `strlen` |
 | Start | `_start` (crt0) calls `int main(void)`; its return value becomes the exit code. No `argc`/`argv`, no environment |
 | Registers at start | all zero; `rsp` 16 byte aligned |
 | Floating point | **none**: the kernel does not save SSE state, programs are built with `-mno-sse`; using `float`/`double` fails to compile (`SSE register return with SSE disabled`) |
-| Input | none yet: no `read`, no files |
-| Time | none yet: no `sleep`, no clock |
+| Input | `read(STDIN, ...)`: the keys, raw (see below) |
+| Files | `open`, `read`, `write`, `close`; paths from the root (`/disk0/NOTE.TXT`), 8.3 names, up to 8 open at once |
+| Time | `uptime()` (milliseconds since boot), `sleep(ms)`, `yield()` |
 | Several programs | up to 8 at once, each in its own address space at the same addresses |
 
 ### Memory
@@ -62,13 +67,13 @@ should be.
 
 ### Cooperative scheduling: give the CPU back
 
-atlOS has no preemption. A program keeps the CPU from its start until it
-exits; every system call returns to it right away. A program that loops
-forever without exiting **freezes the whole machine**, the shell included.
-Keep programs short, and make sure they end. (`yield` and `sleep` will come.)
+atlOS has no preemption. A program keeps the CPU until it exits, or until
+it calls `yield`, `sleep` or a `read` that has to wait for a key; the other
+system calls return to it right away. A program that loops forever without
+one of those **freezes the whole machine**, the shell included. Keep
+programs short, and make sure they end or wait.
 
-The shell prints its next prompt before the program runs, so the program's
-output appears after `atlOS:/> `.
+`run` waits until the program exits, then the shell prompts again.
 
 ## System calls
 
@@ -78,10 +83,38 @@ result in `rax`; a negative result is an error. `atlos.h` wraps them:
 | rax | Call | Wrapper | Result |
 |---|---|---|---|
 | 0 | exit | `exit(code)` | does not return |
-| 1 | write | `write(fd, buffer, size)` | `size`; `-EBADF` if `fd` is not 1 (standard output), `-EINVAL` above 4096 bytes, `-EFAULT` if the buffer is not the program's own memory |
+| 1 | write | `write(fd, buffer, size)` | bytes written; `-EBADF` (not open for writing), `-EINVAL` above 4096 bytes, `-EFAULT` if the buffer is not the program's own memory |
+| 2 | read | `read(fd, buffer, size)` | bytes read, 0 at the end of a file; the same errors |
+| 3 | open | `open(path, flags)` | a file descriptor, 3 and up; `-ENOENT`, `-EISDIR`, `-EMFILE` (8 open already), `-EFAULT` |
+| 4 | close | `close(fd)` | 0, or `-EBADF` |
+| 5 | yield | `yield()` | the other threads run first |
+| 6 | sleep | `sleep(ms)` | at least `ms` milliseconds later |
+| 7 | getpid | `getpid()` | the process id (the shell's `[pid 3 ...]`) |
+| 8 | uptime | `uptime()` | milliseconds since boot |
 | other | | `atlos_syscall(n, a, b, c)` | `-ENOSYS` |
 
-`print(text)` is `write(1, text, strlen(text))`. `breakpoint()` executes
+The errors are the Linux numbers, negated: `if (fd == -ENOENT)`. File
+descriptors 0, 1 and 2 are `STDIN`, `STDOUT` and `STDERR`. `open` takes one
+of `O_RDONLY`, `O_WRONLY`, `O_RDWR`, and any of `O_CREAT` (create the file),
+`O_TRUNC` (empty it), `O_APPEND` (write at the end):
+
+```c
+long fd = open("/disk0/NOTE.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+write(fd, "hello\n", 6);
+close(fd);
+```
+
+### Reading the keyboard
+
+`read(STDIN, buffer, size)` waits for a key, then returns it and the keys
+typed after it, at least one. Nothing is echoed and there is no line
+editing: the program sees every key as it comes and prints what it wants
+(`ask.c` echoes the keys and handles Backspace). Enter arrives as `'\n'`,
+Backspace as `0x7f` (a terminal) or `'\b'`. **Ctrl+C** ends the program
+with exit code 130.
+
+`print(text)` is `write(STDOUT, text, strlen(text))`, `print_number(n)`
+prints a number in decimal. `breakpoint()` executes
 `int3`: the kernel prints the program's registers and the program goes on
 (`BREAK.ELF`).
 
@@ -97,6 +130,7 @@ The shell shows how a program ended: `[pid 2 FAULT.ELF exited with 142]`.
 |---|---|
 | what `main` returned, or the argument of `exit` | normal end |
 | 128 + exception vector | the program faulted and the kernel ended it |
+| 130 | Ctrl+C while the program read the keyboard |
 | 128 (#DE) | division by zero |
 | 134 (#UD) | invalid instruction |
 | 141 (#GP) | general protection: a privileged instruction (`cli`, `hlt`, `in`/`out`, `mov cr3`), `int` with another vector than `0x80`, a non canonical address |
@@ -142,7 +176,7 @@ The shell shows how a program ended: `[pid 2 FAULT.ELF exited with 142]`.
 
    ```cmake
    atlos_user_program(count)
-   set(ATLOS_USER_TARGETS hello fault badptr count PARENT_SCOPE)
+   set(ATLOS_USER_TARGETS hello fault badptr count break ask clock files PARENT_SCOPE)
    ```
 
    The target name becomes the file name on the disk, in upper case:

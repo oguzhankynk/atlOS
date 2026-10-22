@@ -31,6 +31,7 @@
 #include <drivers/disk/partition.hpp>
 #include <drivers/interrupt_controller.hpp>
 #include <drivers/keyboard.hpp>
+#include <drivers/pci/pci.hpp>
 #include <drivers/pit.hpp>
 #include <drivers/scancode.hpp>
 #include <drivers/serial.hpp>
@@ -2527,6 +2528,120 @@ static void testRaiseAndBreakpoint(Scheduler& scheduler)
 }
 
 // ------------------------------------------------------------
+// PCI
+// ------------------------------------------------------------
+
+// A made up PCI bus: a few functions and their configuration space
+class FakePciConfigSpace final : public Drivers::PciConfigSpace {
+public:
+    struct Function {
+        Drivers::PciAddress address;
+        uint8_t config[256];
+    };
+
+    static constexpr int capacity = 8;
+
+    uint8_t* add(Drivers::PciAddress address, uint16_t vendor, uint16_t device, uint8_t classCode, uint8_t subclass)
+    {
+        if (m_count == capacity)
+            kernelPanic("FakePciConfigSpace: full");
+        Function& function = m_functions[m_count++];
+        function.address = address;
+        memset(function.config, 0, sizeof(function.config));
+        set16(function.config, Drivers::PciVendorId, vendor);
+        set16(function.config, Drivers::PciDeviceId, device);
+        function.config[Drivers::PciClass] = classCode;
+        function.config[Drivers::PciSubclass] = subclass;
+        return function.config;
+    }
+
+    static void set16(uint8_t* config, uint8_t offset, uint16_t value) { memcpy(config + offset, &value, 2); }
+    static void set32(uint8_t* config, uint8_t offset, uint32_t value) { memcpy(config + offset, &value, 4); }
+
+    uint32_t read32(Drivers::PciAddress address, uint8_t offset) override
+    {
+        for (int i = 0; i < m_count; i++) {
+            const Function& function = m_functions[i];
+            if (function.address.bus == address.bus && function.address.device == address.device
+                && function.address.function == address.function) {
+                uint32_t value;
+                memcpy(&value, function.config + (offset & 0xFC), 4);
+                return value;
+            }
+        }
+        return 0xFFFFFFFF; // nobody answers
+    }
+
+private:
+    Function m_functions[capacity] {};
+    int m_count {};
+};
+
+// 00:00.0 host bridge; 00:01.0 and .2 of a multi function device; 00:03.0 a
+// network card with BARs and capabilities; 00:05 without the multi function
+// bit (its function 1 is not looked at); 03:00.0 behind a bridge
+static void buildFakePci(FakePciConfigSpace& pci)
+{
+    using F = FakePciConfigSpace;
+    pci.add({ 0, 0, 0 }, 0x8086, 0x1237, 0x06, 0x00);
+    pci.add({ 0, 1, 0 }, 0x8086, 0x7000, 0x06, 0x01)[Drivers::PciHeaderType] = Drivers::pciMultiFunction;
+    pci.add({ 0, 1, 2 }, 0x8086, 0x7020, 0x0C, 0x03);
+
+    uint8_t* nic = pci.add({ 0, 3, 0 }, 0x8086, 0x100E, 0x02, 0x00);
+    F::set16(nic, Drivers::PciCommand, 0x0007);
+    F::set16(nic, Drivers::PciStatus, Drivers::pciStatusCapabilities);
+    F::set32(nic, Drivers::PciBar0, 0xFEBC0000); // memory, 32 bit
+    F::set32(nic, Drivers::PciBar0 + 4, 0xC001); // I/O ports
+    F::set32(nic, Drivers::PciBar0 + 8, 0xFE00000C); // memory, 64 bit, prefetchable: the low half ...
+    F::set32(nic, Drivers::PciBar0 + 12, 0x1); // ... and the high half
+    nic[Drivers::PciCapabilities] = 0x40;
+    nic[0x40] = 0x01; // Power Management, next at 0x50
+    nic[0x41] = 0x50;
+    nic[0x50] = Drivers::pciCapabilityExpress; // the end of the list
+    nic[Drivers::PciInterruptPin] = 1;
+    nic[Drivers::PciInterruptLine] = 11;
+
+    pci.add({ 0, 5, 0 }, 0x1234, 0x1111, 0x03, 0x00);
+    pci.add({ 0, 5, 1 }, 0x1234, 0x2222, 0x03, 0x00);
+    pci.add({ 3, 0, 0 }, 0x144D, 0xA808, 0x01, 0x08);
+}
+
+static void testPci()
+{
+    group("PCI: the scan and the names");
+
+    FakePciConfigSpace pci;
+    buildFakePci(pci);
+    Drivers::PciDevice devices[8];
+    uint32_t count = Drivers::scanPci(pci, devices, 8);
+    CHECK(count == 6);
+    CHECK(devices[0].vendorId == 0x8086 && devices[0].deviceId == 0x1237 && devices[0].classCode == 0x06);
+    CHECK(devices[2].address.device == 1 && devices[2].address.function == 2 && devices[2].subclass == 0x03);
+    CHECK(devices[4].address.device == 5 && devices[4].address.function == 0); // and not function 1
+    CHECK(devices[5].address.bus == 3 && devices[5].classCode == 0x01 && devices[5].subclass == 0x08);
+    CHECK(devices[1].headerType == 0); // the multi function bit is not part of the layout
+    CHECK(Drivers::scanPci(pci, devices, 2) == 2);
+
+    // 16 and 8 bit reads are parts of a 32 bit one
+    CHECK(pci.read16({ 0, 0, 0 }, Drivers::PciDeviceId) == 0x1237);
+    CHECK(pci.read8({ 0, 3, 0 }, Drivers::PciInterruptLine) == 11);
+    CHECK(pci.read16({ 0, 9, 0 }, Drivers::PciVendorId) == Drivers::pciNoVendor);
+
+    CHECK(!strcmp(Drivers::pciClassName(0x01, 0x01), "IDE controller"));
+    CHECK(!strcmp(Drivers::pciClassName(0x06, 0x80), "Bridge"));
+    CHECK(!strcmp(Drivers::pciClassName(0xFE, 0x00), "Unknown device"));
+    CHECK(!strcmp(Drivers::pciVendorName(0x8086), "Intel") && Drivers::pciVendorName(0xABCD) == nullptr);
+    CHECK(!strcmp(Drivers::pciCapabilityName(0x10), "PCI Express") && Drivers::pciCapabilityName(0x77) == nullptr);
+
+    // The machine's own bus through ports 0xCF8/0xCFC: every PC has a host
+    // bridge at 00:00.0
+    Drivers::PciPortConfigSpace ports;
+    count = Drivers::scanPci(ports, devices, 8);
+    CHECK(count > 0);
+    CHECK(count > 0 && devices[0].address.bus == 0 && devices[0].address.device == 0 && devices[0].classCode == 0x06);
+}
+
+// ------------------------------------------------------------
 // Shell
 // ------------------------------------------------------------
 
@@ -2688,10 +2803,12 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     FakeTickSource ticks;
     Scheduler isolated(ticks);
     Drivers::CharacterQueue input;
-    Process::Runtime runtime(pmm, space, vfs);
+    Process::Runtime runtime(pmm, space, vfs, input);
     Fs::BlockDeviceList disks;
     CHECK(disks.add(volume));
-    Shell::Context context { pmm, space, vfs, disks, runtime, nullptr, nullptr };
+    FakePciConfigSpace pci;
+    buildFakePci(pci);
+    Shell::Context context { pmm, space, vfs, disks, pci, runtime, nullptr, nullptr };
     static Cxx::Uninitialized<Shell::Interpreter> s_shell;
     Shell::Interpreter& shell = s_shell.construct(input, context);
 
@@ -2805,6 +2922,18 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     bool disk = (runCommand(shell, sink, "disk"), sink.contains("ram") && sink.contains("sectors"));
     bool diskRead = (runCommand(shell, sink, "disk read 0"), sink.contains("ram sector 0") && sink.contains("00000000000001f0") && sink.contains("55 aa"));
     bool diskSecond = (runCommand(shell, sink, "disk read 1 2 ram"), sink.contains("ram sector 2") && sink.contains("00000000000005f0"));
+    // lspci on the made up bus: the list, then one function in detail
+    bool lspci = (runCommand(shell, sink, "lspci"), sink.contains("  00:03.0  8086:100e  0200  Intel") && sink.contains("Ethernet controller") && sink.contains("03:00.0  144d:a808  0108  Samsung") && sink.contains("6 function(s)"));
+    runCommand(shell, sink, "lspci 00:03.0");
+    bool lspciBars = sink.contains("BAR0      memory at 0xfebc0000 (32 bit)") && sink.contains("BAR1      I/O ports at 0xc000")
+        && sink.contains("BAR2      memory at 0x1fe000000 (64 bit, prefetchable)") && !sink.contains("BAR3");
+    bool lspciDetails = sink.contains("command   0x0007  I/O memory bus-master") && sink.contains("interrupt pin INTA, line 11")
+        && sink.contains("capabilities: Power Management (0x40) PCI Express (0x50)")
+        && sink.contains("0000000000000000  86 80 0e 10 07 00 10 00");
+    bool lspciBad = (runCommand(shell, sink, "lspci 0:3"), sink.contains("an address like"))
+        && (runCommand(shell, sink, "lspci 00:04.0"), sink.contains("no function at 00:04.0"))
+        && (runCommand(shell, sink, "lspci 00:20.0"), sink.contains("an address like"));
+
     bool diskBad = (runCommand(shell, sink, "disk read 0 9"), sink.contains("a count of 1 .. 8"))
         && (runCommand(shell, sink, "disk read 0 1 nope"), sink.contains("no such device"))
         && (runCommand(shell, sink, "disk read 99999"), sink.contains("can not read sector"));
@@ -2830,6 +2959,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(ps);
     CHECK(help && helpGroup && helpCommand && helpUnknown);
     CHECK(disk && diskRead && diskSecond && diskBad);
+    CHECK(lspci && lspciBars && lspciDetails && lspciBad);
     CHECK(version);
     CHECK(unknown && usageShown && quote && nothing);
 
@@ -2932,7 +3062,7 @@ static void testElf()
 }
 
 // Start path, let it run until it exits, return its exit code (-1000 if it did not)
-static int64_t runProgram(Process::Runtime& runtime, Scheduler& scheduler, const char* path, int* pid = nullptr)
+static int64_t runProgram(Process::Runtime& runtime, const char* path, int* pid = nullptr)
 {
     int started = runtime.spawn(path);
     if (pid)
@@ -2940,16 +3070,12 @@ static int64_t runProgram(Process::Runtime& runtime, Scheduler& scheduler, const
     if (started < 0)
         return -1000;
 
-    const Process::Process* process = runtime.find(started);
-    for (int i = 0; i < 100000 && !process->exited; i++)
-        scheduler.yield();
-    int64_t code = process->exited ? process->exitCode : -1000;
-    scheduler.yield(); // the thread leaves the queue
-    runtime.reap();
-    return code;
+    // Sleeps until the program exits, as the shell's run does
+    return runtime.wait((uint32_t)started);
 }
 
-static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runtime, Scheduler& scheduler, Fs::Vfs& vfs)
+static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runtime, Scheduler& scheduler, Fs::Vfs& vfs,
+    Drivers::CharacterQueue& input)
 {
     group("User programs (ring 3, test disk)");
 
@@ -2965,28 +3091,53 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
 
     // Prints from ring 3 through int 0x80, exits with 0
     int pid = 0;
-    int64_t hello = runProgram(runtime, scheduler, "/disk0/BIN/HELLO.ELF", &pid);
+    int64_t hello = runProgram(runtime, "/disk0/BIN/HELLO.ELF", &pid);
     bool helloOutput = sink.contains("Hello from user mode!\n") && sink.contains("running at 0x0000008000")
         && sink.contains("exited with 0]");
     bool reaped = runtime.find(pid) == nullptr && runtime.count() == 0;
 
     // A fault in ring 3: reported, the program ends with 128 + 14, the kernel goes on
     sink.clear();
-    int64_t fault = runProgram(runtime, scheduler, "/disk0/BIN/FAULT.ELF");
+    int64_t fault = runProgram(runtime, "/disk0/BIN/FAULT.ELF");
     bool faultReport = sink.contains("about to write to address 0") && sink.contains("Page fault (in user mode)")
         && sink.contains("CR2=0x0000000000000000 (user write, protection violation)") && !sink.contains("not reached")
         && !sink.contains("KERNEL PANIC");
 
     // A breakpoint in ring 3: reported, the program goes on to exit 0
     sink.clear();
-    int64_t breakpoint = runProgram(runtime, scheduler, "/disk0/BIN/BREAK.ELF");
+    int64_t breakpoint = runProgram(runtime, "/disk0/BIN/BREAK.ELF");
     bool breakpointOutput = sink.contains("before the breakpoint") && sink.contains("Breakpoint (in user mode)")
         && sink.contains("after the breakpoint");
 
     // Pointers into the kernel, unmapped or not user: refused
     sink.clear();
-    int64_t badptr = runProgram(runtime, scheduler, "/disk0/BIN/BADPTR.ELF");
+    int64_t badptr = runProgram(runtime, "/disk0/BIN/BADPTR.ELF");
     bool badptrOutput = sink.contains("every bad pointer refused");
+
+    // read(0): keys typed before the program reads wait in the queue. DEL is
+    // the program's Backspace, '\r' arrives as '\n'
+    sink.clear();
+    input.push("Adx\x7f"
+               "a\r",
+        6);
+    int64_t ask = runProgram(runtime, "/disk0/BIN/ASK.ELF");
+    bool askOutput = sink.contains("What is your name? Ad") && sink.contains("Hello, Ada! I am process");
+    sink.clear();
+    input.push('\x03');
+    int64_t interrupted = runProgram(runtime, "/disk0/BIN/ASK.ELF");
+    bool queueEmpty = input.size() == 0;
+
+    // uptime, sleep, yield; open, read, write, close and their errors
+    sink.clear();
+    int64_t clock = runProgram(runtime, "/disk0/BIN/CLOCK.ELF");
+    bool clockOutput = sink.contains("woke up after");
+    sink.clear();
+    int64_t files = runProgram(runtime, "/disk0/BIN/FILES.ELF");
+    bool filesOutput = sink.contains("files: all as expected");
+    char written[32] {};
+    bool filesOnDisk = vfs.read("/disk0/USER.TXT", 0, written, sizeof(written) - 1) == 23
+        && !strcmp(written, "first line\nsecond line\n");
+    bool waitMissing = runtime.wait(9999) == -1;
 
     // Files that are not programs
     sink.clear();
@@ -3013,6 +3164,11 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(faultReport);
     CHECK(badptr == 0 && badptrOutput);
     CHECK(breakpoint == 0 && breakpointOutput);
+    CHECK(ask == 0 && askOutput);
+    CHECK(interrupted == 128 + 2 && queueEmpty);
+    CHECK(clock == 0 && clockOutput);
+    CHECK(files == 0 && filesOutput && filesOnDisk);
+    CHECK(waitMissing);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
     // Address spaces, pages, kernel stacks: all given back
@@ -3091,7 +3247,7 @@ static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
 }
 
 int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& scheduler, Fs::Vfs& vfs,
-    Process::Runtime& runtime)
+    Process::Runtime& runtime, Drivers::CharacterQueue& input)
 {
     printf("[SELFTEST] start\n");
 
@@ -3132,6 +3288,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testScancodeDecoder();
     testKeyboard(space);
     testBlockDevices();
+    testPci();
     testFat16Names();
     testFat16();
     testFat16Write();
@@ -3143,7 +3300,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testRaiseAndBreakpoint(scheduler);
     testAddressSpaces(pmm, space);
     testElf();
-    testUserPrograms(pmm, runtime, scheduler, vfs);
+    testUserPrograms(pmm, runtime, scheduler, vfs, input);
     testShellParser();
     testLineEditor();
     testShell(pmm, space, scheduler);

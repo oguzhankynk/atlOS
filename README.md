@@ -21,14 +21,15 @@ Working:
 - Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
-- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, ... (`help` lists them by group)
-- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`write`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
+- A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, `lspci`, ... (`help` lists them by group)
+- User programs: static ELF64 files from the disk, run in ring 3 in their own address space, `int 0x80` system calls (`read`/`write` on the keyboard, the screen and files, `open`/`close`, `sleep`, `yield`, `getpid`, `uptime`, `exit`); a fault ends only the program. Writing one: [user/README.md](user/README.md)
+- PCI and PCIe: every bus scanned through the configuration ports, `lspci` with the BARs and capabilities
 - ATA disks (PIO), MBR partitions, FAT16 (read and write, 8.3 names) and a VFS with mount points (`/disk0/...`)
 - Serial (COM1) and VGA text output, a small freestanding libc (`libk`)
 - In-kernel self tests run headless in QEMU
 
 The CPUID helpers are built and tested but not called at
-boot. The shell runs in the kernel; user programs have two system calls so far.
+boot. The shell runs in the kernel; user programs reach it through nine system calls.
 atlOS runs on a single CPU, scheduling is cooperative.
 
 ## Quick start
@@ -68,7 +69,7 @@ kernel/
   shell/         the kernel shell: line editor, parser, commands
   proc/          user programs: ELF loading, ring 3, system calls
   sync/          atomic, interrupt guard, wait queue, semaphore, mutex, condition variable, spinlock
-  drivers/       pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR)
+  drivers/       pic, pit, serial, vga console, keyboard, disk/ (block devices, ATA, MBR), pci/
   fs/            file system interface, fat16, vfs, mounting the disks
   firmware/      bios, smbios
   lib/           small header-only helpers

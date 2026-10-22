@@ -8,10 +8,13 @@ system calls, and ended by the kernel when it faults.
 
 ```
 atlOS:/> run /disk0/BIN/HELLO.ELF
-started pid 1
-atlOS:/> Hello from user mode!
+Hello from user mode!
 running at 0x00000080000000d0
 [pid 1 HELLO.ELF exited with 0]
+atlOS:/> run /disk0/BIN/ASK.ELF
+What is your name? Ada
+Hello, Ada! I am process 2.
+[pid 2 ASK.ELF exited with 0]
 ```
 
 ## What is it for?
@@ -39,6 +42,8 @@ ring 0 code through the IDT. A fault in a program ends that program only.
 | System calls | **`int 0x80`** (a software interrupt: simple, slower) · `syscall`/`sysret` (MSRs, fast; Linux x86_64) · `sysenter` (32-bit) |
 | Who runs the program | **a kernel thread that drops to ring 3**, its kernel stack is the program's kernel stack · a separate process object owning several threads |
 | Ending a program | **exit system call or a fault**; the thread ends, its memory is freed by someone else |
+| Files of a program | **a small table of open files per process**, the index is the file descriptor (Unix) · handles to kernel objects (Windows) · no state: every call names the path and the offset |
+| Keyboard input | **raw bytes to whoever reads, the program echoes** · a "cooked" line mode in the kernel (the Unix terminal: echo, Backspace, the line on Enter) |
 
 ## How atlOS does it
 
@@ -122,13 +127,74 @@ sequenceDiagram
 
 ### System calls (`int 0x80`)
 
-| rax | Call | Arguments | Result |
-|---|---|---|---|
-| 0 | `exit(code)` | rdi | does not return |
-| 1 | `write(fd, buffer, size)` | rdi, rsi, rdx | `size`, or `-EBADF` (fd not 1), `-EINVAL` (more than 4096 bytes), `-EFAULT` |
+The number in `rax`, the arguments in `rdi`, `rsi`, `rdx`, the result in
+`rax`. A negative result is an error, with the Linux numbers (`-2` is
+`-ENOENT`).
+
+| rax | Call | Result |
+|---|---|---|
+| 0 | `exit(code)` | does not return |
+| 1 | `write(fd, buffer, size)` | bytes written; `-EBADF`, `-EINVAL` (more than 4096 bytes), `-EFAULT`, `-EIO` |
+| 2 | `read(fd, buffer, size)` | bytes read, 0 at the end of a file; `-EBADF`, `-EINVAL`, `-EFAULT`, `-EIO` |
+| 3 | `open(path, flags)` | a file descriptor (3 and up); `-ENOENT`, `-EISDIR`, `-EMFILE`, `-EFAULT`, `-ENAMETOOLONG`, `-EINVAL` |
+| 4 | `close(fd)` | 0; `-EBADF` |
+| 5 | `yield()` | 0, after the other runnable threads had their turn |
+| 6 | `sleep(ms)` | 0, at least `ms` milliseconds later |
+| 7 | `getpid()` | the process id |
+| 8 | `uptime()` | milliseconds since boot (the scheduler's ticks) |
 
 An unknown number returns `-ENOSYS`. The gate is an interrupt gate with
 DPL 3; every other gate has DPL 0, so `int $0x21` from a program is a #GP.
+
+`Runtime::systemCall` is one `switch` over `rax`. A call that waits
+(`read` from the keyboard, `sleep`, `yield`) waits on the program thread's
+own kernel stack, inside the interrupt handler: the scheduler switches to
+another thread and back later, then the handler returns to ring 3 as usual.
+The interrupt flag is part of each thread's saved state, so the other
+threads run with interrupts on while this one waits with them off.
+
+### File descriptors
+
+| fd | What |
+|---|---|
+| 0 | standard input: the keyboard and the serial terminal |
+| 1, 2 | standard output and error: the screen and the serial terminal |
+| 3 .. 10 | files from `open`: `Process::files[fd - 3]` |
+
+An open file (`OpenFile`) is its path, its offset and how it was opened. The
+VFS reads and writes by path and offset (`Vfs::read(path, offset, ...)`), so
+`read` and `write` pass both and move the offset by what was transferred.
+
+- `flags`: one of `O_RDONLY`, `O_WRONLY`, `O_RDWR`, plus `O_CREAT` (create
+  it if missing), `O_TRUNC` (start empty: the FAT16 code has no truncate, so
+  the file is removed and created again), `O_APPEND` (each write goes to
+  the current end).
+- Paths start at the root (`/disk0/...`): a program has no current
+  directory. A relative path is `-ENOENT`.
+- The path is copied out of the program byte by byte, each byte checked
+  with `isUserAccessible`, up to 128 bytes with the terminating 0.
+- At exit nothing has to be flushed (every write went to the disk), so the
+  table goes away with the process.
+
+### The keyboard: `read(0, ...)`
+
+The shell and a program read the same `CharacterQueue` (the keyboard and
+COM1 feed it). `run` waits for the program (`Runtime::wait`), so while it
+runs the shell does not read and the keys go to the program.
+
+`read(0, buffer, size)` sleeps until a key is there, then returns it and
+the keys already queued behind it, at most `size`. The bytes are **raw**:
+nothing is echoed, Backspace arrives as `0x7f` (DEL) or `0x08`, and a
+program that wants a line editor writes one (`user/programs/ask.c`). Two
+exceptions: Enter arrives as `\n` (a terminal sends `\r`), and **Ctrl+C**
+(`0x03`) ends the program with 130, like a Unix shell's 128 + SIGINT.
+
+### Waiting for a program
+
+`Runtime::wait(pid)` takes the process's `done` semaphore, which
+`exitCurrent` gives, then frees the program (`reap`) and returns its exit
+code. The waiting thread sleeps meanwhile, so the CPU halts when the program
+waits too (e.g. for a key).
 
 **User pointers.** A program can pass any number as a pointer. Before
 `write` reads the buffer, `AddressSpace::isUserAccessible` checks that every
@@ -141,16 +207,16 @@ could unmap the memory while the kernel reads it; atlOS is cooperative.)
 
 - `exit(code)`: the runtime marks the process exited, prints
   `[pid 1 HELLO.ELF exited with 0]`, switches CR3 back to the kernel's tables
-  and ends the thread (`Scheduler::exit`).
+  gives `done` and ends the thread (`Scheduler::exit`).
 - A breakpoint (`int3`) in ring 3 reports the registers and the program goes
   on.
 - A fault in ring 3 (`frame.cs & 3 == 3`): the exception is reported as
   usual (`Page fault (in user mode)`, the decoded error code) and the program
   ends with `128 + vector`, e.g. 142 for a page fault. The kernel does not
   panic.
-- A thread can not free its own kernel stack while running on it, so
-  `Runtime::reap()` frees exited programs (thread, address space with all its
-  pages and tables) later: the shell calls it before every prompt.
+- A thread can not free its own kernel stack while running on it, so the
+  exited program (thread, address space with all its pages and tables) is
+  freed by another thread: `Runtime::wait` or `Runtime::reap`.
 
 ### The boundary global
 
@@ -161,12 +227,13 @@ runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
 
 ### Deliberately not done
 
-- No `syscall`/`sysret`, no `read`, `yield`, `sleep` or file calls yet.
+- No `syscall`/`sysret`: `int 0x80` goes the way every interrupt goes.
 - **No preemption:** a program that never makes a system call keeps the CPU
-  for good (the timer only counts ticks). Every system call returns to the
-  same program; nothing switches away from it before `exit`.
+  for good (the timer only counts ticks). Only `yield`, `sleep` and a `read`
+  that waits let other threads run.
+- No `lseek`, `stat`, directory listing, `unlink` or `rename` calls.
 - No process object with several threads, no `fork`/`exec`, no arguments or
-  environment, no `wait`.
+  environment.
 - No NX bit: data pages are executable too.
 - No guard page under the stack (it is the only page there; running off it
   faults anyway).
@@ -179,11 +246,18 @@ runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
 - *User programs (ring 3, test disk)*: runs `HELLO.ELF` (output, exit code
   0), `FAULT.ELF` (writes to address 0: a protection violation, exit code
   142, no kernel panic), `BADPTR.ELF` (kernel, kernel only, unmapped and
-  overlong pointers, a wrong fd and an unknown call are all refused), files
-  that are not programs, two programs at once at the same addresses, and
-  that every page and table comes back.
-- The shell test (`scripts/run-shelltest.py`) runs `HELLO.ELF` and
-  `FAULT.ELF` from the shell and checks the shell still answers afterwards.
+  overlong pointers, a wrong fd and an unknown call are all refused),
+  `ASK.ELF` with keys pushed into the queue first (a Backspace in them, then
+  Ctrl+C: exit code 130), `CLOCK.ELF` (`uptime`, `sleep`, `yield`),
+  `FILES.ELF` (`open`/`read`/`write`/`close`, `O_TRUNC`, `O_APPEND`, and the
+  errors: a missing file, a relative path, a directory, a kernel pointer,
+  the wrong access mode, closing twice, every descriptor in use) with the
+  file it wrote read back through the VFS, files that are not programs, two
+  programs at once at the same addresses, and that every page and table
+  comes back. `scripts/check-test-disk.sh` reads `USER.TXT` with mtools too.
+- The shell test (`scripts/run-shelltest.py`) runs `HELLO.ELF`, `FAULT.ELF`
+  (the shell still answers afterwards), types a name into `ASK.ELF`, ends it
+  once with Ctrl+C, runs `CLOCK.ELF` and `FILES.ELF` and `cat`s the file.
 
 ## References
 

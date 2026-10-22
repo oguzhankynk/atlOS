@@ -26,7 +26,7 @@ ctest --preset selftest
 [SELFTEST] start
 [SELFTEST] PMM frames
 ...
-[SELFTEST] done: 760 passed, 0 failed
+[SELFTEST] done: 783 passed, 0 failed
 SELFTEST PASSED
 ```
 
@@ -134,8 +134,10 @@ kernel with the test disk and COM1 on a TCP socket, waits for the prompt and
 types commands the way a terminal does (`\r` for Enter, DEL for Backspace,
 `ESC [ A` for Up, Ctrl+C), checking each answer: `ls`, `cat`, `cd`, writing
 with `echo >`/`>>`, `rm`/`rmdir`, `mw`/`md`, `help` by group, `disk` and
-`disk read 0` (the MBR's `55 aa`), `vmmap`, `tasks`, `run` of a user
-program and of one that faults (the shell must still answer), the example of
+`disk read 0` (the MBR's `55 aa`), `lspci` and `lspci 00:01.1`, `vmmap`, `tasks`, `run` of a user
+program and of one that faults (the shell must still answer), typing a name
+into `ASK.ELF` (and Ctrl+C into it once), `CLOCK.ELF`, `FILES.ELF` and the
+file it wrote, the example of
 `user/README.md` (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
 report, and at the end
 `fault`, whose kernel page fault report must appear. The serial log is

@@ -42,6 +42,9 @@ check $STATUS "fsck.fat finds the volume consistent"
 [ "$(mtype -i "$PART" ::/KERNEL/NOTE.TXT)" = "written by atlOS" ]
 check $? "mtype KERNEL/NOTE.TXT"
 
+[ "$(mtype -i "$PART" ::/USER.TXT)" = "$(printf 'first line\nsecond line')" ]
+check $? "mtype USER.TXT (written by FILES.ELF in ring 3)"
+
 i=1
 while [ $i -le 1000 ]; do
     printf 'data %05d\n' $i
