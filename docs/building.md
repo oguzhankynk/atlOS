@@ -132,3 +132,11 @@ test disk as `/BIN/<NAME>.ELF`. Run one from the shell:
 types a few shell commands over the serial port and saves the VGA screen
 (QEMU's `screendump`) as `boot.png` and `shell.png`, e.g. for the wiki.
 
+
+`scripts/make-demo-gif.py <iso> <disk.img> <out.gif>` records the animated
+GIF of the README (`docs/images/demo.gif`): the boot from SeaBIOS through
+GRUB to the prompt, then a few commands typed one key at a time. The boot is
+faster than a screendump, so it runs in 20 ms slices with the VM stopped for
+each picture and plays slowed down; repeated pictures become one longer
+frame, and the 16 colors of text mode keep the file small. Record it from a
+committed tree, on a release tag the banner shows just `(vX.Y.Z)`.
