@@ -10,6 +10,7 @@
 #   crashtest build a kernel that page faults on purpose and check its report
 #   shelltest boot the normal kernel and drive its shell over the serial port
 #   docs      generate the Doxygen API docs into build/docs
+#   site      build the documentation site into build/site/html (MkDocs)
 #   format    format kernel and libc sources with clang-format
 #   format-check  fail if a source file is not formatted
 #   tidy      run clang-tidy on the kernel sources
@@ -21,7 +22,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 usage() {
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # build <preset> [cmake --build args...]
@@ -47,6 +48,7 @@ for cmd in "$@"; do
         selftest) build selftest --target selftest ;;
         crashtest) build crashtest --target crashtest ;;
         shelltest) build default --target shelltest ;;
+        site) python3 scripts/make-site.py ;;
         clean) rm -rf build ;;
         -h | --help | help) usage ;;
         *)

@@ -68,11 +68,14 @@ Each subsystem directory has a `README.md` with the same sections:
 2. **How could it be designed?** the usual approaches, with pros, cons and
    who uses them (Linux, xv6, ...)
 3. **How atlOS does it** and why; what is deliberately left out
-4. **Flow** diagrams (mermaid, rendered by GitHub)
+4. **Flow** diagrams (mermaid, rendered by GitHub and the site)
 5. **Tests** that cover it, and **references** (OSDev Wiki, Intel SDM, xv6,
    OSTEP)
 
-A change to a subsystem updates its README in the same commit series.
+A change to a subsystem updates its README in the same commit series. A new
+README also gets a chapter in [tutorial.md](tutorial.md) and an entry in the
+`nav` of `docs/mkdocs.yml`. Keep them short: the code and the references
+go deeper.
 
 ## Design
 

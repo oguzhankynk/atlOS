@@ -59,7 +59,10 @@ Pushing the tag starts the release workflow (`.github/workflows/release.yml`).
 It checks that the tag matches `project(atlOS VERSION ...)`, builds and runs
 the self tests from the tag (so the banner shows `vX.Y.Z`), and publishes the
 GitHub release with the `CHANGELOG.md` section as notes
-(`scripts/release-notes.sh`) and the ISO attached.
+(`scripts/release-notes.sh`) and the ISO attached. Then it builds the
+documentation site with source links pointing at the tag and deploys it to
+GitHub Pages (<https://oguzhankynk.github.io/atlOS/>); the repository's
+Pages source has to be "GitHub Actions".
 
 ## Continuous integration
 
@@ -67,7 +70,8 @@ GitHub release with the `CHANGELOG.md` section as notes
 and on pull requests: build, self tests in QEMU (with the test disk, checked
 afterwards by `fsck.fat`), the crash test, the shell test over the serial
 port, `format-check` and `tidy` (any clang-tidy finding fails it). The ISO
-and the test logs are kept as artifacts for 14 days. Both workflows run on `ubuntu-22.04`, the same tool
+and the test logs are kept as artifacts for 14 days. A second job builds the
+documentation site, so a broken link between pages fails CI. Both workflows run on `ubuntu-22.04`, the same tool
 versions as the development machine, and share `.github/actions/setup`, which
 builds the cross toolchain with `scripts/build-toolchain.sh` once and then
 restores it from the cache (the key is the script's hash).

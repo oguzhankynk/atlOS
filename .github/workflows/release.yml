@@ -45,3 +45,35 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "atlOS-$VERSION.iso#atlOS-$VERSION.iso (bootable, x86_64)" \
             --title "atlOS $VERSION" --notes-file notes.md --verify-tag
+
+  site:
+    name: Publish the documentation site
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the site (source links at the tag)
+        run: |
+          pip install -r docs/requirements.txt
+          scripts/make-site.py --ref "$GITHUB_REF_NAME"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site/html
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

@@ -7,6 +7,18 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- [Tutorial](docs/tutorial.md): the subsystem READMEs in boot order, with a
+  short introduction (CPU, x86, x86_64, OS)
+- Documentation site (MkDocs): `scripts/build.sh site`, built in CI and
+  published to GitHub Pages with every release
+
+### Changed
+
+- `docs/memory.md` and `docs/scheduler.md` merged into `kernel/mm/README.md`
+  and `kernel/sched/README.md`
+
 ## [0.5.0] - 2026-10-22
 
 ### Added

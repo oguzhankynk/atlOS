@@ -99,10 +99,12 @@ with diagrams and references:
 
 ## Documentation
 
+The **[tutorial](docs/tutorial.md)** walks through the kernel in boot order;
+each chapter is the README next to the subsystem's code. Online, for the
+latest release: <https://oguzhankynk.github.io/atlOS/>.
+
 - [Building and running](docs/building.md)
 - [Architecture and boot flow](docs/architecture.md)
-- [Memory management](docs/memory.md)
-- [Scheduler and threads](docs/scheduler.md)
 - [Self tests](docs/testing.md)
 - [Code style and design](docs/style.md)
 - [Versioning and releases](docs/releasing.md), [changelog](CHANGELOG.md)
