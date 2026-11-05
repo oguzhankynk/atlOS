@@ -67,8 +67,8 @@ backtrace in it into function names.
 | Backtrace | the rbp walk from a test function down to boot.S, the frame limit, broken chains |
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
 | Backtrace in a thread | the walk stops at the top of a thread's stack (rbp = 0) |
-| Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, instances do not affect each other |
-| Scheduler sleep (kernel, real ticks) | the kernel scheduler with real ticks: idling in `hlt`, a sleeping thread |
+| Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, the idle thread and CPU time, instances do not affect each other |
+| Scheduler sleep (kernel, real ticks) | the kernel scheduler with real ticks: the idle thread halts and gets the ticks, a sleeping thread |
 | Atomic, InterruptGuard, Spinlock | atomic operations and wrap around; guards nest and restore IF |
 | WaitQueue (isolated) | FIFO wake order, `wakeOne` does not switch, `wakeAll` |
 | Semaphore (isolated) | counting up to `max`, hand off to a waiter, `give` from interrupt context |

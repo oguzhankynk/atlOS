@@ -66,10 +66,9 @@ if (buffer.isEmpty())
 ```
 
 Interrupts do not stay off while the thread sleeps: the context switch loads
-the next thread's `RFLAGS`, and when nothing can run the scheduler idles in
-`sti; hlt`. When this thread runs again it gets its own `RFLAGS` (IF = 0)
-back, so the code after `wait()` is still inside the guard. The scheduler
-also turns interrupts off again after idling when the caller had them off
+the next thread's `RFLAGS`, and when nothing can run the idle thread halts
+in `sti; hlt`. When this thread runs again it gets its own `RFLAGS` (IF = 0)
+back, so the code after `wait()` is still inside the guard
 (*Scheduler idle keeps the interrupt state* tests this).
 
 ## How could it be designed?

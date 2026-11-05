@@ -9,6 +9,12 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ### Added
 
+- The idle thread: every scheduler queues one as task 1; it runs when no
+  other task can and halts in `sti; hlt` (the scheduler no longer halts on
+  the caller's stack). `Scheduler(TickSource&, AddressSpace&)`
+- CPU time: each tick is charged to the running task (`TCB::cpuTicks`),
+  `TCB::runs` and `Scheduler::switchCount()` count switches; the shell's
+  `sched` (since boot) and `top [ms]` (over a window)
 - [Tutorial](docs/tutorial.md): the subsystem READMEs in boot order, with a
   short introduction (CPU, x86, x86_64, OS)
 - Documentation site (MkDocs): `scripts/build.sh site`, built in CI and

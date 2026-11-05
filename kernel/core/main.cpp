@@ -220,7 +220,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     IOPort::enableInterrupts();
 
     // The boot flow becomes the scheduler's first task
-    Threading::Scheduler& scheduler = s_scheduler.construct(ticks);
+    Threading::Scheduler& scheduler = s_scheduler.construct(ticks, kernelSpace);
 
     // The keyboard and COM1 arrive through one queue: the shell reads it,
     // and a program the shell runs (file descriptor 0)

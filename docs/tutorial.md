@@ -72,7 +72,8 @@ Physical memory, page tables and the heap. Try `mem`, `vmmap`,
 
 ## 7. Threads and the scheduler
 
-The context switch and a cooperative round robin scheduler. Try `tasks`.
+The context switch, a cooperative round robin scheduler, the idle thread and
+CPU time. Try `tasks`, `sched`, `top`.
 [kernel/sched](../kernel/sched/README.md)
 
 ## 8. Synchronization

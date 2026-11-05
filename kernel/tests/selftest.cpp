@@ -1017,14 +1017,14 @@ static void testRoundRobin(AddressSpace& space)
     group("Scheduler round robin (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
-    CHECK(scheduler.taskCount() == 1);
+    Scheduler scheduler(ticks, space);
+    CHECK(scheduler.taskCount() == 2); // the caller and the idle thread
 
     Thread* a = new Thread(scheduler, space, counterA);
     Thread* b = new Thread(scheduler, space, counterB);
-    CHECK(scheduler.taskCount() == 3);
+    CHECK(scheduler.taskCount() == 4);
 
-    // Queue is [caller, A, B]: each yield from here runs A and B once
+    // Queue is [caller, idle, A, B]: each yield from here runs A and B once, never idle
     for (int i = 0; i < 10; i++)
         scheduler.yield();
     CHECK(s_countA == 10);
@@ -1035,7 +1035,7 @@ static void testRoundRobin(AddressSpace& space)
     CHECK(waitForExit(scheduler, *b, 1000));
     CHECK(s_countA == rounds);
     CHECK(s_countB == rounds);
-    CHECK(scheduler.taskCount() == 1);
+    CHECK(scheduler.taskCount() == 2);
     CHECK(s_frameAligned);
 
     delete a;
@@ -1057,7 +1057,7 @@ static void testSleepFakeTicks(AddressSpace& space)
     group("Scheduler sleep (fake ticks)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Thread* t = new Thread(scheduler, space, sleeper);
 
     // The sleeper runs, goes to sleep and the caller is the only runnable task
@@ -1082,7 +1082,10 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
 {
     group("Scheduler sleep (kernel, real ticks)");
 
-    // Nothing else can run: the caller idles in hlt until the timer wakes it
+    // Nothing else can run: the idle thread halts until the timer wakes the caller
+    const Threading::TCB& idle = scheduler.task(Scheduler::idleIndex);
+    uint64_t idleRuns = idle.runs;
+    uint64_t idleTicks = idle.cpuTicks;
     uint64_t t0 = scheduler.ticks();
     scheduler.sleep(20);
     uint64_t waited = scheduler.ticks() - t0;
@@ -1090,12 +1093,54 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
     CHECK(scheduler.current().state == ThreadState::Running); // not left Ready after waking up
     CHECK(waited < 120);
 
+    // The ticks of the sleep went to the idle thread (a few may arrive while switching)
+    CHECK(idle.runs > idleRuns);
+    CHECK(idle.cpuTicks - idleTicks >= 10);
+
     // A sleeping thread is skipped until its time is up
     s_sleptTicks = 0;
     Thread* t = new Thread(scheduler, space, sleeper);
     CHECK(waitForExit(scheduler, *t, 1000));
     CHECK(s_sleptTicks >= 50);
     CHECK(s_sleptTicks < 150);
+    delete t;
+}
+
+static FakeTickSource* s_fakeTicks {};
+
+static void chargeFiveTicks()
+{
+    s_fakeTicks->advance(5);
+}
+
+static void testCpuTime(AddressSpace& space)
+{
+    group("Scheduler idle thread and CPU time (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks, space);
+    const Threading::TCB& caller = scheduler.task(0);
+    const Threading::TCB& idle = scheduler.task(Scheduler::idleIndex);
+    CHECK(!strcmp(idle.name, "idle"));
+    CHECK(idle.state == ThreadState::Ready);
+
+    // Each tick is charged to the task running when it arrives
+    ticks.advance(3);
+    CHECK(caller.cpuTicks == 3);
+
+    s_fakeTicks = &ticks;
+    Thread* t = new Thread(scheduler, space, chargeFiveTicks);
+    uint64_t switches = scheduler.switchCount();
+    scheduler.yield(); // runs t to its end, then the caller again
+    CHECK(t->getTCB().state == ThreadState::Terminated);
+    CHECK(t->getTCB().cpuTicks == 5);
+    CHECK(t->getTCB().runs == 1);
+    CHECK(caller.cpuTicks == 3);
+    CHECK(scheduler.switchCount() == switches + 2);
+
+    // Someone could always run: the idle thread never did. Every tick is someone's
+    CHECK(idle.runs == 0 && idle.cpuTicks == 0);
+    CHECK(caller.cpuTicks + idle.cpuTicks + t->getTCB().cpuTicks == scheduler.ticks());
     delete t;
 }
 
@@ -1114,7 +1159,7 @@ static void testBlock(AddressSpace& space)
     group("Scheduler block (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Thread* t = new Thread(scheduler, space, blocker);
     for (int i = 0; i < 5; i++)
         scheduler.yield();
@@ -1141,13 +1186,13 @@ static void testRemove(AddressSpace& space)
     group("Scheduler remove (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
 
     // Deleting a queued thread before it ran takes it out of the queue
     Thread* t = new Thread(scheduler, space, neverRuns);
-    CHECK(scheduler.taskCount() == 2);
+    CHECK(scheduler.taskCount() == 3);
     delete t;
-    CHECK(scheduler.taskCount() == 1);
+    CHECK(scheduler.taskCount() == 2);
 
     for (int i = 0; i < 5; i++)
         scheduler.yield();
@@ -1161,7 +1206,7 @@ static void testSchedulersAreIndependent(Scheduler& kernelScheduler, AddressSpac
     uint32_t kernelTasks = kernelScheduler.taskCount();
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     s_countA = 0;
     Thread* a = new Thread(scheduler, space, counterA);
 
@@ -1281,7 +1326,7 @@ static void testWaitQueue(AddressSpace& space)
     group("WaitQueue (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::WaitQueue queue;
     s_waitQueue = &queue;
     s_wakeCount = 0;
@@ -1338,7 +1383,7 @@ static void testSemaphore(AddressSpace& space)
     group("Semaphore (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
 
     // Counting without waiting
     Sync::Semaphore counter(2, 3);
@@ -1423,7 +1468,7 @@ static void testProducerConsumer(AddressSpace& space)
     group("Semaphore producer/consumer (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::Semaphore freeSlots(bufferSize, bufferSize);
     Sync::Semaphore filledSlots(0, bufferSize);
     s_freeSlots = &freeSlots;
@@ -1466,7 +1511,7 @@ static void testMutex(AddressSpace& space)
     group("Mutex (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::Mutex mutex;
     s_mutex = &mutex;
     s_mutexLogCount = 0;
@@ -1523,7 +1568,7 @@ static void testConditionVariable(AddressSpace& space)
     group("ConditionVariable (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::Mutex mutex;
     Sync::ConditionVariable condition;
     s_mutex = &mutex;
@@ -1566,8 +1611,9 @@ static void testIdleKeepsInterruptState(Scheduler& scheduler)
 {
     group("Scheduler idle keeps the interrupt state (kernel, real ticks)");
 
-    // A thread waiting under an InterruptGuard may make the scheduler idle in
-    // "sti; hlt"; it must get the CPU back with interrupts off, as it left it
+    // A thread waiting under an InterruptGuard may hand the CPU to the idle
+    // thread, which halts in "sti; hlt"; it must get the CPU back with
+    // interrupts off, as it left it (switchTask restores its rflags)
     IOPort::disableInterrupts();
     uint64_t t0 = scheduler.ticks();
     scheduler.sleep(3);
@@ -1699,7 +1745,7 @@ static void testKeyboard(AddressSpace& space)
     group("PS/2 keyboard and the character queue (fake interrupt controller)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     FakeInterruptController controller;
     Drivers::CharacterQueue queue;
     Drivers::PS2Keyboard keyboard(controller, queue);
@@ -3306,7 +3352,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(vfs.mount("ram", fat));
 
     FakeTickSource ticks;
-    Scheduler isolated(ticks);
+    Scheduler isolated(ticks, space);
     Drivers::CharacterQueue input;
     Process::Runtime runtime(pmm, space, vfs, input);
     Fs::BlockDeviceList disks;
@@ -3402,8 +3448,13 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     runCommand(shell, sink, "tasks");
     bool threads = sink.contains("*0") && sink.contains("kernel") && sink.contains("running")
         && sink.contains(sleeper->getName()) && sink.contains("sleeping") && sink.contains(" ms")
-        && sink.contains("2 task(s)");
+        && sink.contains("idle") && sink.contains("3 task(s)");
     bool ps = (runCommand(shell, sink, "ps"), sink.contains("sleeping"));
+
+    // CPU time: since boot, and over a window the shell sleeps through (the idle thread runs)
+    bool sched = (runCommand(shell, sink, "sched"), sink.contains("context switches") && sink.contains("idle") && sink.contains("cpu ms") && sink.contains("%"));
+    bool top = (runCommand(shell, sink, "top 20"), sink.contains("context switches") && sink.contains("idle") && sink.contains(sleeper->getName()));
+    bool topBad = (runCommand(shell, sink, "top 0"), sink.contains("ms is 1 .. 60000"));
     scheduler.removeTask(*sleeper);
     delete sleeper;
 
@@ -3500,6 +3551,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(in && badPort);
     CHECK(threads);
     CHECK(ps);
+    CHECK(sched && top && topBad);
     CHECK(help && helpGroup && helpCommand && helpUnknown);
     CHECK(disk && diskRead && diskSecond && diskBad);
     CHECK(lspci && lspciBars && lspciDetails && lspciBad);
@@ -3793,12 +3845,12 @@ static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
     {
         // A scheduler built here makes this flow its task 0 ...
         FakeTickSource ticks;
-        Scheduler isolated(ticks);
+        Scheduler isolated(ticks, space);
         CHECK(&Threading::currentScheduler() == &isolated);
 
         Thread* u = new Thread(recordCurrent); // ... so this thread goes there
         CHECK(u->getTCB().scheduler == &isolated);
-        CHECK(isolated.taskCount() == 2);
+        CHECK(isolated.taskCount() == 3);
         CHECK(waitForExit(isolated, *u, 1000));
         CHECK(s_seenScheduler == &isolated);
         delete u;
@@ -3850,6 +3902,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testSleepRealTime(scheduler, space);
     testBlock(space);
     testRemove(space);
+    testCpuTime(space);
     testSchedulersAreIndependent(scheduler, space);
     testCurrentTask(scheduler, space);
     testAtomic();

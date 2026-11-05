@@ -35,7 +35,7 @@
    9. the tick: the `Drivers::ApicTimer`, measured against the PIT, or the
       `Drivers::PIT` without the APIC; enables interrupts
    10. constructs the `Threading::Scheduler` on that tick (the boot flow
-       becomes task 0, 1 ms tick)
+       becomes task 0, the idle thread task 1, 1 ms tick)
    11. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
        or the shell (after constructing the `Process::Runtime` for user
        programs, bound with `Process::setRuntime`): a `CharacterQueue` fed by

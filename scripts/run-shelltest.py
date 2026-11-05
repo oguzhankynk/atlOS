@@ -218,7 +218,13 @@ def main():
             check("msr 0xc0000080: 0x" in out, "rdmsr", out)
 
             out = serial.command("tasks\r")
-            check("kernel" in out and "running" in out and "1 task(s)" in out, "tasks", out)
+            check("kernel" in out and "running" in out and "idle" in out and "2 task(s)" in out, "tasks", out)
+            # The shell sleeps through top's window: the idle thread gets nearly all of it
+            out = serial.command("top 200\r")
+            idle = [line for line in out.split("\n") if " idle " in line]
+            check("context switches" in out and idle and "%" in idle[0], "top: the idle thread", out)
+            out = serial.command("sched\r")
+            check("context switches" in out and "idle" in out and "cpu ms" in out, "sched", out)
             out = serial.command("uptime\r")
             check("up " in out, "uptime", out)
             out = serial.command("mount\r")

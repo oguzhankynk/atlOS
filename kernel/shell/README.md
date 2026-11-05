@@ -74,7 +74,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
-| tasks | `tasks`, `ps`, `run program.elf [args]` |
+| tasks | `tasks`, `ps`, `sched`, `top [ms]`, `run program.elf [args]` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
 | devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `acpi [SIGNATURE]`, `apic`, `smbios [type]`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |
@@ -114,7 +114,9 @@ out) or `0xb8000` (the VGA text buffer: a character appears top left) are
 harmless places to try.
 
 `tasks` lists the scheduler's queue: name, state, time left for sleepers,
-the stack, and `rsp` (for the running task: the current frame).
+the stack, and `rsp` (for the running task: the current frame). `sched`
+shows each task's CPU time since boot, `top [ms]` over the next `ms`
+milliseconds (see *CPU time* in [`kernel/sched/README.md`](../sched/README.md)).
 
 ### Looking at the hardware
 
@@ -312,7 +314,7 @@ sequenceDiagram
   group, `disk read` of the RAM disk's boot sector, `lspci` on a made up
   bus (BARs, capabilities, bad addresses), `acpi` on made up tables (the
   list, the decoded MADT, a wrong checksum), `apic` without an APIC, `smbios`
-  on a made up table (the list, types 1, 4 and 17, errors), `tasks` with a
+  on a made up table (the list, types 1, 4 and 17, errors), `tasks`, `sched` and `top` with a
   sleeping thread), *VMM translate and mappings*.
 - End to end (`scripts/run-shelltest.py`, `scripts/build.sh shelltest`, CI):
   boots the normal kernel with COM1 on a TCP socket and types commands the
