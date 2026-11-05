@@ -7,10 +7,13 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-06
+
 ### Fixed
 
 - `scripts/make-site.py` and `scripts/make-demo-gif.py` are executable in
-  git: CI could not build the documentation site
+  git: CI could not build the documentation site, and the release of 0.6.0
+  did not publish it
 
 ## [0.6.0] - 2026-11-06
 
@@ -335,7 +338,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/oguzhankynk/atlOS/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
