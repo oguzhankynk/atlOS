@@ -7,6 +7,11 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/make-site.py` and `scripts/make-demo-gif.py` are executable in
+  git: CI could not build the documentation site
+
 ## [0.6.0] - 2026-11-06
 
 ### Added
