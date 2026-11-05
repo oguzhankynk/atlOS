@@ -7,6 +7,8 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-06
+
 ### Added
 
 - The idle thread: every scheduler queues one as task 1; it runs when no
@@ -24,7 +26,7 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
   auxiliary vector says where (`AT_PAGESZ`, `AT_ATLOS_HEAP_BASE`,
   `AT_ATLOS_HEAP_SIZE`), `atlos_start` sets it up before `main`; `malloc`,
   `calloc`, `realloc`, `free` and `heap_info` in `atlos.h`; `MALLOC.ELF`
-- [Tutorial](docs/tutorial.md): the subsystem READMEs in boot order, with a
+- A tutorial (`docs/tutorial.md`): the subsystem READMEs in boot order, with a
   short introduction (CPU, x86, x86_64, OS)
 - Documentation site (MkDocs): `scripts/build.sh site`, built in CI and
   published to GitHub Pages with every release
@@ -328,7 +330,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0
