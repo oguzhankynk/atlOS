@@ -70,6 +70,19 @@ enum SystemCallError : int64_t {
     ErrorNoSystemCall = -38, ///< ENOSYS
 };
 
+/**
+ * @brief The auxiliary vector's entry types: what the kernel tells a program
+ * at its start, in (type, value) pairs above envp on the start stack. 6 is
+ * the System V number; the heap's are atlOS's own, far above the ones Linux
+ * uses. user/lib/atlos.h has the same numbers.
+ */
+enum AuxiliaryType : uint64_t {
+    AuxNull = 0, ///< AT_NULL: the end of the list
+    AuxPageSize = 6, ///< AT_PAGESZ: bytes per page (2 MB)
+    AuxHeapBase = 0x1000, ///< where the program's heap starts
+    AuxHeapSize = 0x1001, ///< its size in bytes, 0: no heap
+};
+
 /// A file the program opened: where it is and how far it has read or written
 struct OpenFile {
     static constexpr uint32_t maxPath = 128;
@@ -93,6 +106,8 @@ struct Process {
     Threading::Thread* thread;
     uint64_t entry;
     uint64_t stackPointer; ///< rsp at the start: it points at argc
+    uint64_t heapBase; ///< the heap: mapped at the start, behind the data (see Runtime::spawn)
+    uint64_t heapSize;
     bool exited;
     int64_t exitCode;
     Sync::Semaphore done { 0, 1 }; ///< given on exit: Runtime::wait takes it
@@ -110,6 +125,10 @@ public:
     /// Top of every program's stack: one 2 MB page just below userEnd
     static constexpr uint64_t stackTop = 0x00007FFFFFFFFFF0ULL;
 
+    /// A program's heap: whole 2 MB pages, mapped before it starts; this many by default
+    static constexpr uint64_t defaultHeapSize = 2ULL * 1024 * 1024;
+    static constexpr uint64_t maxHeapSize = 64ULL * 1024 * 1024;
+
     /// Programs run on the caller's scheduler (Threading::currentScheduler()) when spawned
     /// and read the keyboard (file descriptor 0) from input.
     Runtime(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kernelSpace, Fs::Vfs& vfs,
@@ -122,9 +141,11 @@ public:
      * @brief Load the ELF file at path into a new address space and start it
      * on a new thread (it runs at the caller's next yield). argv[0] .. argv[argc - 1]
      * become the program's main(argc, argv); argv[0] is the program by convention.
+     * @param heapSize Bytes of heap, rounded up to 2 MB pages (0 .. maxHeapSize):
+     *                 mapped behind the program's data, told to it in the auxv.
      * @return The pid, or -1 (the reason is printed).
      */
-    int spawn(const char* path, int argc, const char* const* argv);
+    int spawn(const char* path, int argc, const char* const* argv, uint64_t heapSize = defaultHeapSize);
 
     /// spawn with argv = { path }.
     int spawn(const char* path) { return spawn(path, 1, &path); }
@@ -153,7 +174,7 @@ public:
 
 private:
     static void threadEntry();
-    bool load(const char* path, Process& process);
+    bool load(const char* path, Process& process, uint64_t heapSize);
     bool pushArguments(Process& process, int argc, const char* const* argv);
     int64_t write(Process& process, uint64_t fd, uint64_t buffer, uint64_t size);
     int64_t read(Process& process, uint64_t fd, uint64_t buffer, uint64_t size);

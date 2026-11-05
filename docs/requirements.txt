@@ -1,0 +1,3 @@
+# The documentation site (scripts/make-site.py)
+mkdocs==1.6.1
+mkdocs-material==9.7.7

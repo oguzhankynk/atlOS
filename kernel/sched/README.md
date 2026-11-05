@@ -33,6 +33,20 @@ Choosing the next thread:
 Where the thread list lives: a fixed array, a linked list through the TCBs,
 per-CPU run queues (SMP).
 
+When nothing can run:
+
+| Approach | Plus | Minus | Used by |
+|---|---|---|---|
+| The scheduler halts (`hlt`) in a loop, on the stack of whoever called it | no extra thread | the scheduler needs a "nobody" case; idle time belongs to no one | xv6 (its per-CPU scheduler loop) |
+| **An idle thread** that is always runnable and halts | the queue always has someone to run; idle time is the idle thread's CPU time | one more thread and stack | Linux (the idle task, pid 0, one per CPU), Windows (System Idle Process) |
+
+Measuring CPU time:
+
+| Approach | How | Plus | Minus | Used by |
+|---|---|---|---|---|
+| **Tick sampling** | each timer tick is charged to the task running when it arrives | one increment in the timer interrupt | 1 ms resolution; a task that always runs between two ticks is never charged | classic Unix, Linux with tick based accounting |
+| Measuring at switches | read a cycle counter (TSC) when a task starts and stops, add the difference | exact, also for runs shorter than a tick | needs the counter's frequency (calibrated against a timer) | Linux CFS (`sched_clock`), most modern kernels |
+
 ## How atlOS does it
 
 **Cooperative round robin over a fixed array.** It is the smallest scheduler
@@ -41,26 +55,32 @@ blocking). Because a thread only loses the CPU where it calls the scheduler,
 kernel code needs no locks against other threads; the price is that every
 thread must cooperate.
 
-- `Scheduler(TickSource&)` (`scheduler.hpp`): the flow that constructs it
-  becomes **task 0** (it has a TCB but no `Thread` object; for the kernel's
-  scheduler that is `kernelMain`). The timer (the PIT) only counts ticks; it
+- `Scheduler(TickSource&, AddressSpace&)` (`scheduler.hpp`): the flow that
+  constructs it becomes **task 0** (it has a TCB but no `Thread` object; for
+  the kernel's scheduler that is `kernelMain`), its **idle thread** task 1
+  (the stack comes from the address space). The timer only counts ticks; it
   never switches threads.
 - Run queue: `TCB* m_readyQueue[16]`. `schedule()` looks at the entries after
-  the current one and switches to the first runnable one.
+  the current one and switches to the first runnable one, leaving the idle
+  thread out.
 - States: `Ready`, `Running` (runnable) and `Sleeping` (until `wakeTick`),
   `Blocked` (until `unblock`), `Terminated` (skipped, then dequeued).
-- Nothing runnable → `sti; hlt`: the CPU sleeps until an interrupt (e.g. a
-  timer tick that wakes a sleeper). If the caller had interrupts off (a
-  thread waiting under a `Sync::InterruptGuard`), they are turned off again
-  before it continues.
-- Each TCB has a name (`kernel` for task 0, `t0`, `t1`, ... for threads, the
-  file name for a user program's thread), its stack range, and an `owner`
-  (the user program, if any).
+- Nothing else runnable → the idle thread. Its loop turns interrupts off,
+  yields (anyone runnable gets the CPU), then `sti; hlt` until the next
+  interrupt. Interrupts stay off from the check to the halt: a wake up in
+  between is not missed, and `sti` takes effect only after `hlt` has started.
+  Task 0 and the idle thread never leave the queue, so the idle thread's
+  index stays 1 (`Scheduler::idleIndex`).
+- A thread waiting under a `Sync::InterruptGuard` gets its interrupts back
+  off: `switchTask` saves and restores `rflags` with the other registers.
+- Each TCB has a name (`kernel` for task 0, `idle`, `t1`, `t2`, ... for
+  threads, the file name for a user program's thread), its stack range, and
+  an `owner` (the user program, if any).
 - On every switch the scheduler puts the next thread's stack top into the
   TSS (`rsp0`): interrupts and system calls from ring 3 use it. The saved
   `cr3` switches the address space with the thread.
 - Waiting for an event (not a time) goes through `kernel/sync/`: a
-  `WaitQueue` blocks threads and `unblock`s them, see `sync/README.md`.
+  `WaitQueue` blocks threads and `unblock`s them, see [`kernel/sync/README.md`](../sync/README.md).
 - **The current task** (`Threading::currentTask()`): the TCB running now. Each
   switch sets it, each TCB knows its scheduler (`tcb.scheduler`). Code finds
   "this thread" and its scheduler from it instead of being handed a
@@ -74,6 +94,39 @@ thread must cooperate.
   requires (`rsp % 16 == 8` on entry). Its `rbp` starts at 0, which ends a
   panic backtrace at the top of the thread.
 
+### CPU time
+
+**Tick sampling.** The timer interrupt adds 1 to `cpuTicks` of the task the
+scheduler is running (`m_running`, set on every switch) and to the clock.
+Every tick belongs to someone, so the `cpuTicks` of all tasks add up to
+`ticks()`; the idle thread's share is the time the CPU halted. `runs` counts
+how often a task was switched to, `switchCount()` all switches.
+
+It is a sample, not a measurement: a thread that works 0.3 ms and yields is
+charged a whole tick when one arrives, nothing otherwise; over many ticks it
+evens out. Measuring with the TSC at every switch would be exact, at the
+price of calibrating the TSC.
+
+The shell reads the counters with interrupts off, so the clock and the tasks
+come from the same moment:
+
+```
+atlOS:/> sched
+up 2.224 s, 100 context switches
+   id  name         state       cpu ms    cpu     runs
+  *0   kernel       running        170   7.6%       51
+   1   idle         ready         2054  92.3%       50
+atlOS:/> top 200
+201 ms, 2 context switches
+   id  name         state       cpu ms    cpu     runs
+  *0   kernel       running          1   0.4%        1
+   1   idle         ready          200  99.5%        1
+```
+
+`sched` counts since boot; `top [ms]` samples the counters, sleeps for the
+window and shows the differences. The shell sleeps meanwhile, so the window
+shows what the other tasks (here only the idle thread) did.
+
 ### The context switch (`arch/x86_64/cpu/context.S`)
 
 `switchTask(from, to)` stores every general purpose register, `rflags`, `rsp`,
@@ -86,11 +139,51 @@ in `rdi`, so its first "return" starts it.
 
 - No preemption. User mode will probably need it: a user program
   that never yields would freeze the system.
-- No priorities, no time accounting, no SMP (one run queue per CPU later).
+- No priorities, no SMP (one run queue per CPU later, each with its idle
+  thread).
+- CPU time is sampled per tick, not measured (no TSC).
 - The context switch saves *all* registers; the System V ABI would allow
   saving only the callee-saved ones (`rbx`, `rbp`, `r12`–`r15`). Saving all is
   easier to reason about.
 - No SIMD state is saved (the kernel is built without SSE).
+
+## Using it
+
+```cpp
+#include <sched/scheduler.hpp>
+#include <sched/thread.hpp>
+
+void worker()
+{
+    for (int i = 0; i < 10; i++) {
+        doSomething();
+        Threading::yield(); // the running thread's scheduler
+    }
+} // returning ends the thread
+
+auto* t = new Threading::Thread(worker); // on the caller's scheduler, queued right away
+...
+delete t; // the owner frees it (any state but running)
+```
+
+- `Thread(entry)` uses the caller's scheduler and the kernel address space;
+  `Thread(scheduler, space, entry)` names both (the self tests use it for
+  their own schedulers). `Thread(..., false)` creates it without queueing it.
+- The `Thread` object stays valid after its entry returns, until its owner
+  deletes it. The destructor removes a thread that is still queued; a thread
+  must not delete itself.
+
+| Call (`Scheduler`) | Effect |
+|---|---|
+| `yield()` | run the next runnable thread; returns at once if there is none |
+| `sleep(ms)` | `Sleeping` for at least `ms` ticks |
+| `block()` / `unblock(tcb)` | `Blocked` until another thread (or an IRQ handler) calls `unblock` |
+| `exit()` | end the current thread (task 0 must not) |
+| `current()` | TCB of the running thread |
+| `ticks()` | ticks (ms) since construction |
+| `taskCount()` | number of queued tasks, including task 0 and the idle thread |
+| `switchCount()` | context switches since construction |
+| `task(i)` | TCB of queue entry `i`: name, state, `cpuTicks`, `runs`, ... |
 
 ## The current task
 
@@ -124,7 +217,7 @@ So a `Semaphore`, `Mutex` or `ConditionVariable` is a plain value
 (`Semaphore sem(0, 1);`) and one object works for threads of any scheduler;
 `Thread(entry)` goes to the caller's scheduler.
 
-It is a **boundary global** (`docs/style.md`): one CPU runs one task at a
+It is a **boundary global** ([`docs/style.md`](../../docs/style.md)): one CPU runs one task at a
 time, so "the current task" is a fact about the CPU. With several CPUs it is
 one value per CPU (read through `gs`).
 
@@ -172,9 +265,12 @@ stateDiagram-v2
 
 `kernel/tests/selftest.cpp`: *Scheduler round robin / sleep (fake ticks) /
 block / remove (isolated)* run on their own schedulers with a `FakeTickSource`,
-so sleeping is checked tick by tick; *Scheduler sleep (kernel, real ticks)* uses real
-time; *Thread stack* checks the ABI alignment and that the stack page is
-freed.
+so sleeping is checked tick by tick; *Scheduler idle thread and CPU time
+(isolated)* charges fake ticks to the caller and to a thread, checks `runs`,
+the switch count and that the tasks' ticks add up to the clock; *Scheduler
+sleep (kernel, real ticks)* uses real time, and the idle thread gets the
+ticks of the sleep; *Thread stack* checks the ABI alignment and that the
+stack page is freed. The shell tests run `sched` and `top`.
 
 ## References
 

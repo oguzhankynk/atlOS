@@ -54,7 +54,8 @@ backtrace in it into function names.
 | PMM from a multiboot memory map | `populateFromMultiboot` on a fake multiboot2 info: rounding, kernel reservation |
 | PMM (kernel instance) | the real manager hands out blocks and frames above the kernel, no leak |
 | VMM | allocate/write/free, range reuse, `virtToPhys`, `mapPhysical`/`unmapPhysical` alias in a new page directory, `mapDevice` (uncached: PCD and PWT), no leak |
-| Heap | sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
+| Heap | the kernel heap: sizes from 1 byte to 3 MB, no overlap, `krealloc`, `kcalloc` |
+| Heap free list (isolated, 4 KB pages) | a heap over a small region: alignment, first fit and splitting, merging down to an empty heap that gave its pages back, refused pointers and double frees, running out, `reallocate`, `allocateZeroed` |
 | Interrupts | the timer ticks; an interrupt preserves `rax`/`r12` |
 | Uninitialized | `Cxx::Uninitialized<T>` constructs once, on demand, with the given arguments |
 | PIT (fake controller) | the PIT driver against a fake `InterruptController`: period checks, attaches and unmasks IRQ 0 |
@@ -67,8 +68,8 @@ backtrace in it into function names.
 | Backtrace | the rbp walk from a test function down to boot.S, the frame limit, broken chains |
 | Thread stack | initial `rsp` is ABI aligned, stack page is freed on delete |
 | Backtrace in a thread | the walk stops at the top of a thread's stack (rbp = 0) |
-| Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, instances do not affect each other |
-| Scheduler sleep (kernel, real ticks) | the kernel scheduler with real ticks: idling in `hlt`, a sleeping thread |
+| Scheduler (isolated) | own schedulers on a fake tick source: round robin and exit, `sleep` tick by tick, `block`/`unblock`, removing a queued thread, the idle thread and CPU time, instances do not affect each other |
+| Scheduler sleep (kernel, real ticks) | the kernel scheduler with real ticks: the idle thread halts and gets the ticks, a sleeping thread |
 | Atomic, InterruptGuard, Spinlock | atomic operations and wrap around; guards nest and restore IF |
 | WaitQueue (isolated) | FIFO wake order, `wakeOne` does not switch, `wakeAll` |
 | Semaphore (isolated) | counting up to `max`, hand off to a waiter, `give` from interrupt context |
@@ -91,7 +92,7 @@ backtrace in it into function names.
 | PS/2 keyboard and the character queue (fake interrupt controller) | IRQ 1 attached and unmasked, arrow keys as ANSI sequences, a reader blocked until characters arrive, a full queue drops new characters, sequences go in whole |
 | VMM translate and mappings | `translate` tells physical 0 from unmapped, refuses non canonical addresses, covers the physmap (and no more); `forEachMapping` finds the kernel, the identity map and 64 GB of physmap |
 | ELF64 parsing | a good two segment file; bad magic, 32-bit, wrong machine, not an executable, segments outside the file or the user range, sharing a page, the entry outside code, a broken header table |
-| User programs (ring 3, test disk) | `HELLO.ELF` prints and exits with 0, `FAULT.ELF` ends with 142 (user page fault, no panic), `BADPTR.ELF` gets every bad pointer refused, missing and non ELF files, two programs at once, every page given back |
+| User programs (ring 3, test disk) | `HELLO.ELF` prints and exits with 0, `FAULT.ELF` ends with 142 (user page fault, no panic), `BADPTR.ELF` gets every bad pointer refused, missing and non ELF files, two programs at once, `MALLOC.ELF` with a 4 MB heap, without one and above the limit, every page given back |
 | Exception table (faults that are expected) | `readQword` on a non canonical (#GP) and an unmapped (page fault) address returns false and the kernel goes on; `readMsr`/`writeMsr` on EFER |
 | Page table walk | the kernel image (PML4 511, a 2 MB page), an unmapped address, the identity map |
 | Interrupt counts | the tick's vector (the APIC timer's `0x40`, or IRQ 0's `0x20`) counts one per millisecond |
@@ -159,7 +160,7 @@ with `echo >`/`>>`, `rm`/`rmdir`, `mw`/`md`, `help` by group, `disk` and
 program and of one that faults (the shell must still answer), typing a name
 into `ASK.ELF` (and Ctrl+C into it once), `CLOCK.ELF`, `FILES.ELF` and the
 file it wrote, `ARGS.ELF` and `CAT.ELF` with arguments, the example of
-`user/README.md` (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
+[`user/README.md`](../user/README.md) (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
 report, and at the end
 `fault`, whose kernel page fault report must appear. The serial log is
 `build/default/shelltest.log`.

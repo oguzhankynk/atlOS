@@ -35,8 +35,9 @@ Exceptions, all excluded from the naming check:
 - names shared with assembly or the linker script (`kernelMain`,
   `switchTask`, `gdt_ptr`, `pml4`, `kernel_physical_end`, ...)
 - reserved and ABI names (`__cxa_*`, `__ctors_start`, `_text_start`, ...)
-- libc (standard C names), `kernel/mm/liballoc` (third party) and the
-  multiboot headers in `kernel/arch/x86_64/boot` (copied from the spec)
+- libc (standard C names), the C side of user programs (`user/`: `malloc`,
+  `atlos_start`, ...) and the multiboot headers in
+  `kernel/arch/x86_64/boot` (copied from the spec)
 
 ## clang-tidy
 
@@ -57,8 +58,8 @@ The kernel is clean: new warnings should be fixed, not suppressed. Code inside
 
 ## Third party code
 
-`kernel/mm/liballoc` (liballoc 1.1) and `libc/stdio/printf.cpp`
-(mpaland/printf) are kept as upstream: no reformatting, no renaming.
+`libc/stdio/printf.cpp` (mpaland/printf) is kept as upstream: no
+reformatting, no renaming.
 
 ## Subsystem READMEs
 
@@ -68,11 +69,14 @@ Each subsystem directory has a `README.md` with the same sections:
 2. **How could it be designed?** the usual approaches, with pros, cons and
    who uses them (Linux, xv6, ...)
 3. **How atlOS does it** and why; what is deliberately left out
-4. **Flow** diagrams (mermaid, rendered by GitHub)
+4. **Flow** diagrams (mermaid, rendered by GitHub and the site)
 5. **Tests** that cover it, and **references** (OSDev Wiki, Intel SDM, xv6,
    OSTEP)
 
-A change to a subsystem updates its README in the same commit series.
+A change to a subsystem updates its README in the same commit series. A new
+README also gets a chapter in [tutorial.md](tutorial.md) and an entry in the
+`nav` of `docs/mkdocs.yml`. Keep them short: the code and the references
+go deeper.
 
 ## Design
 
@@ -85,16 +89,17 @@ controllers and timers (`Drivers::ApicInterruptController`, `Drivers::PIC`,
 get it as their entry point argument), all built by `kernelMain` in
 `Cxx::Uninitialized` storage, and the console (`Drivers::SerialPort` and
 `Drivers::VGATextConsole` behind `CharacterSink`, bound to printf with
-`Core::setConsole`). Not done: the heap, whose state lives in liballoc
-(third party) behind the `setHeapAddressSpace` boundary. `logMsg` keeps no
-state and stays a function over printf.
+`Core::setConsole`), and the kernel heap (`Memory::Heap` on
+`Memory::AddressSpacePages`, bound to `kmalloc` and `new` with
+`Memory::setKernelHeap`). `logMsg` keeps no state and stays a function over
+printf.
 
 - **No singletons.** Each subsystem is a class that owns its state
   (`PhysicalMemoryManager`, `AddressSpace`, `Heap`, `Scheduler`, drivers);
   there are no `instance()` accessors and no lazily created globals.
 - **Dependencies are passed in**, by constructor reference, so they are
   visible in the signatures and the construction order is checked by the
-  compiler: `AddressSpace kernelSpace(pmm); Heap heap(kernelSpace);`
+  compiler: `AddressSpace kernelSpace(pmm); AddressSpacePages pages(kernelSpace); Heap heap(pages);`
 - **Hardware behind interfaces:** `InterruptController` (APIC, PIC),
   `TickSource` (APIC timer, PIT), `CharacterSink` (serial, VGA),
   `BlockDevice` and `FileSystem`.
@@ -103,8 +108,8 @@ state and stays a function over printf.
   the boot stack is small), which also avoids static initialization order
   problems.
 - **Globals only at C/assembly boundaries** (interrupt dispatch, the user
-  program runtime behind `int 0x80` and ring 3 faults, liballoc hooks,
-  `operator new`, the panic/printf sink): one explicitly bound pointer per
+  program runtime behind `int 0x80` and ring 3 faults, the kernel heap
+  behind `kmalloc` and `operator new`, the panic/printf sink): one explicitly bound pointer per
   boundary, set by the composition root. And one fact about the CPU: the
   **current task** (`Threading::currentTask()`, set by every switch), which
   sync objects and threads use to find the running thread and its scheduler.

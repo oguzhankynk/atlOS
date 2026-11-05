@@ -53,6 +53,11 @@ struct TCB {
     ThreadState state;
     uint64_t wakeTick; // Scheduler::ticks() value to leave Sleeping at
 
+    // CPU time: the ticks that arrived while this task ran, and how often it
+    // was switched to (the shell's "sched" and "top")
+    uint64_t cpuTicks;
+    uint64_t runs;
+
     // For task listings (the shell's "tasks")
     const char* name;
     uintptr_t stackBase; // 0: not a Thread's stack (the boot flow)

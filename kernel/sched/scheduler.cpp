@@ -45,11 +45,12 @@ static bool isRunnable(const TCB* tcb)
     return tcb->state == ThreadState::Ready || tcb->state == ThreadState::Running;
 }
 
-Scheduler::Scheduler(Drivers::TickSource& ticks)
+Scheduler::Scheduler(Drivers::TickSource& ticks, Memory::AddressSpace& space)
 {
     m_bootTcb.state = ThreadState::Running;
     m_bootTcb.name = "kernel"; // the flow that constructed the scheduler (kernelMain)
     m_bootTcb.scheduler = this;
+    m_bootTcb.runs = 1;
 
     // The constructing flow now runs as this scheduler's task 0
     m_previousTask = s_currentTask;
@@ -57,6 +58,11 @@ Scheduler::Scheduler(Drivers::TickSource& ticks)
     m_readyQueue[0] = &m_bootTcb;
     m_threadCount = 1;
     m_currentThreadIndex = 0;
+    m_running = &m_bootTcb;
+
+    // Task 1 (idleIndex): neither it nor task 0 ever leaves the queue, so its index stays
+    m_idleThread = new Thread(*this, space, idleLoop);
+    m_idleThread->getTCB().name = "idle";
 
     if (!ticks.start(tickPeriodNs, onTick, this))
         kernelPanic("Scheduler: the tick source does not support a 1 ms period");
@@ -64,6 +70,7 @@ Scheduler::Scheduler(Drivers::TickSource& ticks)
 
 Scheduler::~Scheduler()
 {
+    delete m_idleThread;
     if (s_currentTask == &m_bootTcb)
         s_currentTask = m_previousTask;
 }
@@ -71,7 +78,25 @@ Scheduler::~Scheduler()
 void Scheduler::onTick(void* scheduler)
 {
     auto* self = static_cast<Scheduler*>(scheduler);
+
+    // Sampling: the whole tick goes to whoever runs when it arrives. A task
+    // that always yields just before a tick is never charged; on average it
+    // evens out. The idle thread gets the ticks the CPU halted through
+    self->m_running->cpuTicks++;
     self->m_ticks.fetchAdd(1);
+}
+
+// The idle thread. Interrupts are off from the check for runnable tasks
+// (inside yield) to hlt: an interrupt that wakes a task in between would
+// otherwise be missed until the next one. "sti; hlt" turns them on and halts
+// in one step, sti takes effect after the next instruction.
+void Scheduler::idleLoop()
+{
+    while (true) {
+        IOPort::disableInterrupts();
+        Threading::yield();
+        asm volatile("sti; hlt");
+    }
 }
 
 void Scheduler::wakeSleepers()
@@ -107,7 +132,10 @@ void Scheduler::switchTo(uint32_t nextIndex)
     }
 
     to->state = ThreadState::Running;
+    to->runs++;
+    m_switchCount++;
     m_currentThreadIndex = nextIndex;
+    m_running = to;
     s_currentTask = to;
 
     // Interrupts and system calls from ring 3 land on the thread's own kernel stack
@@ -117,36 +145,30 @@ void Scheduler::switchTo(uint32_t nextIndex)
     switchTask(&from->regs, &to->regs);
 }
 
-// Switch to the next runnable thread after the current one. If the current
-// thread is the only runnable one, keep running it. If nothing can run,
-// halt until an interrupt (e.g. the timer waking a sleeper) changes that.
+// Switch to the next runnable task after the current one, the idle thread
+// left out. If the current task is the only runnable one, keep running it.
+// If nothing can run, run the idle thread (it is always Ready). A task that
+// waits with interrupts off (Sync::WaitQueue) gets them back off: switchTask
+// saves and restores rflags.
 void Scheduler::schedule()
 {
-    // A thread may wait with interrupts off (Sync::WaitQueue); idling turns
-    // them on, so put back what the caller had before returning to it
-    bool interruptsWereEnabled = IOPort::interruptsEnabled();
+    wakeSleepers();
 
-    while (true) {
-        wakeSleepers();
-
-        for (uint32_t k = 1; k < m_threadCount; k++) {
-            uint32_t index = (m_currentThreadIndex + k) % m_threadCount;
-            if (isRunnable(m_readyQueue[index])) {
-                switchTo(index);
-                return;
-            }
-        }
-
-        // Keep running the current thread; after a sleep it is only Ready
-        if (isRunnable(m_readyQueue[m_currentThreadIndex])) {
-            m_readyQueue[m_currentThreadIndex]->state = ThreadState::Running;
+    for (uint32_t k = 1; k < m_threadCount; k++) {
+        uint32_t index = (m_currentThreadIndex + k) % m_threadCount;
+        if (index != idleIndex && isRunnable(m_readyQueue[index])) {
+            switchTo(index);
             return;
         }
-
-        asm volatile("sti; hlt");
-        if (!interruptsWereEnabled)
-            IOPort::disableInterrupts();
     }
+
+    // Keep running the current task; after a sleep it is only Ready
+    if (isRunnable(m_readyQueue[m_currentThreadIndex])) {
+        m_readyQueue[m_currentThreadIndex]->state = ThreadState::Running;
+        return;
+    }
+
+    switchTo(idleIndex);
 }
 
 void Scheduler::addTask(Thread& thread)

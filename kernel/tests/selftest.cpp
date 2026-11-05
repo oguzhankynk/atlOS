@@ -55,6 +55,7 @@
 #include <fs/fat16.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
+#include <heap/fixed_region_pages.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
 #include <mm/memory.hpp>
@@ -480,6 +481,91 @@ static void testHeap()
         zero = z[i] == 0;
     CHECK(zero);
     kfree(z);
+}
+
+static void testHeapFreeList()
+{
+    group("Heap free list (isolated, 4 KB pages)");
+
+    // A region of 8 small pages, as a user program's heap is a region of 2 MB pages
+    constexpr size_t pageSize = 4096;
+    constexpr size_t pages = 8;
+    auto* region = static_cast<uint8_t*>(kmalloc(pageSize * pages));
+    CHECK(region != nullptr);
+    if (!region)
+        return;
+
+    {
+        Memory::FixedRegionPages source(region, pageSize * pages, pageSize);
+        Memory::Heap heap(source);
+        CHECK(source.pageCount() == pages);
+        CHECK(heap.statistics().chunks == 0); // nothing is taken before the first allocation
+
+        // Blocks are 16 byte aligned, sizes rounded up; behind the chunk's and the block's headers
+        auto* a = static_cast<uint8_t*>(heap.allocate(1));
+        auto* b = static_cast<uint8_t*>(heap.allocate(100));
+        auto* c = static_cast<uint8_t*>(heap.allocate(24));
+        CHECK(a == region + 32);
+        CHECK(a && b && c && (uintptr_t)b % 16 == 0 && (uintptr_t)c % 16 == 0);
+        CHECK(heap.usableSize(a) == 16 && heap.usableSize(b) == 112 && heap.usableSize(c) == 32);
+        Memory::Heap::Statistics stats = heap.statistics();
+        CHECK(stats.chunks == 1 && stats.reserved == pageSize && stats.inUse == 160 && stats.freeBlocks == 1);
+
+        // First fit: a freed block is used again, split if it is larger than needed
+        CHECK(heap.deallocate(b));
+        auto* b2 = static_cast<uint8_t*>(heap.allocate(50));
+        CHECK(b2 == b && heap.statistics().freeBlocks == 2);
+
+        // Free neighbours merge; a chunk that is free as a whole goes back to the source
+        CHECK(heap.deallocate(a) && heap.statistics().freeBlocks == 3);
+        CHECK(heap.deallocate(c) && heap.statistics().freeBlocks == 2);
+        CHECK(heap.deallocate(b2));
+        stats = heap.statistics();
+        CHECK(stats.chunks == 0 && stats.reserved == 0 && stats.freeBlocks == 0 && stats.inUse == 0);
+
+        // Pointers the heap did not hand out, and a double free, change nothing
+        auto* d = static_cast<uint8_t*>(heap.allocate(64));
+        auto* e = static_cast<uint8_t*>(heap.allocate(64));
+        memset(d, 0, 64); // d + 16 must not find a header's magic in old bytes
+        int local = 0;
+        CHECK(!heap.deallocate(&local) && !heap.deallocate(d + 16) && !heap.deallocate(d + 1));
+        CHECK(heap.deallocate(d) && !heap.deallocate(d));
+        CHECK(heap.deallocate(nullptr));
+        CHECK(heap.deallocate(e) && heap.statistics().chunks == 0);
+
+        // A block larger than a page: a chunk of several pages. More than the region has: nullptr
+        void* large = heap.allocate(3 * pageSize);
+        CHECK(large && heap.statistics().reserved == 4 * pageSize);
+        CHECK(heap.allocate(pages * pageSize) == nullptr);
+        void* small = heap.allocate(10);
+        CHECK(small != nullptr); // the heap goes on after a failure
+        CHECK(heap.deallocate(large) && heap.deallocate(small) && heap.statistics().chunks == 0);
+
+        // reallocate keeps the contents; a size that fits keeps the block
+        auto* r = static_cast<uint8_t*>(heap.allocate(20));
+        for (int i = 0; i < 20; i++)
+            r[i] = (uint8_t)i;
+        auto* grown = static_cast<uint8_t*>(heap.reallocate(r, 2000));
+        bool kept = grown != nullptr && grown != r;
+        for (int i = 0; i < 20 && kept; i++)
+            kept = grown[i] == i;
+        CHECK(kept);
+        CHECK(heap.reallocate(grown, 10) == grown);
+        CHECK(heap.reallocate(grown, 0) == nullptr && heap.statistics().inUse == 0);
+
+        // allocateZeroed zeroes what a freed block left behind, and refuses an overflowing count
+        auto* dirty = static_cast<uint8_t*>(heap.allocate(64));
+        memset(dirty, 0xAB, 64);
+        CHECK(heap.deallocate(dirty));
+        auto* zeroed = static_cast<uint8_t*>(heap.allocateZeroed(8, 8));
+        bool zero = zeroed != nullptr;
+        for (int i = 0; i < 64 && zero; i++)
+            zero = zeroed[i] == 0;
+        CHECK(zero);
+        CHECK(heap.allocateZeroed(~(size_t)0 / 2, 4) == nullptr);
+        CHECK(heap.deallocate(zeroed));
+    }
+    kfree(region);
 }
 
 // ------------------------------------------------------------
@@ -1017,14 +1103,14 @@ static void testRoundRobin(AddressSpace& space)
     group("Scheduler round robin (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
-    CHECK(scheduler.taskCount() == 1);
+    Scheduler scheduler(ticks, space);
+    CHECK(scheduler.taskCount() == 2); // the caller and the idle thread
 
     Thread* a = new Thread(scheduler, space, counterA);
     Thread* b = new Thread(scheduler, space, counterB);
-    CHECK(scheduler.taskCount() == 3);
+    CHECK(scheduler.taskCount() == 4);
 
-    // Queue is [caller, A, B]: each yield from here runs A and B once
+    // Queue is [caller, idle, A, B]: each yield from here runs A and B once, never idle
     for (int i = 0; i < 10; i++)
         scheduler.yield();
     CHECK(s_countA == 10);
@@ -1035,7 +1121,7 @@ static void testRoundRobin(AddressSpace& space)
     CHECK(waitForExit(scheduler, *b, 1000));
     CHECK(s_countA == rounds);
     CHECK(s_countB == rounds);
-    CHECK(scheduler.taskCount() == 1);
+    CHECK(scheduler.taskCount() == 2);
     CHECK(s_frameAligned);
 
     delete a;
@@ -1057,7 +1143,7 @@ static void testSleepFakeTicks(AddressSpace& space)
     group("Scheduler sleep (fake ticks)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Thread* t = new Thread(scheduler, space, sleeper);
 
     // The sleeper runs, goes to sleep and the caller is the only runnable task
@@ -1082,7 +1168,10 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
 {
     group("Scheduler sleep (kernel, real ticks)");
 
-    // Nothing else can run: the caller idles in hlt until the timer wakes it
+    // Nothing else can run: the idle thread halts until the timer wakes the caller
+    const Threading::TCB& idle = scheduler.task(Scheduler::idleIndex);
+    uint64_t idleRuns = idle.runs;
+    uint64_t idleTicks = idle.cpuTicks;
     uint64_t t0 = scheduler.ticks();
     scheduler.sleep(20);
     uint64_t waited = scheduler.ticks() - t0;
@@ -1090,12 +1179,54 @@ static void testSleepRealTime(Scheduler& scheduler, AddressSpace& space)
     CHECK(scheduler.current().state == ThreadState::Running); // not left Ready after waking up
     CHECK(waited < 120);
 
+    // The ticks of the sleep went to the idle thread (a few may arrive while switching)
+    CHECK(idle.runs > idleRuns);
+    CHECK(idle.cpuTicks - idleTicks >= 10);
+
     // A sleeping thread is skipped until its time is up
     s_sleptTicks = 0;
     Thread* t = new Thread(scheduler, space, sleeper);
     CHECK(waitForExit(scheduler, *t, 1000));
     CHECK(s_sleptTicks >= 50);
     CHECK(s_sleptTicks < 150);
+    delete t;
+}
+
+static FakeTickSource* s_fakeTicks {};
+
+static void chargeFiveTicks()
+{
+    s_fakeTicks->advance(5);
+}
+
+static void testCpuTime(AddressSpace& space)
+{
+    group("Scheduler idle thread and CPU time (isolated)");
+
+    FakeTickSource ticks;
+    Scheduler scheduler(ticks, space);
+    const Threading::TCB& caller = scheduler.task(0);
+    const Threading::TCB& idle = scheduler.task(Scheduler::idleIndex);
+    CHECK(!strcmp(idle.name, "idle"));
+    CHECK(idle.state == ThreadState::Ready);
+
+    // Each tick is charged to the task running when it arrives
+    ticks.advance(3);
+    CHECK(caller.cpuTicks == 3);
+
+    s_fakeTicks = &ticks;
+    Thread* t = new Thread(scheduler, space, chargeFiveTicks);
+    uint64_t switches = scheduler.switchCount();
+    scheduler.yield(); // runs t to its end, then the caller again
+    CHECK(t->getTCB().state == ThreadState::Terminated);
+    CHECK(t->getTCB().cpuTicks == 5);
+    CHECK(t->getTCB().runs == 1);
+    CHECK(caller.cpuTicks == 3);
+    CHECK(scheduler.switchCount() == switches + 2);
+
+    // Someone could always run: the idle thread never did. Every tick is someone's
+    CHECK(idle.runs == 0 && idle.cpuTicks == 0);
+    CHECK(caller.cpuTicks + idle.cpuTicks + t->getTCB().cpuTicks == scheduler.ticks());
     delete t;
 }
 
@@ -1114,7 +1245,7 @@ static void testBlock(AddressSpace& space)
     group("Scheduler block (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Thread* t = new Thread(scheduler, space, blocker);
     for (int i = 0; i < 5; i++)
         scheduler.yield();
@@ -1141,13 +1272,13 @@ static void testRemove(AddressSpace& space)
     group("Scheduler remove (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
 
     // Deleting a queued thread before it ran takes it out of the queue
     Thread* t = new Thread(scheduler, space, neverRuns);
-    CHECK(scheduler.taskCount() == 2);
+    CHECK(scheduler.taskCount() == 3);
     delete t;
-    CHECK(scheduler.taskCount() == 1);
+    CHECK(scheduler.taskCount() == 2);
 
     for (int i = 0; i < 5; i++)
         scheduler.yield();
@@ -1161,7 +1292,7 @@ static void testSchedulersAreIndependent(Scheduler& kernelScheduler, AddressSpac
     uint32_t kernelTasks = kernelScheduler.taskCount();
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     s_countA = 0;
     Thread* a = new Thread(scheduler, space, counterA);
 
@@ -1281,7 +1412,7 @@ static void testWaitQueue(AddressSpace& space)
     group("WaitQueue (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::WaitQueue queue;
     s_waitQueue = &queue;
     s_wakeCount = 0;
@@ -1338,7 +1469,7 @@ static void testSemaphore(AddressSpace& space)
     group("Semaphore (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
 
     // Counting without waiting
     Sync::Semaphore counter(2, 3);
@@ -1423,7 +1554,7 @@ static void testProducerConsumer(AddressSpace& space)
     group("Semaphore producer/consumer (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::Semaphore freeSlots(bufferSize, bufferSize);
     Sync::Semaphore filledSlots(0, bufferSize);
     s_freeSlots = &freeSlots;
@@ -1466,7 +1597,7 @@ static void testMutex(AddressSpace& space)
     group("Mutex (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::Mutex mutex;
     s_mutex = &mutex;
     s_mutexLogCount = 0;
@@ -1523,7 +1654,7 @@ static void testConditionVariable(AddressSpace& space)
     group("ConditionVariable (isolated)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     Sync::Mutex mutex;
     Sync::ConditionVariable condition;
     s_mutex = &mutex;
@@ -1566,8 +1697,9 @@ static void testIdleKeepsInterruptState(Scheduler& scheduler)
 {
     group("Scheduler idle keeps the interrupt state (kernel, real ticks)");
 
-    // A thread waiting under an InterruptGuard may make the scheduler idle in
-    // "sti; hlt"; it must get the CPU back with interrupts off, as it left it
+    // A thread waiting under an InterruptGuard may hand the CPU to the idle
+    // thread, which halts in "sti; hlt"; it must get the CPU back with
+    // interrupts off, as it left it (switchTask restores its rflags)
     IOPort::disableInterrupts();
     uint64_t t0 = scheduler.ticks();
     scheduler.sleep(3);
@@ -1699,7 +1831,7 @@ static void testKeyboard(AddressSpace& space)
     group("PS/2 keyboard and the character queue (fake interrupt controller)");
 
     FakeTickSource ticks;
-    Scheduler scheduler(ticks);
+    Scheduler scheduler(ticks, space);
     FakeInterruptController controller;
     Drivers::CharacterQueue queue;
     Drivers::PS2Keyboard keyboard(controller, queue);
@@ -3306,7 +3438,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(vfs.mount("ram", fat));
 
     FakeTickSource ticks;
-    Scheduler isolated(ticks);
+    Scheduler isolated(ticks, space);
     Drivers::CharacterQueue input;
     Process::Runtime runtime(pmm, space, vfs, input);
     Fs::BlockDeviceList disks;
@@ -3402,8 +3534,13 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     runCommand(shell, sink, "tasks");
     bool threads = sink.contains("*0") && sink.contains("kernel") && sink.contains("running")
         && sink.contains(sleeper->getName()) && sink.contains("sleeping") && sink.contains(" ms")
-        && sink.contains("2 task(s)");
+        && sink.contains("idle") && sink.contains("3 task(s)");
     bool ps = (runCommand(shell, sink, "ps"), sink.contains("sleeping"));
+
+    // CPU time: since boot, and over a window the shell sleeps through (the idle thread runs)
+    bool sched = (runCommand(shell, sink, "sched"), sink.contains("context switches") && sink.contains("idle") && sink.contains("cpu ms") && sink.contains("%"));
+    bool top = (runCommand(shell, sink, "top 20"), sink.contains("context switches") && sink.contains("idle") && sink.contains(sleeper->getName()));
+    bool topBad = (runCommand(shell, sink, "top 0"), sink.contains("ms is 1 .. 60000"));
     scheduler.removeTask(*sleeper);
     delete sleeper;
 
@@ -3500,6 +3637,7 @@ static void testShell(PhysicalMemoryManager& pmm, AddressSpace& space, Scheduler
     CHECK(in && badPort);
     CHECK(threads);
     CHECK(ps);
+    CHECK(sched && top && topBad);
     CHECK(help && helpGroup && helpCommand && helpUnknown);
     CHECK(disk && diskRead && diskSecond && diskBad);
     CHECK(lspci && lspciBars && lspciDetails && lspciBad);
@@ -3608,9 +3746,9 @@ static void testElf()
 
 // Start path, let it run until it exits, return its exit code (-1000 if it did not)
 static int64_t runProgram(Process::Runtime& runtime, const char* path, int* pid = nullptr, int argc = 0,
-    const char* const* argv = nullptr)
+    const char* const* argv = nullptr, uint64_t heapSize = Process::Runtime::defaultHeapSize)
 {
-    int started = argc ? runtime.spawn(path, argc, argv) : runtime.spawn(path);
+    int started = argc ? runtime.spawn(path, argc, argv, heapSize) : runtime.spawn(path);
     if (pid)
         *pid = started;
     if (started < 0)
@@ -3729,6 +3867,28 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
         && runtime.find(b)->exitCode == 0;
     runtime.reap();
 
+    // The heap: mapped right behind the data, told to the program in the
+    // auxv, divided up by its malloc; its size as spawn is given it
+    sink.clear();
+    const char* const mallocArgs[] = { "MALLOC.ELF", "100" };
+    int heapPid = runtime.spawn("/disk0/BIN/MALLOC.ELF", 2, mallocArgs, 4ULL << 20);
+    const Process::Process* heapProcess = heapPid > 0 ? runtime.find((uint32_t)heapPid) : nullptr;
+    uint64_t heapPhysical = 0;
+    bool heapMapped = heapProcess && heapProcess->heapBase == userBase + 2ULL * pageSize2Mb
+        && heapProcess->heapSize == 4ULL << 20
+        && heapProcess->space->translate((const void*)(heapProcess->heapBase + pageSize2Mb), heapPhysical) // the last of its 2 pages
+        && !heapProcess->space->translate((const void*)(heapProcess->heapBase + 2ULL * pageSize2Mb), heapPhysical);
+    int64_t heapRun = heapPid > 0 ? runtime.wait((uint32_t)heapPid) : -1000;
+    bool heapOutput = sink.contains("heap: 4096 KB at 0x0000008000400000") && sink.contains("list of 100 numbers")
+        && sink.contains("after free: 0 bytes in use") && sink.contains("largest block: 3 MB");
+
+    // No heap at all: malloc returns NULL, the list stays empty (exit code 1)
+    sink.clear();
+    int64_t noHeap = runProgram(runtime, "/disk0/BIN/MALLOC.ELF", nullptr, 2, mallocArgs, 0);
+    bool noHeapOutput = sink.contains("heap: 0 KB") && sink.contains("list of 0 numbers");
+    bool heapLimit = runtime.spawn("/disk0/BIN/MALLOC.ELF", 1, mallocArgs, Process::Runtime::maxHeapSize + 1) == -1
+        && sink.contains("at most 64 MB");
+
     Core::setConsole(*previous);
     CHECK(hello == 0 && helloOutput);
     CHECK(reaped);
@@ -3746,7 +3906,11 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(argumentLimits && sixteen == 16);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
-    // Address spaces, pages, kernel stacks: all given back
+    CHECK(heapMapped);
+    CHECK(heapRun == 0);
+    CHECK(heapOutput);
+    CHECK(noHeap == 1 && noHeapOutput && heapLimit);
+    // Address spaces, pages, kernel stacks, heaps: all given back
     CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
@@ -3793,12 +3957,12 @@ static void testCurrentTask(Scheduler& kernelScheduler, AddressSpace& space)
     {
         // A scheduler built here makes this flow its task 0 ...
         FakeTickSource ticks;
-        Scheduler isolated(ticks);
+        Scheduler isolated(ticks, space);
         CHECK(&Threading::currentScheduler() == &isolated);
 
         Thread* u = new Thread(recordCurrent); // ... so this thread goes there
         CHECK(u->getTCB().scheduler == &isolated);
-        CHECK(isolated.taskCount() == 2);
+        CHECK(isolated.taskCount() == 3);
         CHECK(waitForExit(isolated, *u, 1000));
         CHECK(s_seenScheduler == &isolated);
         delete u;
@@ -3833,6 +3997,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testPmmKernel(pmm);
     testVmm(pmm, space);
     testHeap();
+    testHeapFreeList();
     testInterrupts(scheduler);
     testUninitialized();
     testPitWithFakeController(scheduler);
@@ -3850,6 +4015,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testSleepRealTime(scheduler, space);
     testBlock(space);
     testRemove(space);
+    testCpuTime(space);
     testSchedulersAreIndependent(scheduler, space);
     testCurrentTask(scheduler, space);
     testAtomic();

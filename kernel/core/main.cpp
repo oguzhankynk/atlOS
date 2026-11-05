@@ -79,6 +79,8 @@ static Cxx::Uninitialized<Drivers::VGATextConsole> s_vga;
 static Cxx::Uninitialized<Drivers::SerialPort> s_serial;
 static Cxx::Uninitialized<Memory::PhysicalMemoryManager> s_pmm;
 static Cxx::Uninitialized<Memory::AddressSpace> s_kernelSpace;
+static Cxx::Uninitialized<Memory::AddressSpacePages> s_heapPages;
+static Cxx::Uninitialized<Memory::Heap> s_heap;
 static Cxx::Uninitialized<Firmware::AcpiTables> s_acpi;
 static Firmware::MadtInfo s_madt;
 static Cxx::Uninitialized<Firmware::SmbiosTables> s_smbios;
@@ -172,8 +174,10 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     Memory::populateFromMultiboot(pmm, mbInfo);
     Memory::AddressSpace& kernelSpace = s_kernelSpace.construct(pmm);
 
-    // kmalloc gets its pages from the kernel address space (liballoc hooks)
-    Memory::setHeapAddressSpace(kernelSpace);
+    // kmalloc and new: a heap on the kernel address space's 2 MB pages
+    Memory::AddressSpacePages& heapPages = s_heapPages.construct(kernelSpace);
+    Memory::Heap& heap = s_heap.construct(heapPages);
+    Memory::setKernelHeap(heap, kernelSpace);
 
     // Disks: ATA PIO polls, it needs neither interrupts nor the scheduler
     Fs::Vfs& vfs = s_vfs.construct();
@@ -220,7 +224,7 @@ extern "C" void kernelMain(uint64_t mbInfo, uint32_t mbMagic)
     IOPort::enableInterrupts();
 
     // The boot flow becomes the scheduler's first task
-    Threading::Scheduler& scheduler = s_scheduler.construct(ticks);
+    Threading::Scheduler& scheduler = s_scheduler.construct(ticks, kernelSpace);
 
     // The keyboard and COM1 arrive through one queue: the shell reads it,
     // and a program the shell runs (file descriptor 0)

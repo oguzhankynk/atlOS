@@ -56,3 +56,19 @@ jobs:
             build/default/shelltest.log
           if-no-files-found: ignore
           retention-days: 14
+
+  site:
+    name: Documentation site (broken links)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the site
+        run: |
+          pip install -r docs/requirements.txt
+          scripts/make-site.py

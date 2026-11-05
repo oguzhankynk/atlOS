@@ -4,8 +4,10 @@
  * @brief Cooperative round robin scheduler.
  *
  * Threads only change on yield/sleep/block/exit; the timer interrupt just
- * counts ticks and never switches threads. There is no global scheduler: a
- * thread reaches its scheduler through the reference its entry point gets.
+ * counts ticks (and charges each one to the running task) and never switches
+ * threads. Every scheduler has an idle thread that runs when no other task
+ * can. There is no global scheduler: a thread reaches its scheduler through
+ * the running task (currentScheduler()).
  *
  * Copyright © 2024 Oguzhan KAYNAK
  *
@@ -30,6 +32,10 @@ namespace Drivers {
 class TickSource;
 }
 
+namespace Memory {
+class AddressSpace;
+}
+
 namespace Threading {
 
 class Scheduler {
@@ -37,11 +43,15 @@ public:
     static constexpr uint32_t maxTasks = 16;
     static constexpr uint32_t tickPeriodNs = 1000000; // 1 ms
 
+    /// Queue index of the idle thread: after task 0, which is never removed either
+    static constexpr uint32_t idleIndex = 1;
+
     /**
-     * @brief The calling flow becomes task 0 (it has no Thread object) and the
-     * 1 ms tick is started on ticks. Panics if ticks can not do 1 ms.
+     * @brief The calling flow becomes task 0 (it has no Thread object), the
+     * idle thread task 1 (its stack comes from space), and the 1 ms tick is
+     * started on ticks. Panics if ticks can not do 1 ms.
      */
-    explicit Scheduler(Drivers::TickSource& ticks);
+    Scheduler(Drivers::TickSource& ticks, Memory::AddressSpace& space);
 
     /// The constructing flow stops being this scheduler's task 0: the task it was before is current again.
     ~Scheduler();
@@ -81,8 +91,11 @@ public:
     /// Milliseconds (ticks) since construction.
     uint64_t ticks() const { return m_ticks.load(); }
 
-    /// Number of queued tasks, including the flow that constructed the scheduler.
+    /// Number of queued tasks, including the flow that constructed the scheduler and the idle thread.
     uint32_t taskCount() const { return m_threadCount; }
+
+    /// Context switches since construction.
+    uint64_t switchCount() const { return m_switchCount; }
 
     /// TCB of queued task index (0 .. taskCount() - 1), for listings.
     const TCB& task(uint32_t index) const { return *m_readyQueue[index]; }
@@ -92,6 +105,8 @@ public:
 
 private:
     static void onTick(void* scheduler);
+
+    static void idleLoop();
 
     void wakeSleepers();
     void removeAt(uint32_t index);
@@ -106,8 +121,18 @@ private:
     uint32_t m_threadCount {};
     uint32_t m_currentThreadIndex {};
 
+    // Runs when no other task can, see idleLoop
+    Thread* m_idleThread {};
+
     // Incremented by the timer interrupt, read by threads
     Sync::Atomic<uint64_t> m_ticks;
+
+    // The task the timer interrupt charges its tick to. Set together with the
+    // queue index, but one aligned 8 byte store: the interrupt never sees it
+    // half changed. volatile: the interrupt reads it behind the compiler's back
+    TCB* volatile m_running {};
+
+    uint64_t m_switchCount {};
 
     // What currentTask() was before this scheduler took the constructing flow over
     TCB* m_previousTask {};

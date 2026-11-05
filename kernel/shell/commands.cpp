@@ -44,6 +44,7 @@
 #include <proc/process.hpp>
 #include <sched/scheduler.hpp>
 #include <shell/parser.hpp>
+#include <sync/interrupt_guard.hpp>
 
 namespace Shell {
 
@@ -329,8 +330,9 @@ static void cmdMem(Interpreter& shell, int, char**)
         pmm.freeBlockCount() * block / (1024ULL * 1024), pmm.freeBlockCount(),
         pmm.capacity() * block / (1024ULL * 1024 * 1024));
 
-    Memory::HeapStatistics heap = Memory::heapStatistics();
-    printf("heap:     %lu KB in use of %lu KB taken from the address space\n", heap.inUse / 1024, heap.reserved / 1024);
+    Memory::Heap::Statistics heap = Memory::kernelHeap().statistics();
+    printf("heap:     %lu KB in use of %lu KB taken from the address space (%u chunk(s), %u free block(s))\n",
+        heap.inUse / 1024, heap.reserved / 1024, heap.chunks, heap.freeBlocks);
 
     printf("kernel image:\n");
     printRange(".text", &Memory::_text_start, &Memory::_text_end);
@@ -1096,6 +1098,23 @@ static const char* stateName(Threading::ThreadState state)
     return "?";
 }
 
+// "HELLO.ELF:1" for a program's thread (name and pid), the TCB's name otherwise
+static void taskName(const Threading::TCB& tcb, char* out, size_t size)
+{
+    const auto* process = static_cast<const Process::Process*>(tcb.owner);
+    if (process)
+        snprintf(out, size, "%s:%u", tcb.name, process->pid);
+    else
+        snprintf(out, size, "%s", tcb.name ? tcb.name : "?");
+}
+
+// part of whole in percent, one decimal: " 12.5%"
+static void printShare(uint64_t part, uint64_t whole)
+{
+    uint64_t tenths = whole ? part * 1000 / whole : 0;
+    printf("%3lu.%lu%%", tenths / 10, tenths % 10);
+}
+
 static void cmdTasks(Interpreter& shell, int, char**)
 {
     // The shell's own scheduler: the one it runs on
@@ -1118,12 +1137,8 @@ static void cmdTasks(Interpreter& shell, int, char**)
 
         // The running task's rsp is live in the CPU; regs.rsp is from its last switch
         // A program's thread: rsp is in its kernel stack (it is in a system call or about to start)
-        const auto* process = static_cast<const Process::Process*>(tcb.owner);
         char name[24];
-        if (process)
-            snprintf(name, sizeof(name), "%s:%u", tcb.name, process->pid);
-        else
-            snprintf(name, sizeof(name), "%s", tcb.name ? tcb.name : "?");
+        taskName(tcb, name, sizeof(name));
 
         printf("  %c%-3u %-12s %-9s %-8s %-16s %016lx\n", i == scheduler.currentIndex() ? '*' : ' ', i, name,
             stateName(tcb.state), wake, stack,
@@ -1132,22 +1147,128 @@ static void cmdTasks(Interpreter& shell, int, char**)
     printf("  %u task(s), * = running (this shell)\n", scheduler.taskCount());
 }
 
+// A task's counters at one moment
+struct TaskSample {
+    const Threading::TCB* tcb;
+    uint64_t cpuTicks;
+    uint64_t runs;
+};
+
+// The scheduler's counters at one moment
+struct SchedulerSample {
+    uint64_t ticks;
+    uint64_t switches;
+    uint32_t count;
+    TaskSample tasks[Threading::Scheduler::maxTasks];
+
+    // A task's counters, zero if it was not queued then
+    TaskSample find(const Threading::TCB& tcb) const
+    {
+        for (uint32_t i = 0; i < count; i++) {
+            if (tasks[i].tcb == &tcb)
+                return tasks[i];
+        }
+        return { &tcb, 0, 0 };
+    }
+};
+
+// Interrupts are off while the counters are read: a tick in between would
+// count in the clock and not in a task (or the other way round)
+static void takeSample(const Threading::Scheduler& scheduler, SchedulerSample& sample)
+{
+    Sync::InterruptGuard guard;
+    sample.ticks = scheduler.ticks();
+    sample.switches = scheduler.switchCount();
+    sample.count = scheduler.taskCount();
+    for (uint32_t i = 0; i < sample.count; i++) {
+        const Threading::TCB& tcb = scheduler.task(i);
+        sample.tasks[i] = { &tcb, tcb.cpuTicks, tcb.runs };
+    }
+}
+
+// One line per task: what it got from "from" to "to" (from empty: since it was queued)
+static void printCpuTime(const Threading::Scheduler& scheduler, const SchedulerSample& from,
+    const SchedulerSample& to)
+{
+    uint64_t window = to.ticks - from.ticks;
+    printf("  %c%-3s %-12s %-9s %8s %6s %8s\n", ' ', "id", "name", "state", "cpu ms", "cpu", "runs");
+    for (uint32_t i = 0; i < to.count; i++) {
+        const TaskSample& now = to.tasks[i];
+        TaskSample before = from.find(*now.tcb);
+        uint64_t cpu = now.cpuTicks - before.cpuTicks;
+
+        char name[24];
+        taskName(*now.tcb, name, sizeof(name));
+        printf("  %c%-3u %-12s %-9s %8lu ", i == scheduler.currentIndex() ? '*' : ' ', i, name,
+            stateName(now.tcb->state), cpu);
+        printShare(cpu, window);
+        printf(" %8lu\n", now.runs - before.runs);
+    }
+}
+
+static void cmdSched(Interpreter&, int, char**)
+{
+    Threading::Scheduler& scheduler = Threading::currentScheduler();
+    SchedulerSample boot {};
+    SchedulerSample now;
+    takeSample(scheduler, now);
+
+    printf("up %lu.%03lu s, %lu context switches\n", now.ticks / 1000, now.ticks % 1000, now.switches);
+    printCpuTime(scheduler, boot, now);
+    printf("  cpu: the 1 ms ticks that arrived while the task ran\n");
+}
+
+static void cmdTop(Interpreter&, int argc, char** argv)
+{
+    uint64_t ms = 1000;
+    if (!usage("top", argc, 1, 2))
+        return;
+    if (argc == 2 && (!parseNumber(argv[1], ms) || ms == 0 || ms > 60000)) {
+        printf("top: ms is 1 .. 60000\n");
+        return;
+    }
+
+    // The shell sleeps through the window: the others (at least the idle thread) run
+    Threading::Scheduler& scheduler = Threading::currentScheduler();
+    SchedulerSample before;
+    SchedulerSample after;
+    takeSample(scheduler, before);
+    Threading::sleep(ms);
+    takeSample(scheduler, after);
+
+    printf("%lu ms, %lu context switches\n", after.ticks - before.ticks, after.switches - before.switches);
+    printCpuTime(scheduler, before, after);
+}
+
 static void cmdRun(Interpreter& shell, int argc, char** argv)
 {
+    // "run -heap 8 P.ELF ...": an 8 MB heap instead of the default
+    uint64_t heapSize = Process::Runtime::defaultHeapSize;
+    int first = 1; // the program's word
+    if (argc >= 2 && !strcmp(argv[1], "-heap")) {
+        uint64_t megabytes;
+        if (argc < 4 || !parseNumber(argv[2], megabytes) || megabytes > Process::Runtime::maxHeapSize >> 20) {
+            printf("run: -heap takes 0 .. %lu (MB), then the program\n", Process::Runtime::maxHeapSize >> 20);
+            return;
+        }
+        heapSize = megabytes << 20;
+        first = 3;
+    }
+
     char path[Interpreter::maxPath];
-    if (!usage("run", argc, 2, Interpreter::maxWords) || !resolve(shell, argv[1], path))
+    if (!usage("run", argc - first + 1, 2, Interpreter::maxWords) || !resolve(shell, argv[first], path))
         return;
 
     // The program's argv: its path, then the words after it ("run P.ELF a b")
     const char* arguments[Interpreter::maxWords];
     arguments[0] = path;
-    for (int i = 2; i < argc; i++)
-        arguments[i - 1] = argv[i];
+    for (int i = first + 1; i < argc; i++)
+        arguments[i - first] = argv[i];
 
     // The program runs on its own thread; the shell sleeps until it exits, so
     // the keys typed meanwhile go to the program (Ctrl+C ends it)
     Process::Runtime& runtime = shell.context().runtime;
-    int pid = runtime.spawn(path, argc - 1, arguments);
+    int pid = runtime.spawn(path, argc - first, arguments, heapSize);
     if (pid > 0)
         runtime.wait((uint32_t)pid);
 }
@@ -1530,7 +1651,9 @@ static const Command s_commands[] = {
     { "memory", "vmmap", "vmmap", "the page table mappings", cmdVmmap },
     { "tasks", "tasks", "tasks", "the scheduler's tasks: name, state, stack", cmdTasks },
     { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
-    { "tasks", "run", "run program.elf [args]", "run a user program (ring 3) until it exits", cmdRun },
+    { "tasks", "sched", "sched", "CPU time of each task and context switches since boot", cmdSched },
+    { "tasks", "top", "top [ms]", "CPU time of each task during the next ms (default 1000)", cmdTop },
+    { "tasks", "run", "run [-heap MB] program.elf [args]", "run a user program (ring 3) until it exits; heap 2 MB by default", cmdRun },
     { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
     { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
     { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },

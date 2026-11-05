@@ -1,7 +1,7 @@
 /*
- * The atlOS system calls for user programs: "int $0x80" with the number in
- * rax, arguments in rdi, rsi, rdx, the result in rax (negative: an error).
- * See kernel/proc/process.hpp.
+ * The atlOS system calls for user programs, and the heap (malloc, free). A
+ * system call is "int $0x80" with the number in rax, arguments in rdi, rsi,
+ * rdx, the result in rax (negative: an error). See kernel/proc/process.hpp.
  */
 #pragma once
 
@@ -38,6 +38,17 @@ enum {
     O_CREAT = 0x40,
     O_TRUNC = 0x200,
     O_APPEND = 0x400,
+};
+
+/*
+ * The auxiliary vector: what the kernel tells the program at its start
+ * (kernel/proc/process.hpp). The start code reads it before main.
+ */
+enum {
+    AT_NULL = 0,
+    AT_PAGESZ = 6, /* bytes per page: 2 MB */
+    AT_ATLOS_HEAP_BASE = 0x1000, /* where the heap starts */
+    AT_ATLOS_HEAP_SIZE = 0x1001, /* its size: "run -heap MB", 2 MB by default */
 };
 
 /* The console's file descriptors; open hands out 3 and up */
@@ -153,3 +164,25 @@ static inline void print_number(unsigned long value)
     } while (value);
     write(STDOUT, text + length, sizeof(text) - length);
 }
+
+/*
+ * The heap (user/lib/malloc.cpp): the region the kernel mapped for the
+ * program, divided up by the same free list the kernel uses for kmalloc.
+ * Blocks are 16 byte aligned; malloc returns NULL when the heap is full.
+ * free of a pointer malloc did not return ends the program (exit code 134).
+ */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void* malloc(unsigned long size);
+void* calloc(unsigned long count, unsigned long size);
+void* realloc(void* block, unsigned long size);
+void free(void* block);
+
+/* Where the heap is, how large, and how many bytes malloc has handed out */
+void heap_info(unsigned long* base, unsigned long* size, unsigned long* in_use);
+
+#ifdef __cplusplus
+}
+#endif

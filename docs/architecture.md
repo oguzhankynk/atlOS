@@ -20,27 +20,28 @@
    4. checks the multiboot2 magic
    5. constructs the `Memory::PhysicalMemoryManager`, fills it from the
       multiboot memory map (`Memory::populateFromMultiboot`, reserves the
-      kernel image), constructs the `Memory::AddressSpace` on top and binds it
-      to the heap (see [memory.md](memory.md))
+      kernel image), constructs the `Memory::AddressSpace` on top, and the
+      kernel's `Memory::Heap` on its pages, bound to `kmalloc` and `new`
+      (see [kernel/mm/README.md](../kernel/mm/README.md))
    6. constructs the `Fs::Vfs` and mounts the FAT16 partitions of the ATA
-      disks (`Fs::mountAtaDisks`, see `kernel/fs/README.md`)
+      disks (`Fs::mountAtaDisks`, see [`kernel/fs/README.md`](../kernel/fs/README.md))
    7. finds the ACPI tables (`Firmware::findRsdp`, `Firmware::AcpiTables`,
-      see `kernel/firmware/acpi/README.md`)
+      see [`kernel/firmware/acpi/README.md`](../kernel/firmware/acpi/README.md))
    8. constructs the `Drivers::PIC` (8259 remapped to vectors 0x20/0x28, all
       lines masked); if the MADT describes an I/O APIC, the
       `Drivers::LocalApic`, the `Drivers::IoApic`s and the
       `Drivers::ApicInterruptController` on top (see
-      `kernel/drivers/apic/README.md`). The APIC, or the PIC without it, is
+      [`kernel/drivers/apic/README.md`](../kernel/drivers/apic/README.md)). The APIC, or the PIC without it, is
       bound to the ISR dispatcher
    9. the tick: the `Drivers::ApicTimer`, measured against the PIT, or the
       `Drivers::PIT` without the APIC; enables interrupts
    10. constructs the `Threading::Scheduler` on that tick (the boot flow
-       becomes task 0, 1 ms tick)
+       becomes task 0, the idle thread task 1, 1 ms tick)
    11. self tests (`ATLOS_SELFTEST` builds), the crash test (`ATLOS_CRASHTEST`)
        or the shell (after constructing the `Process::Runtime` for user
        programs, bound with `Process::setRuntime`): a `CharacterQueue` fed by
        the keyboard and COM1, and
-       `Shell::Interpreter` running in the boot flow (see `kernel/shell/README.md`)
+       `Shell::Interpreter` running in the boot flow (see [`kernel/shell/README.md`](../kernel/shell/README.md))
 
    `kernelMain` is the composition root: driver objects live in
    `Cxx::Uninitialized<T>` storage, are constructed there explicitly in

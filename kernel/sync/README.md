@@ -66,10 +66,9 @@ if (buffer.isEmpty())
 ```
 
 Interrupts do not stay off while the thread sleeps: the context switch loads
-the next thread's `RFLAGS`, and when nothing can run the scheduler idles in
-`sti; hlt`. When this thread runs again it gets its own `RFLAGS` (IF = 0)
-back, so the code after `wait()` is still inside the guard. The scheduler
-also turns interrupts off again after idling when the caller had them off
+the next thread's `RFLAGS`, and when nothing can run the idle thread halts
+in `sti; hlt`. When this thread runs again it gets its own `RFLAGS` (IF = 0)
+back, so the code after `wait()` is still inside the guard
 (*Scheduler idle keeps the interrupt state* tests this).
 
 ## How could it be designed?
@@ -89,7 +88,7 @@ also turns interrupts off again after idling when the caller had them off
   (`Threading::currentTask()`) on its own scheduler; `wakeOne()` makes a
   waiter runnable on *its* scheduler (`tcb->scheduler`). So one object works
   across schedulers, and can be a global or a member of anything (see
-  `kernel/sched/README.md`, *The current task*).
+  [`kernel/sched/README.md`](../sched/README.md), *The current task*).
 - `Atomic<T>` (`atomic.hpp`): `load`, `store`, `exchange`, `compareExchange`,
   `fetchAdd`, `fetchSub` over the `__atomic` builtins, always sequentially
   consistent. 1 to 8 bytes (16 byte atomics need `cmpxchg16b`, not needed).

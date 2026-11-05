@@ -32,7 +32,21 @@
             "type": "shell",
             "command": "./scripts/build.sh selftest",
             "group": "test",
-            "problemMatcher": []
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Crash test",
+            "type": "shell",
+            "command": "./scripts/build.sh crashtest",
+            "group": "test",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Shell test",
+            "type": "shell",
+            "command": "./scripts/build.sh shelltest",
+            "group": "test",
+            "problemMatcher": "$gcc"
         },
         {
             "label": "Run QEMU Debug",
@@ -42,10 +56,28 @@
             "problemMatcher": []
         },
         {
-            "label": "Create Disk Image (FAT16)",
+            "label": "Create Disk Image",
             "type": "shell",
-            "command": "./tools/disk/create_disk_image.sh 16",
+            "command": "cmake --preset default > /dev/null && cmake --build --preset default --target disk-image",
             "problemMatcher": []
+        },
+        {
+            "label": "Docs",
+            "type": "shell",
+            "command": "./scripts/build.sh docs",
+            "problemMatcher": []
+        },
+        {
+            "label": "Format",
+            "type": "shell",
+            "command": "./scripts/build.sh format",
+            "problemMatcher": []
+        },
+        {
+            "label": "Tidy",
+            "type": "shell",
+            "command": "./scripts/build.sh tidy",
+            "problemMatcher": "$gcc"
         }
     ]
 }

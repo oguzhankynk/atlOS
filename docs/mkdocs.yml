@@ -1,0 +1,62 @@
+# The documentation site, built by scripts/make-site.py (it fills docs_dir).
+site_name: atlOS
+site_url: https://oguzhankynk.github.io/atlOS/
+repo_url: https://github.com/oguzhankynk/atlOS
+edit_uri: ""
+docs_dir: ../build/site/src
+site_dir: ../build/site/html
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.footer
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Dark
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Light
+
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: README.md
+  - Tutorial:
+      - Overview: docs/tutorial.md
+      - 1. Boot and long mode: docs/architecture.md
+      - 2. GDT and TSS: kernel/arch/x86_64/gdt/README.md
+      - 3. Interrupts and exceptions: kernel/arch/x86_64/idt/README.md
+      - 4. Drivers: kernel/drivers/README.md
+      - 5. ACPI: kernel/firmware/acpi/README.md
+      - 5. The APIC: kernel/drivers/apic/README.md
+      - 6. Memory: kernel/mm/README.md
+      - 6. The heap: common/heap/README.md
+      - 7. Threads and the scheduler: kernel/sched/README.md
+      - 8. Synchronization: kernel/sync/README.md
+      - 9. File systems: kernel/fs/README.md
+      - 10. User programs (kernel): kernel/proc/README.md
+      - 10. Writing a user program: user/README.md
+      - 11. The kernel shell: kernel/shell/README.md
+      - 12. PCI and PCIe: kernel/drivers/pci/README.md
+      - 12. SMBIOS: kernel/firmware/smbios/README.md
+  - Project:
+      - Building and running: docs/building.md
+      - Test disk: tools/disk/README.md
+      - Self tests: docs/testing.md
+      - Code style and design: docs/style.md
+      - Versioning and releases: docs/releasing.md
+      - Changelog: CHANGELOG.md
+      - Third party code: THIRD_PARTY.md

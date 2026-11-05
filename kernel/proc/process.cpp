@@ -58,7 +58,7 @@ Runtime::Runtime(Memory::PhysicalMemoryManager& pmm, Memory::AddressSpace& kerne
 // Loading
 // ------------------------------------------------------------
 
-bool Runtime::load(const char* path, Process& process)
+bool Runtime::load(const char* path, Process& process, uint64_t heapSize)
 {
     Fs::FileInfo info;
     if (!m_vfs.stat(path, info) || info.isDirectory) {
@@ -88,10 +88,13 @@ bool Runtime::load(const char* path, Process& process)
     // Each segment: its 2 MB pages (zeroed), then its bytes from the file. The
     // address space is not active: the bytes go in through the physmap
     AddressSpace& space = *process.space;
+    uint64_t imageEnd = 0; // behind the last segment's last page
     for (uint32_t i = 0; i < image.segmentCount; i++) {
         const ElfSegment& segment = image.segments[i];
         uint64_t first = segment.virtAddr & ~(uint64_t)(Memory::pageSize2Mb - 1);
         uint64_t last = (segment.virtAddr + segment.memSize - 1) & ~(uint64_t)(Memory::pageSize2Mb - 1);
+        if (last + Memory::pageSize2Mb > imageEnd)
+            imageEnd = last + Memory::pageSize2Mb;
         uint64_t flags = AddressSpace::User | (segment.writable ? (uint64_t)AddressSpace::Writable : 0);
         if (!space.allocateAt(first, (last - first) / Memory::pageSize2Mb + 1, flags)) {
             printf("%s: out of memory\n", path);
@@ -118,6 +121,16 @@ bool Runtime::load(const char* path, Process& process)
         return false;
     }
 
+    // The heap: zeroed, writable pages right behind the image. The program's
+    // malloc divides them up; the kernel only says where they are (auxv)
+    uint64_t heapPages = (heapSize + Memory::pageSize2Mb - 1) / Memory::pageSize2Mb;
+    process.heapBase = imageEnd;
+    process.heapSize = heapPages * Memory::pageSize2Mb;
+    if (heapPages && !space.allocateAt(process.heapBase, heapPages, AddressSpace::User | AddressSpace::Writable)) {
+        printf("%s: out of memory for a %lu MB heap\n", path, process.heapSize >> 20);
+        return false;
+    }
+
     process.entry = image.entry;
     return true;
 }
@@ -126,7 +139,7 @@ bool Runtime::load(const char* path, Process& process)
 //
 //   stackTop  ->  the strings "prog\0" "arg\0" ...
 //                 (padding: rsp must be 16 byte aligned)
-//                 auxv: AT_NULL, 0 (an empty list)
+//                 auxv: (AT_PAGESZ, 2 MB) (heap base) (heap size) (AT_NULL, 0)
 //                 envp: NULL (no environment)
 //                 argv[argc]: NULL
 //                 argv[0] .. argv[argc - 1]: pointers to the strings
@@ -152,7 +165,8 @@ bool Runtime::pushArguments(Process& process, int argc, const char* const* argv)
     auto* page = static_cast<uint8_t*>(Memory::physToVirt(physical));
     auto at = [&](uint64_t address) { return page + (address - stackPage); };
 
-    uint64_t words = 1 + (uint64_t)argc + 1 + 1 + 2; // argc, argv[], NULL, envp NULL, AT_NULL pair
+    constexpr uint64_t auxvEntries = 4;
+    uint64_t words = 1 + (uint64_t)argc + 1 + 1 + 2 * auxvEntries; // argc, argv[], NULL, envp NULL, auxv
     uint64_t strings = stackTop - stringBytes;
     uint64_t rsp = (strings - words * 8) & ~(uint64_t)15;
 
@@ -167,16 +181,31 @@ bool Runtime::pushArguments(Process& process, int argc, const char* const* argv)
     }
     stack[1 + argc] = 0; // argv[argc]
     stack[2 + argc] = 0; // envp[0]
-    stack[3 + argc] = 0; // auxv: AT_NULL ...
-    stack[4 + argc] = 0; // ... and its value
+
+    const uint64_t auxv[2 * auxvEntries] = {
+        AuxPageSize,
+        Memory::pageSize2Mb, //
+        AuxHeapBase,
+        process.heapBase, //
+        AuxHeapSize,
+        process.heapSize, //
+        AuxNull,
+        0,
+    };
+    for (uint64_t i = 0; i < 2 * auxvEntries; i++)
+        stack[3 + argc + i] = auxv[i];
 
     process.stackPointer = rsp;
     return true;
 }
 
-int Runtime::spawn(const char* path, int argc, const char* const* argv)
+int Runtime::spawn(const char* path, int argc, const char* const* argv, uint64_t heapSize)
 {
     reap();
+    if (heapSize > maxHeapSize) {
+        printf("%s: the heap can be at most %lu MB\n", path, maxHeapSize >> 20);
+        return -1;
+    }
     if (m_count == maxProcesses) {
         printf("%s: already %u programs running\n", path, maxProcesses);
         return -1;
@@ -193,7 +222,7 @@ int Runtime::spawn(const char* path, int argc, const char* const* argv)
     strncpy(process->name, name, sizeof(process->name) - 1);
     process->space = new AddressSpace(m_pmm, m_kernelSpace);
 
-    if (!load(path, *process) || !pushArguments(*process, argc, argv)) {
+    if (!load(path, *process, heapSize) || !pushArguments(*process, argc, argv)) {
         delete process->space;
         delete process;
         return -1;

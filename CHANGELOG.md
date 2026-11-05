@@ -7,6 +7,44 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-06
+
+### Added
+
+- The idle thread: every scheduler queues one as task 1; it runs when no
+  other task can and halts in `sti; hlt` (the scheduler no longer halts on
+  the caller's stack). `Scheduler(TickSource&, AddressSpace&)`
+- CPU time: each tick is charged to the running task (`TCB::cpuTicks`),
+  `TCB::runs` and `Scheduler::switchCount()` count switches; the shell's
+  `sched` (since boot) and `top [ms]` (over a window)
+- A heap of atlOS's own (`common/heap/`): `Memory::Heap`, a free list sorted
+  by address, first fit, split on allocate and merged with free neighbours
+  on free; whole chunks go back to their `Memory::PageSource`. Refuses
+  pointers it did not hand out and double frees
+- User programs get a heap: `Runtime::spawn(..., heapSize)` maps it behind
+  the data (2 MB by default, at most 64 MB; the shell's `run -heap MB`), the
+  auxiliary vector says where (`AT_PAGESZ`, `AT_ATLOS_HEAP_BASE`,
+  `AT_ATLOS_HEAP_SIZE`), `atlos_start` sets it up before `main`; `malloc`,
+  `calloc`, `realloc`, `free` and `heap_info` in `atlos.h`; `MALLOC.ELF`
+- A tutorial (`docs/tutorial.md`): the subsystem READMEs in boot order, with a
+  short introduction (CPU, x86, x86_64, OS)
+- Documentation site (MkDocs): `scripts/build.sh site`, built in CI and
+  published to GitHub Pages with every release
+
+### Changed
+
+- `docs/memory.md` and `docs/scheduler.md` merged into `kernel/mm/README.md`
+  and `kernel/sched/README.md`
+- The kernel heap is a `Memory::Heap` on `Memory::AddressSpacePages`, bound
+  with `Memory::setKernelHeap` (was `setHeapAddressSpace`); `kfree` of a bad
+  pointer panics; `mem` shows the chunks and free blocks
+- User programs start in `atlos_start` (`user/lib/start.cpp`), not in `main`
+  directly
+
+### Removed
+
+- liballoc 1.1 (the kernel heap is atlOS's own now)
+
 ## [0.5.0] - 2026-10-22
 
 ### Added
@@ -292,7 +330,8 @@ First release.
 - libc was built with SSE although SSE is never enabled
 - serial writes did not wait for the transmitter between bytes
 
-[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/oguzhankynk/atlOS/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/oguzhankynk/atlOS/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/oguzhankynk/atlOS/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oguzhankynk/atlOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/oguzhankynk/atlOS/compare/v0.2.0...v0.3.0

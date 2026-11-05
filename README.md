@@ -21,8 +21,8 @@ Working:
 - ACPI tables (RSDP, RSDT/XSDT, MADT); interrupts through the local APIC and the I/O APIC, a 1 ms tick from the APIC timer measured against the PIT; the 8259 PIC and the PIT on a machine without ACPI
 - Physical memory manager (2 MB blocks + 4 KB frames for page tables)
 - Virtual memory with 2 MB pages, a physmap of all physical memory, and separate address spaces sharing the kernel half
-- Kernel heap (`kmalloc`/`kfree`, based on liballoc 1.1)
-- Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`
+- A heap (free list, first fit, merged on free) shared by the kernel (`kmalloc`, `new`) and user programs (`malloc`)
+- Cooperative round robin scheduler: threads, `yield`, `sleep`, `block`/`unblock`, an idle thread, CPU time per task (`sched`, `top`)
 - Synchronization: atomics, wait queues, semaphores, mutexes, condition variables
 - PS/2 keyboard (US layout) and serial input
 - A kernel shell (keyboard or serial terminal) that reaches everything: files, `md`/`mw` memory dump and write, `vmmap`, `pt`, `tasks`, `run`, `cr`, `rdmsr`/`wrmsr`, `in`/`out`, `gdt`/`idt`, `irq`, `int`, `disk read`, `lspci`, `acpi`, `apic`, `smbios`, ... (`help` lists them by group)
@@ -69,7 +69,7 @@ kernel/
   arch/x86_64/   boot, crt, cpu (context switch, CPUID), gdt, idt (+ISR stubs), io ports, mmu
   core/          kernel entry (main.cpp), panic, logger, banner
   cxx/           C++ runtime support (global constructors, new/delete)
-  mm/            pmm, vmm, heap (liballoc)
+  mm/            pmm, vmm, the kernel heap's pages
   sched/         scheduler, threads
   shell/         the kernel shell: line editor, parser, commands
   proc/          user programs: ELF loading, ring 3, system calls
@@ -79,6 +79,7 @@ kernel/
   firmware/      acpi/ (the tables, the MADT), smbios/ (the 2.x structures)
   lib/           small header-only helpers
   tests/         in-kernel self tests
+common/heap/     the heap, built into the kernel and into every user program
 libc/            freestanding C library (libk) used by the kernel
 cmake/           cross toolchain file
 user/            user programs (ring 3) for the test disk, see user/README.md
@@ -87,22 +88,24 @@ tools/           grub.cfg, files of the test disk
 docs/            documentation
 ```
 
-Headers live next to their sources; includes are relative to `kernel/`, for
-example `#include <mm/vmm.hpp>`.
+Headers live next to their sources; includes are relative to `kernel/` or
+`common/`, for example `#include <mm/vmm.hpp>`, `#include <heap/heap.hpp>`.
 
 The subsystem directories have a README that explains the concept, the usual ways to design it, what atlOS chose and why,
 with diagrams and references:
-[mm](kernel/mm/README.md), [sched](kernel/sched/README.md),
+[mm](kernel/mm/README.md), [heap](common/heap/README.md), [sched](kernel/sched/README.md),
 [drivers](kernel/drivers/README.md), [interrupts](kernel/arch/x86_64/idt/README.md),
 [ACPI](kernel/firmware/acpi/README.md), [APIC](kernel/drivers/apic/README.md),
 [SMBIOS](kernel/firmware/smbios/README.md).
 
 ## Documentation
 
+The **[tutorial](docs/tutorial.md)** walks through the kernel in boot order;
+each chapter is the README next to the subsystem's code. Online, for the
+latest release: <https://oguzhankynk.github.io/atlOS/>.
+
 - [Building and running](docs/building.md)
 - [Architecture and boot flow](docs/architecture.md)
-- [Memory management](docs/memory.md)
-- [Scheduler and threads](docs/scheduler.md)
 - [Self tests](docs/testing.md)
 - [Code style and design](docs/style.md)
 - [Versioning and releases](docs/releasing.md), [changelog](CHANGELOG.md)

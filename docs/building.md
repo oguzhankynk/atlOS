@@ -11,6 +11,7 @@
 | `qemu-system-x86_64` | 6.2 | run, debug, self tests |
 | `sfdisk`, `mkfs.fat`, mtools | util-linux 2.37, dosfstools 4.2, mtools 4.0 | the test disk (`disk-image`), no root needed; optional: without them `run` and `debug` boot without a disk, the disk self tests are skipped and `shelltest` is not available |
 | Doxygen | optional | API docs |
+| Python 3, MkDocs (`pip install -r docs/requirements.txt`) | MkDocs 1.6.1, Material 9.7.7 | optional: the documentation site |
 | clang-format, clang-tidy | 14 (as in CI), optional | `format`, `format-check`, `tidy`; other versions may format differently |
 
 On Debian/Ubuntu:
@@ -51,6 +52,7 @@ parallel jobs. Background: [OSDev Wiki: GCC Cross-Compiler](https://wiki.osdev.o
 | `scripts/build.sh crashtest` | build a kernel that faults on purpose in `build/crashtest/` and check its report |
 | `scripts/build.sh shelltest` | boot the normal kernel and drive its shell over the serial port, see [testing.md](testing.md) |
 | `scripts/build.sh docs` | Doxygen API docs into `build/docs/html` |
+| `scripts/build.sh site` | the documentation site into `build/site/html` (`scripts/make-site.py`); a broken link fails it |
 | `scripts/build.sh format` / `format-check` | clang-format the sources / check them, see [style.md](style.md) |
 | `scripts/build.sh tidy` | clang-tidy on the kernel sources |
 | `scripts/build.sh clean` | remove `build/` (all presets) |
@@ -112,11 +114,14 @@ configuration (`.vscode/launch.json`).
 
 ## FAT test disk
 
-`tools/disk/create_disk_image.sh [12|16]` creates `tools/disk/disk.img`, a
-128 MB image with four FAT partitions, and `tools/disk/copy.sh` copies
-`MY_HELLO.txt` onto the first one. Both use `sudo` and `/dev/loop0`. The disk
-drivers are not wired up yet, so the image is not attached by the run targets.
-Details, requirements and how to attach it to QEMU by hand:
+`cmake --build --preset default --target disk-image` runs
+`scripts/make-disk-image.sh`, which creates `build/default/disk.img`: a 32 MB
+raw image with an MBR and one FAT16 partition, holding `tools/disk/files/`, a
+generated `BIG.TXT` and the user programs in `/BIN`. It needs no root
+(`sfdisk`, `mkfs.fat` and mtools). Every preset builds its own,
+`build/<preset>/disk.img`. `run`, `debug`, `shelltest` and the self tests
+attach it as the primary ATA master; the kernel mounts it as `/disk0`.
+Contents and how to look inside:
 [`tools/disk/README.md`](../tools/disk/README.md).
 
 ## User programs

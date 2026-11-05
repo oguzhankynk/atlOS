@@ -68,7 +68,7 @@ flowchart LR
 - **`rsp0`** is the kernel stack for interrupts and system calls from ring 3.
   The scheduler sets it to the top of the next thread's kernel stack on every
   switch (`GDT::setKernelStack`), so a user program's thread lands on its own
-  stack (`kernel/proc/README.md`).
+  stack ([`kernel/proc/README.md`](../../../proc/README.md)).
 - `GDT::init()` runs before `IDT::init()` in `kernelMain`.
 
 ### Deliberately not done

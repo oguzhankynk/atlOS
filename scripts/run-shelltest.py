@@ -218,7 +218,13 @@ def main():
             check("msr 0xc0000080: 0x" in out, "rdmsr", out)
 
             out = serial.command("tasks\r")
-            check("kernel" in out and "running" in out and "1 task(s)" in out, "tasks", out)
+            check("kernel" in out and "running" in out and "idle" in out and "2 task(s)" in out, "tasks", out)
+            # The shell sleeps through top's window: the idle thread gets nearly all of it
+            out = serial.command("top 200\r")
+            idle = [line for line in out.split("\n") if " idle " in line]
+            check("context switches" in out and idle and "%" in idle[0], "top: the idle thread", out)
+            out = serial.command("sched\r")
+            check("context switches" in out and "idle" in out and "cpu ms" in out, "sched", out)
             out = serial.command("uptime\r")
             check("up " in out, "uptime", out)
             out = serial.command("mount\r")
@@ -233,6 +239,15 @@ def main():
             check("/disk0\n" in out, "the shell goes on after the fault", out)
             out = serial.command("run /disk0/BIN/COUNT.ELF\r")
             check("1 2 3 4 5\n" in out and "exited with 15]" in out, "the example program of user/README.md", out)
+            # The heap: 2 MB unless run says otherwise; the largest block is a little less
+            out = serial.command("run /disk0/BIN/MALLOC.ELF\r")
+            check("heap: 2048 KB" in out and "sum 500500" in out and "after free: 0 bytes" in out
+                  and "largest block: 1 MB" in out and "exited with 0]" in out, "malloc: the default heap", out)
+            out = serial.command("run -heap 8 /disk0/BIN/MALLOC.ELF 100000\r")
+            check("heap: 8192 KB" in out and "list of 100000 numbers" in out and "largest block: 7 MB" in out
+                  and "exited with 0]" in out, "malloc: run -heap 8", out)
+            out = serial.command("run -heap 65 /disk0/BIN/MALLOC.ELF\r")
+            check("-heap takes 0 .. 64" in out, "run -heap: at most 64 MB", out)
 
             # read(0): the keys go to the program while it runs; DEL is its Backspace
             serial.sock.sendall(b"run /disk0/BIN/ASK.ELF\r")

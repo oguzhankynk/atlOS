@@ -5,9 +5,9 @@ object can use": a physical memory manager, a virtual memory manager and a
 heap. Everything else in the kernel allocates through them.
 
 ```
-kmalloc / kfree / new / delete      heap.hpp, liballoc/   small objects, any size
-AddressSpace::allocatePages         vmm.cpp               2 MB virtual pages
-PhysicalMemoryManager               pmm.cpp               2 MB physical blocks, 4 KB frames
+kmalloc / kfree / new / delete      heap.cpp, common/heap/   small objects, any size
+AddressSpace::allocatePages         vmm.cpp                  2 MB virtual pages
+PhysicalMemoryManager               pmm.cpp                  2 MB physical blocks, 4 KB frames
 ```
 
 ## What is it for?
@@ -48,12 +48,9 @@ The **heap** cuts pages into small allocations.
 
 ### Heap
 
-| Approach | Plus | Minus |
-|---|---|---|
-| Bump allocator | 10 lines | never frees |
-| Free list (first fit) | simple, frees | fragmentation, O(n) |
-| **Third party allocator (liballoc)** | done, tested, frees and merges | someone else's code |
-| Slab allocator | fast for fixed sizes | more code (Linux, Solaris) |
+How a heap cuts pages into blocks (free list, size classes, buddy, slab) has
+a README of its own: [common/heap/README.md](../../common/heap/README.md).
+The kernel and user programs share that code.
 
 ## How atlOS does it
 
@@ -63,13 +60,20 @@ bit per 2 MB block; 16 KB of bitmap covers 256 GB. Allocation is first fit:
 scan for `n` zero bits in a row. The bitmap storage is a constructor argument,
 so the self tests build managers over a fake 128 MB "machine".
 
+- Everything starts in use: `addRegion(base, size)` frees the whole, aligned
+  blocks inside a range, `reserveRegion(base, size)` marks every block it
+  touches as used again.
+
 - `Memory::populateFromMultiboot` (`memory.cpp`) frees the `AVAILABLE`
   regions, then reserves `0 .. kernel_physical_end` (the firmware reports the
   kernel's memory as available too; without the reservation the PMM would
   hand out the kernel's own pages).
 - Block 0 is never handed out, its address would read as `nullptr`.
+- `freeBlocks` rejects unaligned addresses and double frees;
+  `freeBlockCount()` lets the self tests detect leaks.
 - Page tables are 4 KB, a whole 2 MB block for each would waste 2044 KB. So
-  the PMM also hands out **4 KB frames**, cut from 2 MB blocks ("frame pools").
+  the PMM also hands out **4 KB frames**, cut from 2 MB blocks ("frame pools",
+  up to 16; a pool that becomes empty gives its block back).
 
 **VMM: 2 MB pages + a physmap** (`vmm.cpp`). With 2 MB pages there are only
 three table levels (PML4 → PDPT → PD) and far fewer tables to manage; user
@@ -95,7 +99,8 @@ PML4[511]      kernel image, heap, thread stacks (-2 GB)       shared
 A new address space copies the kernel's entries 0 and 256..511, so they point
 at the same PDPTs: a kernel page mapped later shows up everywhere. That is
 also why the kernel half can not get a new PDPT later (it would exist in one
-address space only); the two it needs are there from boot.
+address space only; a mapping that needs one panics); the two it needs are
+there from boot.
 
 `Memory::AddressSpace` holds just the physical address of its PML4:
 
@@ -106,7 +111,8 @@ address space only); the two it needs are there from boot.
   kernel image and backs each with a PMM block; `mapPhysical` maps a given
   physical page without the PMM; `mapDevice` maps the page around a device's
   registers at a free address, uncached (cache disable and write through
-  bits), for MMIO such as the APICs.
+  bits), for MMIO such as the APICs: the physmap is cached, and a device must
+  see every read and write.
 - User pages: `allocateAt(virt, n, flags)` maps zeroed blocks in the user
   range, `Writable` and `User` (ring 3) as asked; the tables above get the
   user bit, the PD entry decides. `isUserAccessible(virt, size, write)` is
@@ -131,11 +137,16 @@ PML4. The physmap costs 256 KB of tables and makes every table, of every
 address space, one addition away; atlOS needs exactly that for user
 programs.
 
-**Heap: liballoc 1.1.** Writing a good general allocator is a project of its
-own; liballoc is small, public domain and needs only four hooks
-(`liballoc_hooks.cpp`). Those hooks are C functions without an object, so
-`kernelMain` binds the kernel `AddressSpace` once
-(`Memory::setHeapAddressSpace`). A boundary global, see `docs/style.md`.
+**Heap: a free list on the address space's pages** (`heap.cpp`).
+`Memory::Heap` ([common/heap/](../../common/heap/README.md)) gets its pages
+from a `Memory::AddressSpacePages`, which asks `AddressSpace::allocatePages`
+for 2 MB pages and gives them back when a whole chunk is free again.
+`kmalloc` and `operator new` can not be handed an object, so `kernelMain`
+constructs both and binds them once (`Memory::setKernelHeap`, which also
+binds the kernel address space for `Thread(entry)`); a `kmalloc` before that
+panics. A boundary global, see [docs/style.md](../../docs/style.md). `kfree`
+of a pointer the heap did not hand out, or freed twice, panics. No lock: the
+scheduler is cooperative and interrupt handlers must not allocate.
 
 ### Deliberately not done
 
@@ -152,22 +163,22 @@ own; liballoc is small, public domain and needs only four hooks
 ```mermaid
 sequenceDiagram
     participant C as Caller
-    participant H as liballoc (kmalloc)
+    participant H as Heap (kmalloc)
     participant V as AddressSpace
     participant P as PhysicalMemoryManager
     participant T as Page tables
     C->>H: kmalloc(200)
-    alt a page with free space exists
-        H-->>C: pointer inside it
+    alt a free block is large enough
+        H-->>C: pointer inside it (the rest of the block stays free)
     else needs more memory
-        H->>V: liballoc_alloc(1 page) -> allocatePages(1)
+        H->>V: AddressSpacePages::allocatePages(1) -> allocatePages(1)
         V->>V: find a free 2 MB virtual page
         V->>P: allocateFrame() (only if a new PD is needed)
         V->>P: allocateBlocks(1)
         P-->>V: physical address of a 2 MB block
         V->>T: write the PD entry (present, writable, 2 MB)
         V-->>H: virtual address
-        H-->>C: pointer inside the new page
+        H-->>C: pointer inside the new chunk
     end
 ```
 
@@ -179,7 +190,7 @@ flowchart TD
     B --> C[addRegion for each AVAILABLE range]
     C --> D[reserveRegion: kernel image, multiboot info]
     D --> E[AddressSpace: physmap in PML4 256]
-    E --> F[setHeapAddressSpace: kmalloc can now get pages]
+    E --> F[Heap on AddressSpacePages, setKernelHeap: kmalloc can now get pages]
 ```
 
 ## Tests
@@ -195,7 +206,9 @@ flowchart TD
 - *Address spaces*: a second one shares the kernel half and the identity
   map, user pages only in the user range, zeroed, built while inactive and
   seen after `activate()`, flags, everything given back by the destructor.
-- *Heap*: sizes from 1 byte to 3 MB, `krealloc`, `kcalloc`.
+- *Heap*: sizes from 1 byte to 3 MB, `krealloc`, `kcalloc` on the kernel
+  heap; the free list itself is tested on its own (see
+  [common/heap/README.md](../../common/heap/README.md)).
 
 ## References
 
@@ -206,4 +219,3 @@ flowchart TD
 - Intel SDM Vol. 3A, chapter "Paging" (4-level paging, PS bit for 2 MB pages)
 - *Operating Systems: Three Easy Pieces*: "Paging: Introduction", "Free-Space Management"
 - xv6 book (MIT 6.1810): chapter "Page tables"
-- [liballoc](https://github.com/blanham/liballoc)
