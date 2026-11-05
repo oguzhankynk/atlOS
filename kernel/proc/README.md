@@ -1,6 +1,6 @@
 # User programs (`kernel/proc/`)
 
-(Writing a program: see `user/README.md`. This page is the kernel's side.)
+(Writing a program: see [`user/README.md`](../../user/README.md). This page is the kernel's side.)
 
 How a file on the disk becomes a program running in **ring 3**: in its own
 address space, unable to touch the kernel, talking to it only through
@@ -259,7 +259,7 @@ could unmap the memory while the kernel reads it; atlOS is cooperative.)
 The `int 0x80` handler and the ring 3 fault path are reached from the
 assembly stubs, which can not be handed an object. `kernelMain` binds the
 runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
-(see `docs/style.md`).
+(see [`docs/style.md`](../../docs/style.md)).
 
 ### Deliberately not done
 

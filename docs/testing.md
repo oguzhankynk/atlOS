@@ -159,7 +159,7 @@ with `echo >`/`>>`, `rm`/`rmdir`, `mw`/`md`, `help` by group, `disk` and
 program and of one that faults (the shell must still answer), typing a name
 into `ASK.ELF` (and Ctrl+C into it once), `CLOCK.ELF`, `FILES.ELF` and the
 file it wrote, `ARGS.ELF` and `CAT.ELF` with arguments, the example of
-`user/README.md` (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
+[`user/README.md`](../user/README.md) (`COUNT.ELF`), `scripts/symbolize.sh` on the user fault
 report, and at the end
 `fault`, whose kernel page fault report must appear. The serial log is
 `build/default/shelltest.log`.

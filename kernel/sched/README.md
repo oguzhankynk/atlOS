@@ -60,7 +60,7 @@ thread must cooperate.
   TSS (`rsp0`): interrupts and system calls from ring 3 use it. The saved
   `cr3` switches the address space with the thread.
 - Waiting for an event (not a time) goes through `kernel/sync/`: a
-  `WaitQueue` blocks threads and `unblock`s them, see `sync/README.md`.
+  `WaitQueue` blocks threads and `unblock`s them, see [`kernel/sync/README.md`](../sync/README.md).
 - **The current task** (`Threading::currentTask()`): the TCB running now. Each
   switch sets it, each TCB knows its scheduler (`tcb.scheduler`). Code finds
   "this thread" and its scheduler from it instead of being handed a
@@ -91,6 +91,42 @@ in `rdi`, so its first "return" starts it.
   saving only the callee-saved ones (`rbx`, `rbp`, `r12`–`r15`). Saving all is
   easier to reason about.
 - No SIMD state is saved (the kernel is built without SSE).
+
+## Using it
+
+```cpp
+#include <sched/scheduler.hpp>
+#include <sched/thread.hpp>
+
+void worker()
+{
+    for (int i = 0; i < 10; i++) {
+        doSomething();
+        Threading::yield(); // the running thread's scheduler
+    }
+} // returning ends the thread
+
+auto* t = new Threading::Thread(worker); // on the caller's scheduler, queued right away
+...
+delete t; // the owner frees it (any state but running)
+```
+
+- `Thread(entry)` uses the caller's scheduler and the kernel address space;
+  `Thread(scheduler, space, entry)` names both (the self tests use it for
+  their own schedulers). `Thread(..., false)` creates it without queueing it.
+- The `Thread` object stays valid after its entry returns, until its owner
+  deletes it. The destructor removes a thread that is still queued; a thread
+  must not delete itself.
+
+| Call (`Scheduler`) | Effect |
+|---|---|
+| `yield()` | run the next runnable thread; returns at once if there is none |
+| `sleep(ms)` | `Sleeping` for at least `ms` ticks |
+| `block()` / `unblock(tcb)` | `Blocked` until another thread (or an IRQ handler) calls `unblock` |
+| `exit()` | end the current thread (task 0 must not) |
+| `current()` | TCB of the running thread |
+| `ticks()` | ticks (ms) since construction |
+| `taskCount()` | number of queued tasks, including task 0 |
 
 ## The current task
 
@@ -124,7 +160,7 @@ So a `Semaphore`, `Mutex` or `ConditionVariable` is a plain value
 (`Semaphore sem(0, 1);`) and one object works for threads of any scheduler;
 `Thread(entry)` goes to the caller's scheduler.
 
-It is a **boundary global** (`docs/style.md`): one CPU runs one task at a
+It is a **boundary global** ([`docs/style.md`](../../docs/style.md)): one CPU runs one task at a
 time, so "the current task" is a fact about the CPU. With several CPUs it is
 one value per CPU (read through `gs`).
 

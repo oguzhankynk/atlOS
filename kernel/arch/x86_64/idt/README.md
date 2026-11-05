@@ -134,7 +134,7 @@ backtrace, `Core::haltWithStatus(Panic)`. A second panic while the first one
 reports (say, the backtrace walks into unmapped memory) only prints a line and
 halts, instead of reporting forever. `haltWithStatus` ends in a `cli; hlt`
 loop; test builds first write the status to `ATLOS_DEBUG_EXIT_PORT` so the
-test machine can stop at once (see `docs/testing.md`).
+test machine can stop at once (see [`docs/testing.md`](../../../../docs/testing.md)).
 
 ### Faults that are expected: the exception table
 
@@ -200,7 +200,7 @@ the counts.
 ### Deliberately not done
 
 - Exceptions in the kernel report and halt; nothing is recovered (no demand
-  paging). In ring 3 they end the program (`kernel/proc/README.md`).
+  paging). In ring 3 they end the program ([`kernel/proc/README.md`](../../../proc/README.md)).
 - Only the double fault has its own stack. NMI and machine check would want
   IST stacks too once they can happen in the middle of anything.
 - No symbol names at run time; the kernel prints addresses only.

@@ -45,7 +45,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 
 - **Input** (`drivers/character_queue.hpp`): the keyboard and the serial
   port's IRQ handlers push into one `CharacterQueue`; its semaphore lets the
-  shell sleep in `read()` until a key arrives (see `kernel/sync/README.md`).
+  shell sleep in `read()` until a key arrives (see [`kernel/sync/README.md`](../sync/README.md)).
   The keyboard driver turns the arrow keys into the ANSI sequences a serial
   terminal sends (`ESC [ A` for up), so both inputs look the same.
 - **Output**: `printf` goes to the console; with a COM1 present the console is
@@ -153,7 +153,7 @@ atlOS:/> irq
   (the POST code port), others are not.
 - `rdmsr` and `wrmsr` reach the model specific registers. An MSR the CPU
   does not have raises #GP on a real CPU; the exception table (see
-  `kernel/arch/x86_64/idt/README.md`) turns that into "not readable", the
+  [`kernel/arch/x86_64/idt/README.md`](../arch/x86_64/idt/README.md)) turns that into "not readable", the
   kernel goes on. QEMU's emulator returns 0 for MSRs it does not know.
 - `irq` counts what arrived on every vector since boot: timer ticks,
   keyboard and serial interrupts, system calls, faults.
@@ -192,7 +192,7 @@ sector of the first partition, `disk read 1 2 ata0p1` the first FAT.
 
 ### Looking at PCI
 
-`lspci` scans every bus (`Drivers::scanPci`, see `kernel/drivers/pci/README.md`)
+`lspci` scans every bus (`Drivers::scanPci`, see [`kernel/drivers/pci/README.md`](../drivers/pci/README.md))
 and prints a line per function: its address, vendor and device id, class and
 subclass, and their names. `lspci bus:dev.fn` decodes one function's header:
 the command bits, the BARs, the interrupt pin, the capability list (a PCIe
@@ -212,10 +212,10 @@ atlOS:/> lspci 00:01.1
 ### Looking at ACPI and the APIC
 
 `acpi` lists the tables the root table (XSDT or RSDT) points at, see
-`kernel/firmware/acpi/README.md`. `acpi SIG` shows one table's header,
+[`kernel/firmware/acpi/README.md`](../firmware/acpi/README.md). `acpi SIG` shows one table's header,
 decodes it if atlOS reads it (the MADT: processors, I/O APICs, overrides,
 NMI pins) and dumps its first 512 bytes, labeled with physical addresses.
-`apic` reads the hardware itself (`kernel/drivers/apic/README.md`): the local
+`apic` reads the hardware itself ([`kernel/drivers/apic/README.md`](../drivers/apic/README.md)): the local
 APIC's registers and local vector table, the timer's frequency and count, and
 for every ISA IRQ its GSI, I/O APIC pin and redirection entry.
 
@@ -247,7 +247,7 @@ them. IRQ 0 is masked because the scheduler ticks on the APIC timer.
 ### Looking at SMBIOS
 
 `smbios` lists the structures of the firmware's SMBIOS 2.x table (see
-`kernel/firmware/smbios/README.md`): handle, type, length, the number of
+[`kernel/firmware/smbios/README.md`](../firmware/smbios/README.md)): handle, type, length, the number of
 strings. `smbios type` shows every structure of one type: types 0 (BIOS),
 1 (system), 2 (baseboard), 4 (processor) and 17 (memory device) decoded
 field by field, any type with its strings and its formatted area dumped.
@@ -270,7 +270,7 @@ handle 0x1100, type 17 Memory device, 40 bytes
 `argv = { the program's path, args... }` and sleeps until it exits
 (`Runtime::wait`). Meanwhile the keys go to the program, which reads
 them with `read(0, ...)`; Ctrl+C ends a program that reads. See
-`kernel/proc/README.md`.
+[`kernel/proc/README.md`](../proc/README.md).
 
 ### Deliberately not done
 

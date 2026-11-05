@@ -121,7 +121,7 @@ Bytes become characters in three steps:
 3. `PS2Keyboard` pushes the character into a **`CharacterQueue`** (a 128
    byte ring buffer; a counting `Sync::Semaphore` counts the characters, the
    IRQ handler `give`s, `read()` `take`s, so a reader sleeps until a key
-   arrives, see `kernel/sync/README.md`). The serial port pushes into the
+   arrives, see [`kernel/sync/README.md`](../sync/README.md)). The serial port pushes into the
    same queue: the shell reads both. A full queue drops new characters
    (counted in `droppedCount`), so what was typed first keeps its order.
    The arrow keys become the ANSI sequences of a terminal (`ESC [ A` up,

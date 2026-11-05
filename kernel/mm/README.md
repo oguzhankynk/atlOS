@@ -63,13 +63,20 @@ bit per 2 MB block; 16 KB of bitmap covers 256 GB. Allocation is first fit:
 scan for `n` zero bits in a row. The bitmap storage is a constructor argument,
 so the self tests build managers over a fake 128 MB "machine".
 
+- Everything starts in use: `addRegion(base, size)` frees the whole, aligned
+  blocks inside a range, `reserveRegion(base, size)` marks every block it
+  touches as used again.
+
 - `Memory::populateFromMultiboot` (`memory.cpp`) frees the `AVAILABLE`
   regions, then reserves `0 .. kernel_physical_end` (the firmware reports the
   kernel's memory as available too; without the reservation the PMM would
   hand out the kernel's own pages).
 - Block 0 is never handed out, its address would read as `nullptr`.
+- `freeBlocks` rejects unaligned addresses and double frees;
+  `freeBlockCount()` lets the self tests detect leaks.
 - Page tables are 4 KB, a whole 2 MB block for each would waste 2044 KB. So
-  the PMM also hands out **4 KB frames**, cut from 2 MB blocks ("frame pools").
+  the PMM also hands out **4 KB frames**, cut from 2 MB blocks ("frame pools",
+  up to 16; a pool that becomes empty gives its block back).
 
 **VMM: 2 MB pages + a physmap** (`vmm.cpp`). With 2 MB pages there are only
 three table levels (PML4 → PDPT → PD) and far fewer tables to manage; user
@@ -95,7 +102,8 @@ PML4[511]      kernel image, heap, thread stacks (-2 GB)       shared
 A new address space copies the kernel's entries 0 and 256..511, so they point
 at the same PDPTs: a kernel page mapped later shows up everywhere. That is
 also why the kernel half can not get a new PDPT later (it would exist in one
-address space only); the two it needs are there from boot.
+address space only; a mapping that needs one panics); the two it needs are
+there from boot.
 
 `Memory::AddressSpace` holds just the physical address of its PML4:
 
@@ -106,7 +114,8 @@ address space only); the two it needs are there from boot.
   kernel image and backs each with a PMM block; `mapPhysical` maps a given
   physical page without the PMM; `mapDevice` maps the page around a device's
   registers at a free address, uncached (cache disable and write through
-  bits), for MMIO such as the APICs.
+  bits), for MMIO such as the APICs: the physmap is cached, and a device must
+  see every read and write.
 - User pages: `allocateAt(virt, n, flags)` maps zeroed blocks in the user
   range, `Writable` and `User` (ring 3) as asked; the tables above get the
   user bit, the PD entry decides. `isUserAccessible(virt, size, write)` is
@@ -135,7 +144,10 @@ programs.
 own; liballoc is small, public domain and needs only four hooks
 (`liballoc_hooks.cpp`). Those hooks are C functions without an object, so
 `kernelMain` binds the kernel `AddressSpace` once
-(`Memory::setHeapAddressSpace`). A boundary global, see `docs/style.md`.
+(`Memory::setHeapAddressSpace`); a `kmalloc` before that panics. A boundary
+global, see [docs/style.md](../../docs/style.md). The liballoc lock hooks are
+no-ops: the scheduler is cooperative and interrupt handlers must not
+allocate.
 
 ### Deliberately not done
 

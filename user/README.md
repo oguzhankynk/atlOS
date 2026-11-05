@@ -3,7 +3,7 @@
 User programs are small C programs that atlOS loads from its disk and runs in
 **ring 3**, in an address space of their own: they can not touch the kernel,
 and when they crash, only they end. This directory has everything needed to
-write one; how the kernel side works is in `kernel/proc/README.md`.
+write one; how the kernel side works is in [`kernel/proc/README.md`](../kernel/proc/README.md).
 
 ```
 atlOS:/> run /disk0/BIN/COUNT.ELF
@@ -59,7 +59,7 @@ argv[argc] = NULL
 The shell does not resolve paths in the arguments, and a program has no
 current directory: pass paths from the root (`run /disk0/BIN/CAT.ELF
 /disk0/HELLO.TXT`). How the kernel puts the arguments on the stack:
-`kernel/proc/README.md`.
+[`kernel/proc/README.md`](../kernel/proc/README.md).
 
 ## The environment
 
@@ -295,6 +295,6 @@ Keep these when changing `CMakeLists.txt` or `user.ld`; the loader
 
 ## References
 
-- `kernel/proc/README.md`: loading, ring 3, system calls, from the kernel's side
+- [`kernel/proc/README.md`](../kernel/proc/README.md): loading, ring 3, system calls, from the kernel's side
 - System V ABI, x86-64 supplement: calling convention, process start
 - OSDev Wiki: [ELF](https://wiki.osdev.org/ELF), [System Calls](https://wiki.osdev.org/System_Calls)
