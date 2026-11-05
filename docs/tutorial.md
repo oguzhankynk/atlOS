@@ -66,9 +66,11 @@ replace the PIC and PIT. Try `acpi APIC`, `apic`.
 
 ## 6. Memory
 
-Physical memory, page tables and the heap. Try `mem`, `vmmap`,
+Physical memory, page tables, and the heap that cuts pages into blocks (the
+same code for the kernel and for user programs). Try `mem`, `vmmap`,
 `pt 0xFFFFFFFF80000000`.
-[kernel/mm](../kernel/mm/README.md)
+[kernel/mm](../kernel/mm/README.md),
+[common/heap](../common/heap/README.md)
 
 ## 7. Threads and the scheduler
 
@@ -89,8 +91,9 @@ A VFS and FAT16 on an ATA disk. Try `mount`, `ls /disk0`, `disk read 0`.
 
 ## 10. User programs
 
-ELF loading, ring 3, system calls; then writing a program yourself. Try
-`run /disk0/BIN/HELLO.ELF`.
+ELF loading, ring 3, system calls, the start stack and a program's heap;
+then writing a program yourself. Try `run /disk0/BIN/HELLO.ELF`,
+`run -heap 8 /disk0/BIN/MALLOC.ELF`.
 [kernel/proc](../kernel/proc/README.md),
 [user](../user/README.md)
 

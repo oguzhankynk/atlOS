@@ -43,6 +43,7 @@ nav:
       - 5. ACPI: kernel/firmware/acpi/README.md
       - 5. The APIC: kernel/drivers/apic/README.md
       - 6. Memory: kernel/mm/README.md
+      - 6. The heap: common/heap/README.md
       - 7. Threads and the scheduler: kernel/sched/README.md
       - 8. Synchronization: kernel/sync/README.md
       - 9. File systems: kernel/fs/README.md

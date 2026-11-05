@@ -330,8 +330,9 @@ static void cmdMem(Interpreter& shell, int, char**)
         pmm.freeBlockCount() * block / (1024ULL * 1024), pmm.freeBlockCount(),
         pmm.capacity() * block / (1024ULL * 1024 * 1024));
 
-    Memory::HeapStatistics heap = Memory::heapStatistics();
-    printf("heap:     %lu KB in use of %lu KB taken from the address space\n", heap.inUse / 1024, heap.reserved / 1024);
+    Memory::Heap::Statistics heap = Memory::kernelHeap().statistics();
+    printf("heap:     %lu KB in use of %lu KB taken from the address space (%u chunk(s), %u free block(s))\n",
+        heap.inUse / 1024, heap.reserved / 1024, heap.chunks, heap.freeBlocks);
 
     printf("kernel image:\n");
     printRange(".text", &Memory::_text_start, &Memory::_text_end);
@@ -1241,20 +1242,33 @@ static void cmdTop(Interpreter&, int argc, char** argv)
 
 static void cmdRun(Interpreter& shell, int argc, char** argv)
 {
+    // "run -heap 8 P.ELF ...": an 8 MB heap instead of the default
+    uint64_t heapSize = Process::Runtime::defaultHeapSize;
+    int first = 1; // the program's word
+    if (argc >= 2 && !strcmp(argv[1], "-heap")) {
+        uint64_t megabytes;
+        if (argc < 4 || !parseNumber(argv[2], megabytes) || megabytes > Process::Runtime::maxHeapSize >> 20) {
+            printf("run: -heap takes 0 .. %lu (MB), then the program\n", Process::Runtime::maxHeapSize >> 20);
+            return;
+        }
+        heapSize = megabytes << 20;
+        first = 3;
+    }
+
     char path[Interpreter::maxPath];
-    if (!usage("run", argc, 2, Interpreter::maxWords) || !resolve(shell, argv[1], path))
+    if (!usage("run", argc - first + 1, 2, Interpreter::maxWords) || !resolve(shell, argv[first], path))
         return;
 
     // The program's argv: its path, then the words after it ("run P.ELF a b")
     const char* arguments[Interpreter::maxWords];
     arguments[0] = path;
-    for (int i = 2; i < argc; i++)
-        arguments[i - 1] = argv[i];
+    for (int i = first + 1; i < argc; i++)
+        arguments[i - first] = argv[i];
 
     // The program runs on its own thread; the shell sleeps until it exits, so
     // the keys typed meanwhile go to the program (Ctrl+C ends it)
     Process::Runtime& runtime = shell.context().runtime;
-    int pid = runtime.spawn(path, argc - 1, arguments);
+    int pid = runtime.spawn(path, argc - first, arguments, heapSize);
     if (pid > 0)
         runtime.wait((uint32_t)pid);
 }
@@ -1639,7 +1653,7 @@ static const Command s_commands[] = {
     { "tasks", "ps", "ps", "the same as tasks", cmdTasks },
     { "tasks", "sched", "sched", "CPU time of each task and context switches since boot", cmdSched },
     { "tasks", "top", "top [ms]", "CPU time of each task during the next ms (default 1000)", cmdTop },
-    { "tasks", "run", "run program.elf [args]", "run a user program (ring 3) until it exits", cmdRun },
+    { "tasks", "run", "run [-heap MB] program.elf [args]", "run a user program (ring 3) until it exits; heap 2 MB by default", cmdRun },
     { "cpu", "cpuinfo", "cpuinfo", "CPUID: vendor, features, caches", cmdCpuinfo },
     { "cpu", "cr", "cr", "control registers and EFER, bits by name", cmdCr },
     { "cpu", "rdmsr", "rdmsr msr", "read a model specific register", cmdRdmsr },

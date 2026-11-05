@@ -239,6 +239,15 @@ def main():
             check("/disk0\n" in out, "the shell goes on after the fault", out)
             out = serial.command("run /disk0/BIN/COUNT.ELF\r")
             check("1 2 3 4 5\n" in out and "exited with 15]" in out, "the example program of user/README.md", out)
+            # The heap: 2 MB unless run says otherwise; the largest block is a little less
+            out = serial.command("run /disk0/BIN/MALLOC.ELF\r")
+            check("heap: 2048 KB" in out and "sum 500500" in out and "after free: 0 bytes" in out
+                  and "largest block: 1 MB" in out and "exited with 0]" in out, "malloc: the default heap", out)
+            out = serial.command("run -heap 8 /disk0/BIN/MALLOC.ELF 100000\r")
+            check("heap: 8192 KB" in out and "list of 100000 numbers" in out and "largest block: 7 MB" in out
+                  and "exited with 0]" in out, "malloc: run -heap 8", out)
+            out = serial.command("run -heap 65 /disk0/BIN/MALLOC.ELF\r")
+            check("-heap takes 0 .. 64" in out, "run -heap: at most 64 MB", out)
 
             # read(0): the keys go to the program while it runs; DEL is its Backspace
             serial.sock.sendall(b"run /disk0/BIN/ASK.ELF\r")

@@ -74,7 +74,7 @@ COM1 IRQ    ──┘   (semaphore)       (echo, history)  (commands)           
 | general | `help`, `clear`, `echo [words] [> \| >> file]`, `version`, `uptime` |
 | files | `pwd`, `cd`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `rmdir`, `mount` |
 | memory | `mem`, `md addr [len]`, `mw addr value [1\|2\|4\|8]`, `vmmap`, `pt addr` |
-| tasks | `tasks`, `ps`, `sched`, `top [ms]`, `run program.elf [args]` |
+| tasks | `tasks`, `ps`, `sched`, `top [ms]`, `run [-heap MB] program.elf [args]` |
 | cpu | `cpuinfo`, `cr`, `rdmsr msr`, `wrmsr msr value`, `gdt`, `idt [vector]` |
 | devices | `in port [b\|w\|l]`, `out port value [b\|w\|l]`, `irq`, `disk [read lba [count] [device]]`, `lspci [bus:dev.fn]`, `acpi [SIGNATURE]`, `apic`, `smbios [type]`, `int vector` |
 | system | `panic [message]`, `fault`, `reboot` |

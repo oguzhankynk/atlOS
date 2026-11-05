@@ -72,7 +72,7 @@ inside the file, every `PT_LOAD` segment inside the file and inside the user
 range, no two segments in one 2 MB page, the entry point inside an
 executable segment. The file is input from outside; nothing is trusted.
 
-`Runtime::spawn(path, argc, argv)` then:
+`Runtime::spawn(path, argc, argv, heapSize)` then:
 
 1. creates an `AddressSpace(pmm, kernel)`: the kernel half and the identity
    map shared, the user range empty;
@@ -83,7 +83,11 @@ executable segment. The file is input from outside; nothing is trusted.
 3. maps one writable page for the stack, its top at `0x00007FFFFFFFFFF0`,
    and writes `argc`, `argv` and the strings onto it (`pushArguments`, see
    below);
-4. creates a kernel `Thread` whose saved `cr3` is the new address space and
+4. maps the **heap**: `heapSize` rounded up to 2 MB pages (2 MB by default,
+   the shell's `run -heap MB` for more, at most 64 MB), zeroed and writable,
+   right behind the last segment. The program's `malloc` divides it up; how,
+   is in [common/heap/README.md](../../common/heap/README.md);
+5. creates a kernel `Thread` whose saved `cr3` is the new address space and
    whose `owner` is the process, and queues it.
 
 ### Entering ring 3 (`arch/x86_64/cpu/usermode.S`)
@@ -115,7 +119,10 @@ yet), and `rsp` starts at `argc`:
                     "one\0"
 0x00007FFFFFFFFFCE  "/disk0/BIN/ARGS.ELF\0"
                     (0 .. 15 bytes: rsp must be 16 byte aligned)
-                    0, 0         auxv: AT_NULL (no auxiliary vector entries)
+                    0, 0                    auxv: AT_NULL, the end
+                    0x1001, 0x200000        AT_ATLOS_HEAP_SIZE: 2 MB
+                    0x1000, 0x8000400000    AT_ATLOS_HEAP_BASE: behind the data
+                    6, 0x200000             AT_PAGESZ: 2 MB pages
                     0            envp[0]: NULL (no environment)
                     0            argv[3]: NULL
                     0x...FFFE6   argv[2]
@@ -124,17 +131,20 @@ yet), and `rsp` starts at `argc`:
 rsp  ->             3            argc
 ```
 
-`crt0.S` turns this into a C call: `rdi = [rsp]` (argc), `rsi = rsp + 8`
-(argv), `call main`. The pointers in `argv[]` are addresses in the program's
-address space, the strings are copies: the program may change them.
+Each auxv entry is a pair (type, value). `crt0.S` hands `rsp` to
+`atlos_start` (`user/lib/start.cpp`), which reads `argc` and `argv`, walks
+past `envp` to the auxv, sets up the heap from it and calls `main(argc,
+argv)`. The pointers in `argv[]` are addresses in the program's address
+space, the strings are copies: the program may change them.
 
 - The shell's `run P.ELF a "b c"` passes `argv = { "/disk0/.../P.ELF", "a",
   "b c" }`: the resolved path, then the words (quotes keep spaces).
 - At most 16 arguments and 1024 bytes of strings (`maxArguments`,
   `maxArgumentBytes`); more is refused before the program starts.
-- The environment and the auxiliary vector are there but empty; a real
-  kernel passes e.g. `AT_PAGESZ` and `AT_ENTRY` in auxv, and the variables
-  (`PATH=...`) in envp.
+- The environment is there but empty. The auxiliary vector has the page
+  size (`AT_PAGESZ`, the System V number) and the heap (atlOS's own numbers,
+  far above Linux's); Linux also passes e.g. `AT_ENTRY` and `AT_PHDR`, and
+  the variables (`PATH=...`) in envp.
 
 ### Back into the kernel
 
@@ -270,6 +280,8 @@ runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
 - No `lseek`, `stat`, directory listing, `unlink` or `rename` calls.
 - No process object with several threads, no `fork`/`exec`, no environment
   variables.
+- The heap is fixed at the start: no `brk`/`sbrk`, no `mmap`, and its pages
+  are mapped whether the program uses them or not.
 - No NX bit: data pages are executable too.
 - No guard page under the stack (it is the only page there; running off it
   faults anyway).
@@ -294,7 +306,9 @@ runtime once with `Process::setRuntime`, like `Handlers::setInterruptController`
   `ARGS.ELF` with three arguments (one with a space; the strings at the top
   of the stack page, `argv[argc]` NULL, exit code 3), `CAT.ELF` on two
   paths (one missing) and without any, 16 arguments, and 17, a too long
-  one and none refused.
+  one and none refused. `MALLOC.ELF` with a 4 MB heap (mapped behind the
+  data, two pages and not three, its output), without a heap (`malloc`
+  returns NULL), and a heap above 64 MB refused.
 - The shell test (`scripts/run-shelltest.py`) runs `HELLO.ELF`, `FAULT.ELF`
   (the shell still answers afterwards), types a name into `ASK.ELF`, ends it
   once with Ctrl+C, runs `CLOCK.ELF` and `FILES.ELF` and `cat`s the file,

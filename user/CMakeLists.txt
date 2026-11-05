@@ -6,12 +6,27 @@ set(ATLOS_USER_FLAGS
     -g -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -O2 -Wall -Wextra -Werror
 )
 
-add_library(atlos_user_crt OBJECT lib/crt0.S)
+# The start code and the heap, linked into every program. The heap is the
+# kernel's own code (common/heap/), built here a second time for ring 3
+set(ATLOS_USER_CXX_FLAGS -std=c++17 -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics)
+
+add_library(atlos_user_lib OBJECT
+    lib/crt0.S
+    lib/start.cpp
+    lib/malloc.cpp
+    lib/string.c
+    ${CMAKE_SOURCE_DIR}/common/heap/heap.cpp
+    ${CMAKE_SOURCE_DIR}/common/heap/fixed_region_pages.cpp
+)
+target_include_directories(atlos_user_lib PRIVATE lib ${CMAKE_SOURCE_DIR}/common)
+target_compile_options(atlos_user_lib PRIVATE ${ATLOS_USER_FLAGS} $<$<COMPILE_LANGUAGE:CXX>:${ATLOS_USER_CXX_FLAGS}>)
+# memset's loop must not become a call to memset (see string.c)
+set_source_files_properties(lib/string.c PROPERTIES COMPILE_OPTIONS -fno-tree-loop-distribute-patterns)
 
 set(ATLOS_USER_PROGRAMS "")
 
 function(atlos_user_program name)
-    add_executable(${name} programs/${name}.c $<TARGET_OBJECTS:atlos_user_crt>)
+    add_executable(${name} programs/${name}.c $<TARGET_OBJECTS:atlos_user_lib>)
     target_include_directories(${name} PRIVATE lib)
     target_compile_options(${name} PRIVATE ${ATLOS_USER_FLAGS})
     target_link_options(${name} PRIVATE
@@ -31,6 +46,7 @@ atlos_user_program(clock)
 atlos_user_program(files)
 atlos_user_program(args)
 atlos_user_program(cat)
+atlos_user_program(malloc)
 
 set(ATLOS_USER_PROGRAMS ${ATLOS_USER_PROGRAMS} PARENT_SCOPE)
-set(ATLOS_USER_TARGETS hello fault badptr count break ask clock files args cat PARENT_SCOPE)
+set(ATLOS_USER_TARGETS hello fault badptr count break ask clock files args cat malloc PARENT_SCOPE)

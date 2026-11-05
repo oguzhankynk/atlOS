@@ -35,8 +35,9 @@ Exceptions, all excluded from the naming check:
 - names shared with assembly or the linker script (`kernelMain`,
   `switchTask`, `gdt_ptr`, `pml4`, `kernel_physical_end`, ...)
 - reserved and ABI names (`__cxa_*`, `__ctors_start`, `_text_start`, ...)
-- libc (standard C names), `kernel/mm/liballoc` (third party) and the
-  multiboot headers in `kernel/arch/x86_64/boot` (copied from the spec)
+- libc (standard C names), the C side of user programs (`user/`: `malloc`,
+  `atlos_start`, ...) and the multiboot headers in
+  `kernel/arch/x86_64/boot` (copied from the spec)
 
 ## clang-tidy
 
@@ -57,8 +58,8 @@ The kernel is clean: new warnings should be fixed, not suppressed. Code inside
 
 ## Third party code
 
-`kernel/mm/liballoc` (liballoc 1.1) and `libc/stdio/printf.cpp`
-(mpaland/printf) are kept as upstream: no reformatting, no renaming.
+`libc/stdio/printf.cpp` (mpaland/printf) is kept as upstream: no
+reformatting, no renaming.
 
 ## Subsystem READMEs
 
@@ -88,16 +89,17 @@ controllers and timers (`Drivers::ApicInterruptController`, `Drivers::PIC`,
 get it as their entry point argument), all built by `kernelMain` in
 `Cxx::Uninitialized` storage, and the console (`Drivers::SerialPort` and
 `Drivers::VGATextConsole` behind `CharacterSink`, bound to printf with
-`Core::setConsole`). Not done: the heap, whose state lives in liballoc
-(third party) behind the `setHeapAddressSpace` boundary. `logMsg` keeps no
-state and stays a function over printf.
+`Core::setConsole`), and the kernel heap (`Memory::Heap` on
+`Memory::AddressSpacePages`, bound to `kmalloc` and `new` with
+`Memory::setKernelHeap`). `logMsg` keeps no state and stays a function over
+printf.
 
 - **No singletons.** Each subsystem is a class that owns its state
   (`PhysicalMemoryManager`, `AddressSpace`, `Heap`, `Scheduler`, drivers);
   there are no `instance()` accessors and no lazily created globals.
 - **Dependencies are passed in**, by constructor reference, so they are
   visible in the signatures and the construction order is checked by the
-  compiler: `AddressSpace kernelSpace(pmm); Heap heap(kernelSpace);`
+  compiler: `AddressSpace kernelSpace(pmm); AddressSpacePages pages(kernelSpace); Heap heap(pages);`
 - **Hardware behind interfaces:** `InterruptController` (APIC, PIC),
   `TickSource` (APIC timer, PIT), `CharacterSink` (serial, VGA),
   `BlockDevice` and `FileSystem`.
@@ -106,8 +108,8 @@ state and stays a function over printf.
   the boot stack is small), which also avoids static initialization order
   problems.
 - **Globals only at C/assembly boundaries** (interrupt dispatch, the user
-  program runtime behind `int 0x80` and ring 3 faults, liballoc hooks,
-  `operator new`, the panic/printf sink): one explicitly bound pointer per
+  program runtime behind `int 0x80` and ring 3 faults, the kernel heap
+  behind `kmalloc` and `operator new`, the panic/printf sink): one explicitly bound pointer per
   boundary, set by the composition root. And one fact about the CPU: the
   **current task** (`Threading::currentTask()`, set by every switch), which
   sync objects and threads use to find the running thread and its scheduler.

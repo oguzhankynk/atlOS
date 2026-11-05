@@ -38,10 +38,11 @@ if(NOT ATLOS_DEBUG_EXIT_PORT STREQUAL "")
     target_compile_definitions(kernel_flags INTERFACE ATLOS_DEBUG_EXIT_PORT=${ATLOS_DEBUG_EXIT_PORT})
 endif()
 
-# Includes are relative to kernel/, e.g. <mm/vmm.hpp>; libc headers come with k.
-# Generated headers (core/version.hpp) live in the build tree.
+# Includes are relative to kernel/, e.g. <mm/vmm.hpp>, or to common/ (code the
+# kernel shares with user programs), e.g. <heap/heap.hpp>; libc headers come
+# with k. Generated headers (core/version.hpp) live in the build tree.
 set(KERNEL_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_include_directories(kernel_flags INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} ${KERNEL_GENERATED_DIR})
+target_include_directories(kernel_flags INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/common ${KERNEL_GENERATED_DIR})
 
 # core/version.hpp from the project version and git describe, refreshed on
 # every build (the file only changes when the version or git state does)
@@ -72,6 +73,7 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     shell/*.cpp
     sync/*.cpp
     tests/*.cpp
+    ${CMAKE_SOURCE_DIR}/common/heap/*.cpp
     ${ARCHDIR}/gdt/*.cpp
     ${ARCHDIR}/idt/*.cpp
     ${ARCHDIR}/idt/isr.S

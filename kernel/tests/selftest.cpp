@@ -55,6 +55,7 @@
 #include <fs/fat16.hpp>
 #include <fs/storage.hpp>
 #include <fs/vfs.hpp>
+#include <heap/fixed_region_pages.hpp>
 #include <mm/constants.hpp>
 #include <mm/heap.hpp>
 #include <mm/memory.hpp>
@@ -480,6 +481,91 @@ static void testHeap()
         zero = z[i] == 0;
     CHECK(zero);
     kfree(z);
+}
+
+static void testHeapFreeList()
+{
+    group("Heap free list (isolated, 4 KB pages)");
+
+    // A region of 8 small pages, as a user program's heap is a region of 2 MB pages
+    constexpr size_t pageSize = 4096;
+    constexpr size_t pages = 8;
+    auto* region = static_cast<uint8_t*>(kmalloc(pageSize * pages));
+    CHECK(region != nullptr);
+    if (!region)
+        return;
+
+    {
+        Memory::FixedRegionPages source(region, pageSize * pages, pageSize);
+        Memory::Heap heap(source);
+        CHECK(source.pageCount() == pages);
+        CHECK(heap.statistics().chunks == 0); // nothing is taken before the first allocation
+
+        // Blocks are 16 byte aligned, sizes rounded up; behind the chunk's and the block's headers
+        auto* a = static_cast<uint8_t*>(heap.allocate(1));
+        auto* b = static_cast<uint8_t*>(heap.allocate(100));
+        auto* c = static_cast<uint8_t*>(heap.allocate(24));
+        CHECK(a == region + 32);
+        CHECK(a && b && c && (uintptr_t)b % 16 == 0 && (uintptr_t)c % 16 == 0);
+        CHECK(heap.usableSize(a) == 16 && heap.usableSize(b) == 112 && heap.usableSize(c) == 32);
+        Memory::Heap::Statistics stats = heap.statistics();
+        CHECK(stats.chunks == 1 && stats.reserved == pageSize && stats.inUse == 160 && stats.freeBlocks == 1);
+
+        // First fit: a freed block is used again, split if it is larger than needed
+        CHECK(heap.deallocate(b));
+        auto* b2 = static_cast<uint8_t*>(heap.allocate(50));
+        CHECK(b2 == b && heap.statistics().freeBlocks == 2);
+
+        // Free neighbours merge; a chunk that is free as a whole goes back to the source
+        CHECK(heap.deallocate(a) && heap.statistics().freeBlocks == 3);
+        CHECK(heap.deallocate(c) && heap.statistics().freeBlocks == 2);
+        CHECK(heap.deallocate(b2));
+        stats = heap.statistics();
+        CHECK(stats.chunks == 0 && stats.reserved == 0 && stats.freeBlocks == 0 && stats.inUse == 0);
+
+        // Pointers the heap did not hand out, and a double free, change nothing
+        auto* d = static_cast<uint8_t*>(heap.allocate(64));
+        auto* e = static_cast<uint8_t*>(heap.allocate(64));
+        memset(d, 0, 64); // d + 16 must not find a header's magic in old bytes
+        int local = 0;
+        CHECK(!heap.deallocate(&local) && !heap.deallocate(d + 16) && !heap.deallocate(d + 1));
+        CHECK(heap.deallocate(d) && !heap.deallocate(d));
+        CHECK(heap.deallocate(nullptr));
+        CHECK(heap.deallocate(e) && heap.statistics().chunks == 0);
+
+        // A block larger than a page: a chunk of several pages. More than the region has: nullptr
+        void* large = heap.allocate(3 * pageSize);
+        CHECK(large && heap.statistics().reserved == 4 * pageSize);
+        CHECK(heap.allocate(pages * pageSize) == nullptr);
+        void* small = heap.allocate(10);
+        CHECK(small != nullptr); // the heap goes on after a failure
+        CHECK(heap.deallocate(large) && heap.deallocate(small) && heap.statistics().chunks == 0);
+
+        // reallocate keeps the contents; a size that fits keeps the block
+        auto* r = static_cast<uint8_t*>(heap.allocate(20));
+        for (int i = 0; i < 20; i++)
+            r[i] = (uint8_t)i;
+        auto* grown = static_cast<uint8_t*>(heap.reallocate(r, 2000));
+        bool kept = grown != nullptr && grown != r;
+        for (int i = 0; i < 20 && kept; i++)
+            kept = grown[i] == i;
+        CHECK(kept);
+        CHECK(heap.reallocate(grown, 10) == grown);
+        CHECK(heap.reallocate(grown, 0) == nullptr && heap.statistics().inUse == 0);
+
+        // allocateZeroed zeroes what a freed block left behind, and refuses an overflowing count
+        auto* dirty = static_cast<uint8_t*>(heap.allocate(64));
+        memset(dirty, 0xAB, 64);
+        CHECK(heap.deallocate(dirty));
+        auto* zeroed = static_cast<uint8_t*>(heap.allocateZeroed(8, 8));
+        bool zero = zeroed != nullptr;
+        for (int i = 0; i < 64 && zero; i++)
+            zero = zeroed[i] == 0;
+        CHECK(zero);
+        CHECK(heap.allocateZeroed(~(size_t)0 / 2, 4) == nullptr);
+        CHECK(heap.deallocate(zeroed));
+    }
+    kfree(region);
 }
 
 // ------------------------------------------------------------
@@ -3660,9 +3746,9 @@ static void testElf()
 
 // Start path, let it run until it exits, return its exit code (-1000 if it did not)
 static int64_t runProgram(Process::Runtime& runtime, const char* path, int* pid = nullptr, int argc = 0,
-    const char* const* argv = nullptr)
+    const char* const* argv = nullptr, uint64_t heapSize = Process::Runtime::defaultHeapSize)
 {
-    int started = argc ? runtime.spawn(path, argc, argv) : runtime.spawn(path);
+    int started = argc ? runtime.spawn(path, argc, argv, heapSize) : runtime.spawn(path);
     if (pid)
         *pid = started;
     if (started < 0)
@@ -3781,6 +3867,28 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
         && runtime.find(b)->exitCode == 0;
     runtime.reap();
 
+    // The heap: mapped right behind the data, told to the program in the
+    // auxv, divided up by its malloc; its size as spawn is given it
+    sink.clear();
+    const char* const mallocArgs[] = { "MALLOC.ELF", "100" };
+    int heapPid = runtime.spawn("/disk0/BIN/MALLOC.ELF", 2, mallocArgs, 4ULL << 20);
+    const Process::Process* heapProcess = heapPid > 0 ? runtime.find((uint32_t)heapPid) : nullptr;
+    uint64_t heapPhysical = 0;
+    bool heapMapped = heapProcess && heapProcess->heapBase == userBase + 2ULL * pageSize2Mb
+        && heapProcess->heapSize == 4ULL << 20
+        && heapProcess->space->translate((const void*)(heapProcess->heapBase + pageSize2Mb), heapPhysical) // the last of its 2 pages
+        && !heapProcess->space->translate((const void*)(heapProcess->heapBase + 2ULL * pageSize2Mb), heapPhysical);
+    int64_t heapRun = heapPid > 0 ? runtime.wait((uint32_t)heapPid) : -1000;
+    bool heapOutput = sink.contains("heap: 4096 KB at 0x0000008000400000") && sink.contains("list of 100 numbers")
+        && sink.contains("after free: 0 bytes in use") && sink.contains("largest block: 3 MB");
+
+    // No heap at all: malloc returns NULL, the list stays empty (exit code 1)
+    sink.clear();
+    int64_t noHeap = runProgram(runtime, "/disk0/BIN/MALLOC.ELF", nullptr, 2, mallocArgs, 0);
+    bool noHeapOutput = sink.contains("heap: 0 KB") && sink.contains("list of 0 numbers");
+    bool heapLimit = runtime.spawn("/disk0/BIN/MALLOC.ELF", 1, mallocArgs, Process::Runtime::maxHeapSize + 1) == -1
+        && sink.contains("at most 64 MB");
+
     Core::setConsole(*previous);
     CHECK(hello == 0 && helloOutput);
     CHECK(reaped);
@@ -3798,7 +3906,11 @@ static void testUserPrograms(PhysicalMemoryManager& pmm, Process::Runtime& runti
     CHECK(argumentLimits && sixteen == 16);
     CHECK(missing == -1 && notElf == -1 && reasons);
     CHECK(two && bothExited && runtime.count() == 0);
-    // Address spaces, pages, kernel stacks: all given back
+    CHECK(heapMapped);
+    CHECK(heapRun == 0);
+    CHECK(heapOutput);
+    CHECK(noHeap == 1 && noHeapOutput && heapLimit);
+    // Address spaces, pages, kernel stacks, heaps: all given back
     CHECK(pmm.freeBlockCount() == freeBefore);
 }
 
@@ -3885,6 +3997,7 @@ int run(PhysicalMemoryManager& pmm, AddressSpace& space, Threading::Scheduler& s
     testPmmKernel(pmm);
     testVmm(pmm, space);
     testHeap();
+    testHeapFreeList();
     testInterrupts(scheduler);
     testUninitialized();
     testPitWithFakeController(scheduler);

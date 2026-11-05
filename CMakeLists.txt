@@ -193,8 +193,9 @@ find_program(RUN_CLANG_TIDY NAMES run-clang-tidy run-clang-tidy-14)
 
 file(GLOB_RECURSE ATLOS_FORMAT_FILES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/kernel/*.cpp ${CMAKE_SOURCE_DIR}/kernel/*.hpp ${CMAKE_SOURCE_DIR}/kernel/*.h
+    ${CMAKE_SOURCE_DIR}/common/*.cpp ${CMAKE_SOURCE_DIR}/common/*.hpp
     ${CMAKE_SOURCE_DIR}/libc/*.cpp ${CMAKE_SOURCE_DIR}/libc/*.h
-    ${CMAKE_SOURCE_DIR}/user/*.c ${CMAKE_SOURCE_DIR}/user/*.h
+    ${CMAKE_SOURCE_DIR}/user/*.c ${CMAKE_SOURCE_DIR}/user/*.cpp ${CMAKE_SOURCE_DIR}/user/*.h ${CMAKE_SOURCE_DIR}/user/*.hpp
 )
 
 if(CLANG_FORMAT)
@@ -211,11 +212,12 @@ if(CLANG_FORMAT)
 endif()
 
 if(RUN_CLANG_TIDY)
-    # Kernel sources only; libc and liballoc are not held to the kernel rules
+    # The kernel's sources and what it shares with user programs (common/);
+    # libc is not held to the kernel rules
     add_custom_target(tidy
         COMMAND ${RUN_CLANG_TIDY} -p ${CMAKE_BINARY_DIR} -quiet
             -extra-arg=-Wno-unknown-warning-option
-            "^(?!.*(/liballoc/|/libc/)).*/kernel/.*\\.cpp$"
+            "^(?!.*/libc/).*/(kernel|common)/.*\\.cpp$"
         COMMENT "Running clang-tidy"
         VERBATIM
     )

@@ -20,8 +20,9 @@
    4. checks the multiboot2 magic
    5. constructs the `Memory::PhysicalMemoryManager`, fills it from the
       multiboot memory map (`Memory::populateFromMultiboot`, reserves the
-      kernel image), constructs the `Memory::AddressSpace` on top and binds it
-      to the heap (see [kernel/mm/README.md](../kernel/mm/README.md))
+      kernel image), constructs the `Memory::AddressSpace` on top, and the
+      kernel's `Memory::Heap` on its pages, bound to `kmalloc` and `new`
+      (see [kernel/mm/README.md](../kernel/mm/README.md))
    6. constructs the `Fs::Vfs` and mounts the FAT16 partitions of the ATA
       disks (`Fs::mountAtaDisks`, see [`kernel/fs/README.md`](../kernel/fs/README.md))
    7. finds the ACPI tables (`Firmware::findRsdp`, `Firmware::AcpiTables`,

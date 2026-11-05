@@ -15,6 +15,15 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 - CPU time: each tick is charged to the running task (`TCB::cpuTicks`),
   `TCB::runs` and `Scheduler::switchCount()` count switches; the shell's
   `sched` (since boot) and `top [ms]` (over a window)
+- A heap of atlOS's own (`common/heap/`): `Memory::Heap`, a free list sorted
+  by address, first fit, split on allocate and merged with free neighbours
+  on free; whole chunks go back to their `Memory::PageSource`. Refuses
+  pointers it did not hand out and double frees
+- User programs get a heap: `Runtime::spawn(..., heapSize)` maps it behind
+  the data (2 MB by default, at most 64 MB; the shell's `run -heap MB`), the
+  auxiliary vector says where (`AT_PAGESZ`, `AT_ATLOS_HEAP_BASE`,
+  `AT_ATLOS_HEAP_SIZE`), `atlos_start` sets it up before `main`; `malloc`,
+  `calloc`, `realloc`, `free` and `heap_info` in `atlos.h`; `MALLOC.ELF`
 - [Tutorial](docs/tutorial.md): the subsystem READMEs in boot order, with a
   short introduction (CPU, x86, x86_64, OS)
 - Documentation site (MkDocs): `scripts/build.sh site`, built in CI and
@@ -24,6 +33,15 @@ versions may change interfaces. See [docs/releasing.md](docs/releasing.md).
 
 - `docs/memory.md` and `docs/scheduler.md` merged into `kernel/mm/README.md`
   and `kernel/sched/README.md`
+- The kernel heap is a `Memory::Heap` on `Memory::AddressSpacePages`, bound
+  with `Memory::setKernelHeap` (was `setHeapAddressSpace`); `kfree` of a bad
+  pointer panics; `mem` shows the chunks and free blocks
+- User programs start in `atlos_start` (`user/lib/start.cpp`), not in `main`
+  directly
+
+### Removed
+
+- liballoc 1.1 (the kernel heap is atlOS's own now)
 
 ## [0.5.0] - 2026-10-22
 

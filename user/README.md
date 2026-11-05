@@ -18,8 +18,11 @@ atlOS:/>
 user/
   CMakeLists.txt       builds every program: atlos_user_program(name)
   user.ld              linker script: where code, data and the entry point go
-  lib/crt0.S           _start: calls main(), passes its result to exit
-  lib/atlos.h          the system calls and a few helpers
+  lib/crt0.S           _start: hands the start stack to atlos_start
+  lib/start.cpp        atlos_start: reads the auxv, sets up the heap, calls main(), exits
+  lib/malloc.cpp       malloc, calloc, realloc, free (the heap in common/heap/)
+  lib/string.c         memcpy, memmove, memset, memcmp (the compiler may call them)
+  lib/atlos.h          the system calls, malloc and a few helpers
   programs/            the programs, one .c file each
     hello.c            prints, exits with 0
     count.c            the example below
@@ -31,6 +34,7 @@ user/
     files.c            open, read, write, close and their errors
     args.c             prints argc and argv, and where they are
     cat.c              prints the files named in its arguments
+    malloc.c           the heap: a linked list, the largest block that fits
 ```
 
 ## Arguments
@@ -86,11 +90,43 @@ Every program gets the same layout (2 MB pages, see `user.ld`):
 |---|---|---|
 | `0x0000008000000000` | code (`.text`, `.rodata`), starting right after the ELF headers | read, execute |
 | next 2 MB page | data (`.data`, `.bss`) | read, write |
+| next page | the heap: 2 MB, or what `run -heap MB` asks (0 .. 64) | read, write |
 | `0x00007FFFFFE00000` .. `0x00007FFFFFFFFFF0` | the stack: one 2 MB page; at its top the argument strings and `argv[]`, `rsp` starts just below | read, write |
 
 Every page is zeroed before the program starts, so `.bss` and unused stack
-are 0. There is no heap: use globals and the stack. The 2 MB stack is the only
-stack page; running off its bottom is a page fault.
+are 0. The 2 MB stack is the only stack page; running off its bottom is a
+page fault.
+
+### The heap
+
+`malloc`, `calloc`, `realloc` and `free` work as in C, on the heap the
+kernel mapped behind the data. The size is fixed when the program starts:
+when it is full, `malloc` returns `NULL`. Every block is 16 byte aligned and
+has a 16 byte header, and so has each run of pages, so a heap of n MB never
+fits a block of n MB. `free` of a pointer `malloc` did not return, or a
+second `free`, ends the program with exit code 134.
+
+```c
+struct node* node = malloc(sizeof(struct node));
+if (!node)
+    return 1; // the heap is full
+...
+free(node);
+```
+
+```
+atlOS:/> run -heap 8 /disk0/BIN/MALLOC.ELF 100000
+heap: 8192 KB at 0x0000008000400000
+list of 100000 numbers, sum 5000050000
+with the list: 1600016 bytes in use
+after free: 0 bytes in use
+largest block: 7 MB
+[pid 1 MALLOC.ELF exited with 0]
+```
+
+`heap_info` says where the heap is, how large, and how much is in use. The
+heap is the kernel's own allocator, built into the program; how it works is
+in [common/heap/README.md](../common/heap/README.md).
 
 Everything else faults: the kernel half, and the first megabytes (identity
 mapped for the kernel only), so **dereferencing `NULL` is a page fault**, as it
@@ -282,7 +318,10 @@ Keep these when changing `CMakeLists.txt` or `user.ld`; the loader
   `-z max-page-size=0x200000` keeps the file small (the offsets inside the
   file match the addresses modulo 2 MB);
 - no SSE (`-mno-sse -mno-sse2 -mno-mmx`), `-mcmodel=large` (the code is far
-  above 2 GB).
+  above 2 GB);
+- no libc: what a program needs comes from `lib/`. The start code and the
+  heap are C++ (no exceptions, no RTTI, no global constructors: crt0 runs
+  none; the heap is built in place by `atlos_start`) behind a C interface.
 
 ## Testing a program
 
